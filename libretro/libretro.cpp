@@ -26,6 +26,39 @@ volatile bool execute = false;
 // Video buffer
 static uint16_t screenSwap[256 * 192 * 2];
 
+#ifndef SWAPTYPE
+# define SWAPTYPE uint32_t
+#endif
+
+namespace VIDEO
+{
+    template<typename T>
+    void SwapScreen(void* aOut, const void* aIn)
+    {
+        static const uint32_t pixPerT = sizeof(T) / 2;
+        static const uint32_t totalPix = 256 * 192 * 2 / pixPerT;
+        static const T rMask = (pixPerT == 1) ? 0xF800 : ((pixPerT == 2) ? 0xF800F800 : 0xF800F800F800F800);
+        static const T gMask = (pixPerT == 1) ? 0x07C0 : ((pixPerT == 2) ? 0x07C007C0 : 0x07C007C007C007C0);
+        static const T bMask = (pixPerT == 1) ? 0x001F : ((pixPerT == 2) ? 0x001F001F : 0x001F001F001F001F);
+        
+        assert(pixPerT == 1 || pixPerT == 2 || pixPerT == 4);
+        
+        const T* inPix = (const T*)aIn;
+        T* outPix = (T*)aOut;
+        
+        for(int i = 0; i != totalPix; i ++)
+        {
+            const T p = *inPix++;
+            
+            const T r = (p & rMask) >> 10;
+            const T g = (p & gMask);
+            const T b = (p & bMask) << 10;
+            
+            *outPix++ = r | g | b;
+        }
+    }
+}
+
 namespace AUDIO
 {
     static unsigned frames;
@@ -259,13 +292,7 @@ void retro_run (void)
     SPU_Emulate_user();
     
     // VIDEO: Swap screen colors and pass on
-    const int16_t* const screen = (const int16_t* const)GPU_screen;
-    
-    for(int i = 0; i != 256 * 192 * 2; i ++)
-    {
-        const uint16_t inPix = screen[i];
-        screenSwap[i] = ((inPix & 0x1F) << 10) | (inPix & 0x3E0) | ((inPix & 0x7C00) >> 10);
-    }
+    VIDEO::SwapScreen<SWAPTYPE>(screenSwap, GPU_screen);
     
     // Draw pointer
     if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
