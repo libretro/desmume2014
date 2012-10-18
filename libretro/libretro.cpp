@@ -350,11 +350,17 @@ bool retro_load_game(const struct retro_game_info *game)
     return execute;
 }
 
-bool retro_load_game_special(
-  unsigned game_type,
-  const struct retro_game_info *info, size_t num_info
-)
-{ return false; }
+bool retro_load_game_special(unsigned game_type, const struct retro_game_info *info, size_t num_info)
+{
+    if(RETRO_GAME_TYPE_SUPER_GAME_BOY == game_type && 2 == num_info)
+    {
+        strncpy(GBAgameName, info[1].path, sizeof(GBAgameName));
+        addonsChangePak(NDS_ADDON_GBAGAME);
+        
+        return retro_load_game(&info[0]);
+    }
+    return false;
+}
 
 void retro_unload_game (void)
 {
