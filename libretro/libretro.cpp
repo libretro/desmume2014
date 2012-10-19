@@ -246,20 +246,26 @@ void retro_run (void)
 {
     poll_cb();
 
-    // TOUCH: Todo: Support analog to control touch
-    if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
+    // TOUCH:
+    const int16_t analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) / 2048;
+    const int16_t analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / 2048;
+    const bool r2Down =  input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);    
+
+    const bool haveMouse = (RETRO_DEVICE_MOUSE == INPUT::Devices[1]);
+    const int16_t mouseX = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) : 0;
+    const int16_t mouseY = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) : 0;
+    const bool mouseDown = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) : false;
+    
+    INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, mouseX + analogX);
+    INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, mouseY + analogY);
+    
+    if(r2Down || mouseDown)
     {
-        INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X));
-        INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y));
-        
-        if(input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT))
-        {
-            NDS_setTouchPos(INPUT::TouchX, INPUT::TouchY);
-        }
-        else
-        {
-            NDS_releaseTouch();
-        }
+        NDS_setTouchPos(INPUT::TouchX, INPUT::TouchY);
+    }
+    else
+    {
+        NDS_releaseTouch();
     }
 
     // BUTTONS
@@ -280,7 +286,7 @@ void retro_run (void)
         input.D = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN);
         input.L = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT);
         input.R = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT);
-        input.F = 0; //Lid
+        input.F = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2); //Lid
         NDS_endProcessingInput();
     }
 
