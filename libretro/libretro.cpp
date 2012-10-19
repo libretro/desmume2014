@@ -33,28 +33,31 @@ static uint16_t screenSwap[256 * 192 * 2];
 namespace VIDEO
 {
     template<typename T>
-    void SwapScreen(void* aOut, const void* aIn)
+    void SwapScreen(void* aOut, const void* aIn, uint32_t aPitchInPix)
     {
         static const uint32_t pixPerT = sizeof(T) / 2;
-        static const uint32_t totalPix = 256 * 192 * 2 / pixPerT;
+        static const uint32_t pixPerLine = 256 / pixPerT;
         static const T rMask = (pixPerT == 1) ? 0xF800 : ((pixPerT == 2) ? 0xF800F800 : 0xF800F800F800F800);
         static const T gMask = (pixPerT == 1) ? 0x07C0 : ((pixPerT == 2) ? 0x07C007C0 : 0x07C007C007C007C0);
         static const T bMask = (pixPerT == 1) ? 0x001F : ((pixPerT == 2) ? 0x001F001F : 0x001F001F001F001F);
         
         assert(pixPerT == 1 || pixPerT == 2 || pixPerT == 4);
         
+        const uint32_t pitchInT = aPitchInPix / pixPerT;
         const T* inPix = (const T*)aIn;
-        T* outPix = (T*)aOut;
         
-        for(int i = 0; i != totalPix; i ++)
+        for(int i = 0; i != 192; i ++)
         {
-            const T p = *inPix++;
-            
-            const T r = (p & rMask) >> 10;
-            const T g = (p & gMask);
-            const T b = (p & bMask) << 10;
-            
-            *outPix++ = r | g | b;
+            T* outPix = (T*)aOut + (i * pitchInT);
+        
+            for(int j = 0; j != pixPerLine; j ++)
+            {
+                const T p = *inPix++;            
+                const T r = (p & rMask) >> 10;
+                const T g = (p & gMask);
+                const T b = (p & bMask) << 10;
+                *outPix++ = r | g | b;
+            }
         }
     }
 }
@@ -104,27 +107,45 @@ namespace INPUT
     static int32_t TouchX;
     static int32_t TouchY;
     
-    static const uint8_t CursorImage[16*16] =
+    static const uint8_t CursorImage[16*8] =
     {
-        2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 1, 1, 1, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 1, 2, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 2, 0, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        2, 0, 0, 0, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-        0, 0, 0, 0, 0, 2, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0,
-        0, 0, 0, 0, 0, 2, 2, 2, 0, 0, 0, 0, 0, 0, 0, 0
+        2, 0, 0, 0, 0, 0, 0, 0, 
+        2, 2, 0, 0, 0, 0, 0, 0, 
+        2, 1, 2, 0, 0, 0, 0, 0, 
+        2, 1, 1, 2, 0, 0, 0, 0, 
+        2, 1, 1, 1, 2, 0, 0, 0, 
+        2, 1, 1, 1, 1, 2, 0, 0, 
+        2, 1, 1, 1, 1, 1, 2, 0, 
+        2, 1, 1, 1, 1, 1, 1, 2, 
+        2, 1, 1, 1, 1, 1, 2, 2, 
+        2, 1, 1, 1, 1, 2, 0, 0, 
+        2, 1, 2, 1, 1, 2, 0, 0, 
+        2, 2, 0, 2, 1, 2, 0, 0, 
+        2, 0, 0, 0, 2, 1, 2, 0, 
+        0, 0, 0, 0, 2, 1, 2, 0, 
+        0, 0, 0, 0, 0, 2, 1, 2, 
+        0, 0, 0, 0, 0, 2, 2, 2, 
     };
 
     unsigned Devices[2] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_MOUSE};
+    
+    void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
+    {
+        // Draw pointer
+        if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
+        {
+            for(int i = 0; i != 16 && INPUT::TouchY + i < 192; i ++)
+            {
+                for(int j = 0; j != 8 && INPUT::TouchX + j < 256; j ++)
+                {
+                    if(INPUT::CursorImage[i * 8 + j])
+                    {
+                        aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = 0x7FFF;
+                    }
+                }
+            }
+        }    
+    }
 }
 
 SoundInterface_struct* SNDCoreList[] =
@@ -246,7 +267,7 @@ void retro_run (void)
 {
     poll_cb();
 
-    // TOUCH:
+    // TOUCH
     const int16_t analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) / 2048;
     const int16_t analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / 2048;
     const bool r2Down =  input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);    
@@ -298,23 +319,14 @@ void retro_run (void)
     SPU_Emulate_user();
     
     // VIDEO: Swap screen colors and pass on
-    VIDEO::SwapScreen<SWAPTYPE>(screenSwap, GPU_screen);
+    static void* const screenDest[2] = {&screenSwap[0], &screenSwap[256 * 192]};
+    static const void* const screenSource[2] = {&GPU_screen[0], &GPU_screen[256 * 192 * 2]};
+    static const uint32_t destPitch = 256;
     
-    // Draw pointer
-    if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
-    {
-        for(int i = 0; i != 16 && INPUT::TouchY + i < 192; i ++)
-        {
-            for(int j = 0; j != 16 && INPUT::TouchX + j < 256; j ++)
-            {
-                if(INPUT::CursorImage[i * 16 + j])
-                {
-                    screenSwap[(256 * (192 + i + INPUT::TouchY)) + (j + INPUT::TouchX)] = 0x7FFF;
-                }
-            }
-        }
-    }
-    
+    VIDEO::SwapScreen<SWAPTYPE>(screenDest[0], screenSource[0], destPitch);
+    VIDEO::SwapScreen<SWAPTYPE>(screenDest[1], screenSource[1], destPitch);
+    INPUT::DrawPointer((uint16_t*)screenDest[1], destPitch);
+        
     video_cb(screenSwap, 256, 192 * 2, 256 * 2);
 }
 
