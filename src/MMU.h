@@ -357,16 +357,16 @@ struct MMU_struct
 
 	//ARM7 mem
 	u8 ARM7_BIOS[0x4000];
-	u8 ARM7_ERAM[0x10000];
+	u8 ARM7_ERAM[0x10000]; //64KB of exclusive WRAM
 	u8 ARM7_REG[0x10000];
-	u8 ARM7_WIRAM[0x10000];
+	u8 ARM7_WIRAM[0x10000]; //WIFI ram
 
 	// VRAM mapping
 	u8 VRAM_MAP[4][32];
 	u32 LCD_VRAM_ADDR[10];
 	u8 LCDCenable[10];
 
-	//Shared ram
+	//32KB of shared WRAM - can be switched between ARM7 & ARM9 in two blocks
 	u8 SWIRAM[0x8000];
 
 	//Card rom & ram
@@ -419,6 +419,8 @@ struct MMU_struct
 	u16 SPI_CMD;
 	u16 AUX_SPI_CNT;
 	u16 AUX_SPI_CMD;
+
+	u8 WRAMCNT;
 
 	u64 gfx3dCycles;
 
@@ -757,10 +759,6 @@ FORCEINLINE u32 _MMU_read32(const int PROCNUM, const MMU_ACCESS_TYPE AT, const u
 	{
 		if ( (addr & 0x0F000000) == 0x02000000)
 			return T1ReadLong_guaranteedAligned( MMU.MAIN_MEM, addr & _MMU_MAIN_MEM_MASK32);
-		else if((addr & 0xFF800000) == 0x03800000)
-			return T1ReadLong_guaranteedAligned(MMU.ARM7_ERAM, addr&0xFFFC);
-		else if((addr & 0xFF800000) == 0x03000000)
-			return T1ReadLong_guaranteedAligned(MMU.SWIRAM, addr&0x7FFC);
 	}
 
 
