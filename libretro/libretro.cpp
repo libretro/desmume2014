@@ -56,7 +56,7 @@ namespace VIDEO
     {
         static const uint32_t pixPerT = sizeof(T) / 2;
         static const uint32_t pixPerLine = 256 / pixPerT;
-        static const T colorMask = (pixPerT == 1) ? 0x001F : ((pixPerT == 2) ? 0x001F001F : 0x001F001F001F001F);
+        static const T colorMask = (pixPerT == 1) ? 0x001F : ((pixPerT == 2) ? 0x001F001F : 0x001F001F001F001FULL);
         
         assert(pixPerT == 1 || pixPerT == 2 || pixPerT == 4);
         
@@ -146,26 +146,8 @@ namespace INPUT
 
     unsigned Devices[2] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_MOUSE};
 
-    void DrawPointer32(uint32_t* aOut, uint32_t aPitchInPix)
-    {
-        // Draw pointer
-        if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
-        {
-            for(int i = 0; i != 16 && INPUT::TouchY + i < 192; i ++)
-            {
-                for(int j = 0; j != 8 && INPUT::TouchX + j < 256; j ++)
-                {
-                    if(INPUT::CursorImage[i * 8 + j])
-                    {
-                        aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = 0xFFFFFF;
-                    }
-                }
-            }
-        }    
-    }
-    
-    template<unsigned COLOR>
-    void DrawPointer16(uint16_t* aOut, uint32_t aPitchInPix)
+    template<unsigned COLOR, typename PIXTYPE>
+    void DrawPointer(PIXTYPE* aOut, uint32_t aPitchInPix)
     {
         // Draw pointer
         if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
@@ -374,7 +356,7 @@ void retro_run (void)
     
         VIDEO::SwapScreen32(screenDest[0], screenSource[0], 256);
         VIDEO::SwapScreen32(screenDest[1], screenSource[1], 256);
-        INPUT::DrawPointer32(screenDest[1], 256);
+        INPUT::DrawPointer<0xFFFFFF>(screenDest[1], 256);
         
         video_cb(screenSwap, 256, 192 * 2, 256 * 4);
     }
@@ -385,7 +367,7 @@ void retro_run (void)
     
         VIDEO::SwapScreen16<SWAPTYPE, 1>(screenDest[0], screenSource[0], 256);
         VIDEO::SwapScreen16<SWAPTYPE, 1>(screenDest[1], screenSource[1], 256);
-        INPUT::DrawPointer16<0xFFFF>(screenDest[1], 256);
+        INPUT::DrawPointer<0xFFFF>(screenDest[1], 256);
         
         video_cb(screenSwap, 256, 192 * 2, 256 * 2);
     }
@@ -396,7 +378,7 @@ void retro_run (void)
     
         VIDEO::SwapScreen16<SWAPTYPE, 0>(screenDest[0], screenSource[0], 256);
         VIDEO::SwapScreen16<SWAPTYPE, 0>(screenDest[1], screenSource[1], 256);
-        INPUT::DrawPointer16<0x7FFF>(screenDest[1], 256);
+        INPUT::DrawPointer<0x7FFF>(screenDest[1], 256);
         
         video_cb(screenSwap, 256, 192 * 2, 256 * 2);
     }
