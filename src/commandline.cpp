@@ -17,8 +17,6 @@
 
 //windows note: make sure this file gets compiled with _cdecl
 
-#ifndef __LIBRETRO__
-
 #include <glib.h>
 #include <algorithm>
 #include <stdio.h>
@@ -288,5 +286,3 @@ void CommandLine::process_addonCommands()
 			slot1Change(NDS_SLOT1_RETAIL_NAND);
 }
 
-
-#endif

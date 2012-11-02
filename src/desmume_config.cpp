@@ -15,8 +15,6 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __LIBRETRO__
-
 #include <glib.h>
 #include <glib/gstdio.h>
 
@@ -147,5 +145,3 @@ gboolean desmume_config_read_joykeys(GKeyFile *keyfile)
 
     return TRUE;
 }
-
-#endif
