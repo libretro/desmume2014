@@ -145,24 +145,32 @@ namespace INPUT
     };
 
     unsigned Devices[2] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_MOUSE};
+    
+    const uint32_t FramesWithPointerBase = 60 * 10;
+    uint32_t FramesWithPointer = FramesWithPointerBase;
 
     template<unsigned COLOR, typename PIXTYPE>
     void DrawPointer(PIXTYPE* aOut, uint32_t aPitchInPix)
     {
-        // Draw pointer
-        if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
+        if(FramesWithPointer > 0)
         {
-            for(int i = 0; i != 16 && INPUT::TouchY + i < 192; i ++)
+            FramesWithPointer --;
+        
+            // Draw pointer
+            if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
             {
-                for(int j = 0; j != 8 && INPUT::TouchX + j < 256; j ++)
+                for(int i = 0; i != 16 && INPUT::TouchY + i < 192; i ++)
                 {
-                    if(INPUT::CursorImage[i * 8 + j])
+                    for(int j = 0; j != 8 && INPUT::TouchX + j < 256; j ++)
                     {
-                        aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = COLOR;
+                        if(INPUT::CursorImage[i * 8 + j])
+                        {
+                            aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = COLOR;
+                        }
                     }
                 }
             }
-        }    
+        }
     }
 }
 
@@ -297,20 +305,49 @@ void retro_run (void)
 {
     poll_cb();
 
-    // TOUCH
+    bool haveTouch = false;
+
+    // TOUCH: Analog
     const int16_t analogX = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_X) / 2048;
     const int16_t analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / 2048;
-    const bool r2Down =  input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);    
+    haveTouch = haveTouch || input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);    
 
+    INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, analogX);
+    INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, analogY);
+    INPUT::FramesWithPointer = (analogX || analogY) ? INPUT::FramesWithPointerBase : INPUT::FramesWithPointer;
+
+#ifndef HAVE_ABSOLUTE_POINTER
+    // TOUCH: Mouse
     const bool haveMouse = (RETRO_DEVICE_MOUSE == INPUT::Devices[1]);
     const int16_t mouseX = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) : 0;
     const int16_t mouseY = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) : 0;
-    const bool mouseDown = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) : false;
+    haveTouch = haveTouch || (haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) : false);
     
-    INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, mouseX + analogX);
-    INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, mouseY + analogY);
+    INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, mouseX);
+    INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, mouseY);
+    INPUT::FramesWithPointer = (mouseX || mouseY) ? INPUT::FramesWithPointerBase : INPUT::FramesWithPointer;
+#else
+    // TOUCH: Pointer
+    if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
+    {
+        haveTouch = true;
     
-    if(r2Down || mouseDown)
+        static const float X_FACTOR = (256.0f / 65536.0f);
+        static const float Y_FACTOR = (384.0f / 65536.0f);
+    
+        float x = (input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X) + 32768.0f) * X_FACTOR;
+        float y = (input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y) + 32768.0f) * Y_FACTOR;
+        
+        if(y >= 192.0f)
+        {
+            INPUT::TouchX = x;
+            INPUT::TouchY = y - 192.0f;
+        }
+    }
+#endif
+
+    // TOUCH: Final        
+    if(haveTouch)
     {
         NDS_setTouchPos(INPUT::TouchX, INPUT::TouchY);
     }
@@ -318,6 +355,7 @@ void retro_run (void)
     {
         NDS_releaseTouch();
     }
+
 
     // BUTTONS
     if(INPUT::Devices[0] == RETRO_DEVICE_JOYPAD)
