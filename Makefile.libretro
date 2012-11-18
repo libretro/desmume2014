@@ -106,8 +106,7 @@ SOURCES = \
 	version.cpp \
 	mic.cpp \
 	GPU_osd_stub.cpp \
-	driver.cpp \
-	fs-linux.cpp
+	driver.cpp
 
 ifeq ($(DESMUME_JIT),1)
 SOURCES += \
