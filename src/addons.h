@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch homebrew
+
 /*
 	Copyright (C) 2009-2011 DeSmuME team
 
@@ -56,7 +58,6 @@ struct ADDONINTERFACE
 enum NDS_ADDON_TYPE
 {
 	NDS_ADDON_NONE,
-	NDS_ADDON_CFLASH,		// compact flash
 	NDS_ADDON_RUMBLEPAK,	// rumble pack
 	NDS_ADDON_GBAGAME,		// gba game in slot
 	NDS_ADDON_GUITARGRIP,	// Guitar Grip
@@ -66,15 +67,6 @@ enum NDS_ADDON_TYPE
 	//NDS_ADDON_EXTERNALMIC,
 	NDS_ADDON_COUNT		// use for counter addons - MUST TO BE LAST!!!
 };
-
-enum ADDON_CFLASH_MODE
-{
-	ADDON_CFLASH_MODE_Path, ADDON_CFLASH_MODE_File, ADDON_CFLASH_MODE_RomPath
-};
-
-extern ADDON_CFLASH_MODE CFlash_Mode;
-extern std::string CFlash_Path;
-inline bool CFlash_IsUsingPath() { return CFlash_Mode==ADDON_CFLASH_MODE_Path || CFlash_Mode==ADDON_CFLASH_MODE_RomPath; }
 
 extern ADDONINTERFACE addon;						// current pak
 extern ADDONINTERFACE addonList[NDS_ADDON_COUNT];	// lists pointer on paks

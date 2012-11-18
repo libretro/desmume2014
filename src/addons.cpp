@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch homebrew support
+
 /*
 	Copyright (C) 2009-2012 DeSmuME team
 
@@ -17,17 +19,9 @@
 #include "addons.h"
 #include <string>
 
-//this is the currently-configured cflash mode
-ADDON_CFLASH_MODE CFlash_Mode;
-
-//this is the currently-configured path (directory or filename) for cflash.
-//it should be viewed as a parameter for the above.
-std::string CFlash_Path;
-
 char GBAgameName[MAX_PATH];
 
 extern ADDONINTERFACE addonNone;
-extern ADDONINTERFACE addonCFlash;
 extern ADDONINTERFACE addonRumblePak;
 extern ADDONINTERFACE addonGBAgame;
 extern ADDONINTERFACE addonGuitarGrip;
@@ -38,7 +32,6 @@ extern ADDONINTERFACE addonPaddle;
 
 ADDONINTERFACE addonList[NDS_ADDON_COUNT] = {
 		addonNone,
-		addonCFlash,
 		addonRumblePak,
 		addonGBAgame,
 		addonGuitarGrip,
@@ -47,8 +40,8 @@ ADDONINTERFACE addonList[NDS_ADDON_COUNT] = {
 		addonPaddle
 };
 
-ADDONINTERFACE	addon = addonCFlash;		// default none pak
-NDS_ADDON_TYPE				addon_type = NDS_ADDON_CFLASH;
+ADDONINTERFACE	addon = addonNone;		// default none pak
+NDS_ADDON_TYPE				addon_type = NDS_ADDON_NONE;
 
 BOOL addonsInit()
 {

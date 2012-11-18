@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch GDB_STUB
+//__LIBRETRO__: Ditch GDB_STUB, Homebrew support
 
 /*
 	Copyright (C) 2006 yopyop
@@ -595,10 +595,6 @@ int NDS_LoadROM(const char *filename, const char *physicalName, const char *logi
 		printf("\n\t* ROM crc: %08X\n", advsc.getCRC32());
 	}
 	printf("\n");
-
-	//for homebrew, try auto-patching DLDI. should be benign if there is no DLDI or if it fails
-	if(gameInfo.isHomebrew)
-		DLDI::tryPatch((void*)gameInfo.romdata, gameInfo.romsize);
 
 	memset(buf, 0, MAX_PATH);
 	path.getpathnoext(path.BATTERY, buf);

@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch Homebrew
+
 /*
 	Copyright (C) 2010-2011 DeSmuME team
 
@@ -60,7 +62,6 @@ enum NDS_SLOT1_TYPE
 {
 	NDS_SLOT1_NONE,
 	NDS_SLOT1_RETAIL,
-	NDS_SLOT1_R4,
 	NDS_SLOT1_RETAIL_NAND,		// used in Made in Ore/WarioWare D.I.Y.
 	NDS_SLOT1_COUNT		// use for counter addons - MUST TO BE LAST!!!
 };
@@ -72,8 +73,5 @@ BOOL slot1Init();
 void slot1Close();
 void slot1Reset();
 BOOL slot1Change(NDS_SLOT1_TYPE type);				// change current adddon
-void slot1SetFatDir(const std::string& dir);
-std::string slot1GetFatDir();
 NDS_SLOT1_TYPE slot1GetCurrentType();
-EMUFILE* slot1GetFatImage();
 #endif //__SLOT1_H__

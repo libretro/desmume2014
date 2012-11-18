@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch Homebrew support
+
 /*
 	Copyright (C) 2010-2012 DeSmuME team
 
@@ -22,60 +24,28 @@
 
 #include "NDSSystem.h"
 #include "emufile.h"
-#include "utils/vfat.h"
 
 extern SLOT1INTERFACE slot1None;
 extern SLOT1INTERFACE slot1Retail;
-extern SLOT1INTERFACE slot1R4;
 extern SLOT1INTERFACE slot1Retail_NAND;
-
-static EMUFILE* fatImage = NULL;
-static std::string fatDir;
 
 SLOT1INTERFACE slot1List[NDS_SLOT1_COUNT] = {
 		slot1None,
 		slot1Retail,
-		slot1R4,
 		slot1Retail_NAND
 };
 
 SLOT1INTERFACE slot1_device = slot1Retail; //default for frontends that dont even configure this
 NDS_SLOT1_TYPE slot1_device_type = NDS_SLOT1_RETAIL;
 
-static void scanDir()
-{
-	if(fatDir == "") return;
-	
-	if (fatImage)
-	{
-		delete fatImage;
-		fatImage = NULL;
-	}
-
-	VFAT vfat;
-	if(vfat.build(fatDir.c_str(),16))
-	{
-		fatImage = vfat.detach();
-	}
-}
-
 BOOL slot1Init()
 {
-	if (slot1_device_type == NDS_SLOT1_R4)
-		scanDir();
 	return slot1_device.init();
 }
 
 void slot1Close()
 {
 	slot1_device.close();
-	
-	//be careful to do this second, maybe the device will write something more
-	if (fatImage)
-	{
-		delete fatImage;
-		fatImage = NULL;
-	}
 }
 
 void slot1Reset()
@@ -90,28 +60,10 @@ BOOL slot1Change(NDS_SLOT1_TYPE changeToType)
 	slot1_device.close();
 	slot1_device_type = changeToType;
 	slot1_device = slot1List[slot1_device_type];
-	if (changeToType == NDS_SLOT1_R4)
-		scanDir();
 	printf("Slot 1: %s\n", slot1_device.name);
 	printf("sending eject signal to SLOT-1\n");
 	NDS_TriggerCardEjectIRQ();
 	return slot1_device.init();
-}
-
-void slot1SetFatDir(const std::string& dir)
-{
-	//printf("FAT path %s\n", dir.c_str());
-	fatDir = dir;
-}
-
-std::string slot1GetFatDir()
-{
-	return fatDir;
-}
-
-EMUFILE* slot1GetFatImage()
-{
-	return fatImage;
 }
 
 NDS_SLOT1_TYPE slot1GetCurrentType()

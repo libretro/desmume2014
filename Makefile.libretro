@@ -92,30 +92,16 @@ SOURCES = \
 	movie.cpp \
 	utils/datetime.cpp \
     utils/guid.cpp \
-	utils/emufat.cpp \
 	utils/md5.cpp utils/xstring.cpp \
 	utils/decrypt/crc.cpp utils/decrypt/decrypt.cpp \
 	utils/decrypt/header.cpp \
 	utils/task.cpp \
-    utils/vfat.cpp \
-	utils/dlditool.cpp \
-	utils/libfat/cache.cpp \
-	utils/libfat/directory.cpp \
-	utils/libfat/disc.cpp \
-	utils/libfat/fatdir.cpp \
-	utils/libfat/fatfile.cpp \
-	utils/libfat/filetime.cpp \
-	utils/libfat/file_allocation_table.cpp \
-	utils/libfat/libfat.cpp \
-	utils/libfat/libfat_public_api.cpp \
-	utils/libfat/lock.cpp \
-	utils/libfat/partition.cpp \
 	utils/tinyxml/tinystr.cpp \
 	utils/tinyxml/tinyxml.cpp \
 	utils/tinyxml/tinyxmlerror.cpp \
 	utils/tinyxml/tinyxmlparser.cpp \
 	addons.cpp \
-	addons/slot2_mpcf.cpp addons/slot2_paddle.cpp addons/slot2_gbagame.cpp addons/slot2_none.cpp addons/slot2_rumblepak.cpp addons/slot2_guitarGrip.cpp addons/slot2_expMemory.cpp addons/slot2_piano.cpp addons/slot1_none.cpp addons/slot1_r4.cpp addons/slot1_retail.cpp addons/slot1_retail_nand.cpp \
+	addons/slot2_paddle.cpp addons/slot2_gbagame.cpp addons/slot2_none.cpp addons/slot2_rumblepak.cpp addons/slot2_guitarGrip.cpp addons/slot2_expMemory.cpp addons/slot2_piano.cpp addons/slot1_none.cpp addons/slot1_retail.cpp addons/slot1_retail_nand.cpp \
 	cheatSystem.cpp \
 	texcache.cpp rasterize.cpp \
 	metaspu/metaspu.cpp \
