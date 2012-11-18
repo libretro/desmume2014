@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch GDB_STUB
+
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2006-2012 DeSmuME team
@@ -273,33 +275,9 @@ struct armcpu_t
 		memcpy(&cond_table[0], &arm_cond_table[0], sizeof(arm_cond_table));
 	}
 #endif
-
-#ifdef GDB_STUB
-  /** there is a pending irq for the cpu */
-  int irq_flag;
-
-  /** the post executed function (if installed) */
-  void (*post_ex_fn)( void *, u32 adr, int thumb);
-
-  /** data for the post executed function */
-  void *post_ex_fn_data;
-
-
-
-  /** the memory interface */
-  struct armcpu_memory_iface *mem_if;
-
-  /** the ctrl interface */
-  struct armcpu_ctrl_iface ctrl_iface;
-#endif
 };
 
-#ifdef GDB_STUB
-int armcpu_new( armcpu_t *armcpu, u32 id, struct armcpu_memory_iface *mem_if,
-                struct armcpu_ctrl_iface **ctrl_iface_ret);
-#else
 int armcpu_new( armcpu_t *armcpu, u32 id);
-#endif
 void armcpu_init(armcpu_t *armcpu, u32 adr);
 u32 armcpu_switchMode(armcpu_t *armcpu, u8 mode);
 

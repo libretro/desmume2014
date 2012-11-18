@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch HAVE_LUA
+//__LIBRETRO__: Ditch HAVE_LUA, GDB_STUB
 
 /*
 	Copyright (C) 2005 Guillaume Duhamel
@@ -26,11 +26,6 @@
 #define _WINDOWS
 //todo - everyone will want to support this eventually, i suppose
 #include "config.h"
-#endif
-
-//enforce a constraint: gdb stub requires developer
-#if defined(GDB_STUB) && !defined(DEVELOPER)
-#define DEVELOPER
 #endif
 
 #ifdef DEVELOPER

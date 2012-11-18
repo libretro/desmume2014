@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch HAVE_LUA
+//__LIBRETRO__: Ditch GDB_STUB
 
 /*
 	Copyright (C) 2006 yopyop
@@ -52,101 +52,10 @@ armcpu_t NDS_ARM9;
 		      }       \
                       while(0)
 
-#ifdef GDB_STUB
 
-#define STALLED_CYCLE_COUNT 10
-
-static void
-stall_cpu( void *instance) {
-  armcpu_t *armcpu = (armcpu_t *)instance;
-  printf("UNSTALL\n");
-  armcpu->stalled = 1;
-}
-                      
-static void
-unstall_cpu( void *instance) {
-  armcpu_t *armcpu = (armcpu_t *)instance;
-  printf("UNSTALL\n");
-  armcpu->stalled = 0;
-}
-
-static void
-install_post_exec_fn( void *instance,
-                      void (*ex_fn)( void *, u32 adr, int thumb),
-                      void *fn_data) {
-  armcpu_t *armcpu = (armcpu_t *)instance;
-
-  armcpu->post_ex_fn = ex_fn;
-  armcpu->post_ex_fn_data = fn_data;
-}
-
-static void
-remove_post_exec_fn( void *instance) {
-  armcpu_t *armcpu = (armcpu_t *)instance;
-
-  armcpu->post_ex_fn = NULL;
-}
-#endif
-
-#ifdef GDB_STUB
-static u32 read_cpu_reg( void *instance, u32 reg_num)
-{
-	armcpu_t *armcpu = (armcpu_t *)instance;
-
-	if ( reg_num <= 14) {
-	  return armcpu->R[reg_num];
-	}
-	else if ( reg_num == 15) {
-	  return armcpu->instruct_adr;
-	}
-	else if ( reg_num == 16) {
-	  //CPSR
-	  return armcpu->CPSR.val;
-	}
-}
-
-static void
-set_cpu_reg( void *instance, u32 reg_num, u32 value) {
-  armcpu_t *armcpu = (armcpu_t *)instance;
-
-  if ( reg_num <= 14) {
-    armcpu->R[reg_num] = value;
-  }
-  else if ( reg_num == 15) {
-    armcpu->next_instruction = value;
-  }
-  else if ( reg_num == 16) {
-    /* FIXME: setting the CPSR */
-  }
-}
-#endif
-
-#ifdef GDB_STUB
-int armcpu_new( armcpu_t *armcpu, u32 id,
-                struct armcpu_memory_iface *mem_if,
-                struct armcpu_ctrl_iface **ctrl_iface_ret)
-#else
 int armcpu_new( armcpu_t *armcpu, u32 id)
-#endif
 {
 	armcpu->proc_ID = id;
-
-#ifdef GDB_STUB
-	armcpu->mem_if = mem_if;
-
-	/* populate the control interface */
-	armcpu->ctrl_iface.stall = stall_cpu;
-	armcpu->ctrl_iface.unstall = unstall_cpu;
-	armcpu->ctrl_iface.read_reg = read_cpu_reg;
-	armcpu->ctrl_iface.set_reg = set_cpu_reg;
-	armcpu->ctrl_iface.install_post_ex_fn = install_post_exec_fn;
-	armcpu->ctrl_iface.remove_post_ex_fn = remove_post_exec_fn;
-	armcpu->ctrl_iface.data = armcpu;
-
-	*ctrl_iface_ret = &armcpu->ctrl_iface;
-
-	armcpu->post_ex_fn = NULL;
-#endif
 
 	armcpu->stalled = 0;
 
@@ -172,10 +81,6 @@ void armcpu_init(armcpu_t *armcpu, u32 adr)
 	armcpu->halt_IE_and_IF = FALSE;
 	armcpu->intrWaitARM_state = 0;
 
-//#ifdef GDB_STUB
-//    armcpu->irq_flag = 0;
-//#endif
-
 	for(int i = 0; i < 16; ++i)
 		armcpu->R[i] = 0;
 	
@@ -190,18 +95,11 @@ void armcpu_init(armcpu_t *armcpu, u32 adr)
 	
 	armcpu->SPSR_svc.val = armcpu->SPSR_abt.val = armcpu->SPSR_und.val = armcpu->SPSR_irq.val = armcpu->SPSR_fiq.val = 0;
 
-//#ifdef GDB_STUB
-//    armcpu->instruct_adr = adr;
-//	armcpu->R[15] = adr + 8;
-//#else
 	//armcpu->R[15] = adr;
-//#endif
 
 	armcpu->next_instruction = adr;
 	
-//#ifndef GDB_STUB
 	armcpu_prefetch(armcpu);
-//#endif
 }
 
 u32 armcpu_switchMode(armcpu_t *armcpu, u8 mode)
@@ -324,25 +222,10 @@ template<u32 PROCNUM>
 FORCEINLINE static u32 armcpu_prefetch()
 {
 	armcpu_t* const armcpu = &ARMPROC;
-//#ifdef GDB_STUB
-//	u32 temp_instruction;
-//#endif
 	u32 curInstruction = armcpu->next_instruction;
 
 	if(armcpu->CPSR.bits.T == 0)
 	{
-//#ifdef GDB_STUB
-//		temp_instruction =
-//			armcpu->mem_if->prefetch32( armcpu->mem_if->data,
-//			armcpu->next_instruction);
-//
-//		if ( !armcpu->stalled) {
-//			armcpu->instruction = temp_instruction;
-//			armcpu->instruct_adr = armcpu->next_instruction;
-//			armcpu->next_instruction += 4;
-//			armcpu->R[15] = armcpu->next_instruction + 4;
-//		}
-//#else
 		curInstruction &= 0xFFFFFFFC; //please don't change this to 0x0FFFFFFC -- the NDS will happily run on 0xF******* addresses all day long
 		//please note that we must setup R[15] before reading the instruction since there is a protection
 		//which prevents PC > 0x3FFF from reading the bios region
@@ -350,23 +233,10 @@ FORCEINLINE static u32 armcpu_prefetch()
 		armcpu->next_instruction = curInstruction + 4;
 		armcpu->R[15] = curInstruction + 8;
 		armcpu->instruction = _MMU_read32<PROCNUM, MMU_AT_CODE>(curInstruction);
-//#endif
 
 		return MMU_codeFetchCycles<PROCNUM,32>(curInstruction);
 	}
 
-//#ifdef GDB_STUB
-//	temp_instruction =
-//		armcpu->mem_if->prefetch16( armcpu->mem_if->data,
-//		armcpu->next_instruction);
-//
-//	if ( !armcpu->stalled) {
-//		armcpu->instruction = temp_instruction;
-//		armcpu->instruct_adr = armcpu->next_instruction;
-//		armcpu->next_instruction = armcpu->next_instruction + 2;
-//		armcpu->R[15] = armcpu->next_instruction + 2;
-//	}
-//#else
 	curInstruction &= 0xFFFFFFFE; //please don't change this to 0x0FFFFFFE -- the NDS will happily run on 0xF******* addresses all day long
 	//please note that we must setup R[15] before reading the instruction since there is a protection
 	//which prevents PC > 0x3FFF from reading the bios region
@@ -374,7 +244,6 @@ FORCEINLINE static u32 armcpu_prefetch()
 	armcpu->next_instruction = curInstruction + 2;
 	armcpu->R[15] = curInstruction + 4;
 	armcpu->instruction = _MMU_read16<PROCNUM, MMU_AT_CODE>(curInstruction);
-//#endif
 
 	if(PROCNUM==0)
 	{
@@ -459,19 +328,12 @@ BOOL armcpu_irqException(armcpu_t *armcpu)
     Status_Reg tmp;
 
 	//TODO - remove GDB specific code
-//#ifdef GDB_STUB
-//	armcpu->irq_flag = 0;
-//#endif
       
 	tmp = armcpu->CPSR;
 	armcpu_switchMode(armcpu, IRQ);
 
 	//TODO - remove GDB specific code
-//#ifdef GDB_STUB
-//	armcpu->R[14] = armcpu->next_instruction + 4;
-//#else
 	armcpu->R[14] = armcpu->instruct_adr + 4;
-//#endif
 	armcpu->SPSR = tmp;
 	armcpu->CPSR.bits.T = 0;
 	armcpu->CPSR.bits.I = 1;
@@ -492,9 +354,6 @@ BOOL armcpu_irqException(armcpu_t *armcpu)
 //
 //  armcpu->waitIRQ = 0;
 //
-//#ifdef GDB_STUB
-//  armcpu->irq_flag = 1;
-//#endif
 //
 //  return TRUE;
 //}
@@ -521,9 +380,6 @@ u32 TRAPUNDEF(armcpu_t* cpu)
 //
 //  armcpu->waitIRQ = 0;
 //
-//#ifdef GDB_STUB
-//  armcpu->irq_flag = 1;
-//#endif
 //
 //  return TRUE;
 //}
@@ -578,23 +434,6 @@ u32 armcpu_exec()
 	}
 #endif
 
-#if 0 //#ifdef GDB_STUB
-	if (ARMPROC.stalled) {
-		return STALLED_CYCLE_COUNT;
-	}
-
-	/* check for interrupts */
-	if (ARMPROC.irq_flag) {
-		armcpu_irqException(&ARMPROC);
-	}
-
-	cFetch = armcpu_prefetch(&ARMPROC);
-
-	if (ARMPROC.stalled) {
-		return MMU_fetchExecuteCycles<PROCNUM>(cExecute, cFetch);
-	}
-#endif
-
 	//cFetch = armcpu_prefetch(&ARMPROC);
 
 	//printf("%d: %08X\n",PROCNUM,ARMPROC.instruct_adr);
@@ -613,13 +452,6 @@ u32 armcpu_exec()
 		}
 		else
 			cExecute = 1; // If condition=false: 1S cycle
-#ifdef GDB_STUB
-		if ( ARMPROC.post_ex_fn != NULL) {
-			/* call the external post execute function */
-			ARMPROC.post_ex_fn(ARMPROC.post_ex_fn_data, ARMPROC.instruct_adr, 0);
-		}
-		ARMPROC.mem_if->prefetch32( ARMPROC.mem_if->data, ARMPROC.next_instruction);
-#endif
 		cFetch = armcpu_prefetch<PROCNUM>();
 		return MMU_fetchExecuteCycles<PROCNUM>(cExecute, cFetch);
 	}
@@ -629,13 +461,6 @@ u32 armcpu_exec()
 	#endif
 	cExecute = thumb_instructions_set[PROCNUM][ARMPROC.instruction>>6](ARMPROC.instruction);
 
-#ifdef GDB_STUB
-	if ( ARMPROC.post_ex_fn != NULL) {
-		/* call the external post execute function */
-		ARMPROC.post_ex_fn( ARMPROC.post_ex_fn_data, ARMPROC.instruct_adr, 1);
-	}
-	ARMPROC.mem_if->prefetch32( ARMPROC.mem_if->data, ARMPROC.next_instruction);
-#endif
 	cFetch = armcpu_prefetch<PROCNUM>();
 	return MMU_fetchExecuteCycles<PROCNUM>(cExecute, cFetch);
 }
