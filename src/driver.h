@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch View3D support
+
 /*
 	Copyright (C) 2009-2010 DeSmuME team
 
@@ -26,19 +28,11 @@
 #include <pcap.h>
 #endif
 
-class VIEW3D_Driver
-{
-public:
-	virtual void Launch() {}
-	virtual void NewFrame() {}
-	virtual bool IsRunning() { return false; }
-};
-
 //each platform needs to implement this, although it doesnt need to implement any functions
 class BaseDriver {
 public:
-	BaseDriver();
-	~BaseDriver();
+	BaseDriver() {};
+	~BaseDriver() {};
 
 #ifdef EXPERIMENTAL_WIFI_COMM
 	virtual bool WIFI_SocketsAvailable() { return true; }
@@ -85,10 +79,6 @@ public:
 	};
 
 	virtual void DEBUG_UpdateIORegView(eDebug_IOReg category) { }
-
-	VIEW3D_Driver* view3d;
-	void VIEW3D_Shutdown();
-	void VIEW3D_Init();
 };
 extern BaseDriver* driver;
 

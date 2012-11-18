@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch Movie Support
+//__LIBRETRO__: Ditch Movie Support, View3D support
 
 /*	
 	Copyright (C) 2006 yopyop
@@ -2143,16 +2143,6 @@ static void gfx3d_doFlush()
 
 	//switch to the new lists
 	twiddleLists();
-
-	if(driver->view3d->IsRunning())
-	{
-		viewer3d_state->frameNumber = currFrameCounter;
-		viewer3d_state->state = gfx3d.state;
-		viewer3d_state->polylist = *gfx3d.polylist;
-		viewer3d_state->vertlist = *gfx3d.vertlist;
-		viewer3d_state->indexlist = gfx3d.indexlist;
-		driver->view3d->NewFrame();
-	}
 
 	drawPending = TRUE;
 }

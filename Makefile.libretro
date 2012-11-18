@@ -105,8 +105,7 @@ SOURCES = \
 	metaspu/metaspu.cpp \
 	version.cpp \
 	mic.cpp \
-	GPU_osd_stub.cpp \
-	driver.cpp
+	GPU_osd_stub.cpp
 
 ifeq ($(DESMUME_JIT),1)
 SOURCES += \
