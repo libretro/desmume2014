@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch Movie Support
+
 /*
 	Copyright (C) 2006 thoduv
 	Copyright (C) 2006-2007 Theo Berkau
@@ -22,7 +24,6 @@
 #include "debug.h"
 #include "types.h"
 #include "mc.h"
-#include "movie.h"
 #include "readwrite.h"
 #include "NDSSystem.h"
 #define TIXML_USE_STL

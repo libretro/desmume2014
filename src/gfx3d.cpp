@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch Movie Support
+
 /*	
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2008-2012 DeSmuME team
@@ -45,8 +47,9 @@
 #include "NDSSystem.h"
 #include "readwrite.h"
 #include "FIFO.h"
-#include "movie.h" //only for currframecounter which really ought to be moved into the core emu....
 #include <queue>
+
+extern int currFrameCounter;
 
 //#define _SHOW_VTX_COUNTERS	// show polygon/vertex counters on screen
 #ifdef _SHOW_VTX_COUNTERS

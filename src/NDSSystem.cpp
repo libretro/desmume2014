@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch GDB_STUB, Homebrew support
+//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie
 
 /*
 	Copyright (C) 2006 yopyop
@@ -36,7 +36,6 @@
 #include "bios.h"
 #include "debug.h"
 #include "cheatSystem.h"
-#include "movie.h"
 #include "Disassembler.h"
 #include "readwrite.h"
 #include "debug.h"
@@ -45,6 +44,8 @@
 #include "slot1.h"
 
 #include "path.h"
+
+int currFrameCounter;
 
 //int xxctr=0;
 //#define LOG_ARM9
@@ -555,7 +556,6 @@ int NDS_LoadROM(const char *filename, const char *physicalName, const char *logi
 
 	if (cheatSearch)
 		cheatSearch->close();
-	FCEUI_StopMovie();
 
 	MMU_unsetRom();
 	NDS_SetROM((u8*)gameInfo.romdata, gameInfo.mask);
@@ -613,7 +613,6 @@ int NDS_LoadROM(const char *filename, const char *physicalName, const char *logi
 
 void NDS_FreeROM(void)
 {
-	FCEUI_StopMovie();
 	if ((u8*)MMU.CART_ROM == (u8*)gameInfo.romdata)
 		gameInfo.romdata = NULL;
 	if (MMU.CART_ROM != MMU.UNUSED_RAM)
@@ -2178,7 +2177,6 @@ void execHardware_interrupts()
 
 static void resetUserInput();
 
-bool _HACK_DONT_STOPMOVIE = false;
 void NDS_Reset()
 {
 	singleStep = false;
@@ -2202,16 +2200,11 @@ void NDS_Reset()
 	nds_arm9_timer = 0;
 	nds_arm7_timer = 0;
 
-	if(movieMode != MOVIEMODE_INACTIVE && !_HACK_DONT_STOPMOVIE)
-		movie_reset_command = true;
-
-	if(movieMode == MOVIEMODE_INACTIVE) {
-		currFrameCounter = 0;
-		lagframecounter = 0;
-		LagFrameFlag = 0;
-		lastLag = 0;
-		TotalLagFrames = 0;
-	}
+    currFrameCounter = 0;
+    lagframecounter = 0;
+    LagFrameFlag = 0;
+    lastLag = 0;
+    TotalLagFrames = 0;
 
 	SPU_DeInit();
 
@@ -2790,18 +2783,6 @@ void NDS_setTouchPos(u16 x, u16 y)
 	rawUserInput.touch.touchX = x<<4;
 	rawUserInput.touch.touchY = y<<4;
 	rawUserInput.touch.isTouch = true;
-
-	if(movieMode != MOVIEMODE_INACTIVE && movieMode != MOVIEMODE_FINISHED)
-	{
-		// just in case, since the movie only stores 8 bits per touch coord
-#ifdef WORDS_BIGENDIAN
-		rawUserInput.touch.touchX &= 0xF00F;
-		rawUserInput.touch.touchY &= 0xF00F;
-#else
-		rawUserInput.touch.touchX &= 0x0FF0;
-		rawUserInput.touch.touchY &= 0x0FF0;
-#endif
-	}
 }
 void NDS_releaseTouch(void)
 { 

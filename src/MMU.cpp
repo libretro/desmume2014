@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch Movie
+
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2007 shash
@@ -36,7 +38,6 @@
 #include "addons.h"
 #include "slot1.h"
 #include "mic.h"
-#include "movie.h"
 #include "readwrite.h"
 #include "MMU_timing.h"
 

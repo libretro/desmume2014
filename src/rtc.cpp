@@ -1,3 +1,4 @@
+//__LIBRETRO__: Ditch Movie support
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2008 CrazyMax
@@ -28,7 +29,6 @@
 #ifdef WIN32
 #include "windows/main.h"
 #endif
-#include "movie.h"
 
 
 typedef struct
@@ -92,28 +92,10 @@ static inline u8 toBCD(u8 x)
 	return ((x / 10) << 4) | (x % 10);
 }
 
-bool moviemode=false;
-
 DateTime rtcGetTime(void)
 {
 	DateTime tm;
-	if(movieMode == MOVIEMODE_INACTIVE) {
-		return DateTime::get_Now();
-	}
-	else {
-		//now, you might think it is silly to go through all these conniptions
-		//when we could just assume that there are 60fps and base the seconds on frameCounter/60
-		//but, we were imagining that one day we might need more precision
-
-		const u32 arm9rate_unitsperframe = 560190<<1;
-		const u32 arm9rate_unitspersecond = (u32)(arm9rate_unitsperframe * 59.8261);
-
-		u64 totalcycles = (u64)arm9rate_unitsperframe * currFrameCounter;
-		u64 totalseconds=totalcycles/arm9rate_unitspersecond;
-
-		DateTime timer = currMovieData.rtcStart;
-		return timer.AddSeconds(totalseconds);
-	}
+	return DateTime::get_Now();
 }
 
 static void rtcRecv()

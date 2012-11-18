@@ -89,7 +89,6 @@ SOURCES = \
 	matrix.cpp \
 	gfx3d.cpp \
 	thumb_instructions.cpp \
-	movie.cpp \
 	utils/datetime.cpp \
     utils/guid.cpp \
 	utils/md5.cpp utils/xstring.cpp \

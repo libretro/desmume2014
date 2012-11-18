@@ -1,3 +1,4 @@
+//__LIBRETRO__: Ditch Movie Support
 /*
 	Copyright (C) 2006 Normmatt
 	Copyright (C) 2006 Theo Berkau
@@ -40,7 +41,6 @@
 
 #include "readwrite.h"
 #include "gfx3d.h"
-#include "movie.h"
 #include "mic.h"
 #include "MMU_timing.h"
 
@@ -49,6 +49,8 @@
 #ifdef _WINDOWS
 #include "windows/main.h"
 #endif
+
+extern int currFrameCounter;
 
 int lastSaveState = 0;		//Keeps track of last savestate used for quick save/load functions
 
@@ -263,12 +265,6 @@ SFORMAT SF_MMU[]={
 
 	{ "MR3D", 4, 1,		&MMU.reg_DISP3DCNT_bits},
 	
-	{ 0 }
-};
-
-SFORMAT SF_MOVIE[]={
-	{ "FRAC", 4, 1, &currFrameCounter},
-	{ "LAGC", 4, 1, &TotalLagFrames},
 	{ 0 }
 };
 
@@ -921,8 +917,6 @@ static void writechunks(EMUFILE* os) {
 	savestate_WriteChunk(os,81,mic_savestate);
 	savestate_WriteChunk(os,90,SF_GFX3D);
 	savestate_WriteChunk(os,91,gfx3d_savestate);
-	savestate_WriteChunk(os,100,SF_MOVIE);
-	savestate_WriteChunk(os,101,mov_savestate);
 	savestate_WriteChunk(os,110,SF_WIFI);
 	savestate_WriteChunk(os,120,SF_RTC);
 	savestate_WriteChunk(os,0xFFFFFFFF,(SFORMAT*)0);
@@ -953,8 +947,6 @@ static bool ReadStateChunks(EMUFILE* is, s32 totalsize)
 			case 81: if(!mic_loadstate(is,size)) ret=false; break;
 			case 90: if(!ReadStateChunk(is,SF_GFX3D,size)) ret=false; break;
 			case 91: if(!gfx3d_loadstate(is,size)) ret=false; break;
-			case 100: if(!ReadStateChunk(is,SF_MOVIE, size)) ret=false; break;
-			case 101: if(!mov_loadstate(is, size)) ret=false; break;
 			case 110: if(!ReadStateChunk(is,SF_WIFI,size)) ret=false; break;
 			case 120: if(!ReadStateChunk(is,SF_RTC,size)) ret=false; break;
 			default:
@@ -1040,13 +1032,7 @@ bool savestate_load(EMUFILE* is)
 	//THERE IS NO GOING BACK NOW
 	//reset the emulator first to clean out the host's state
 
-	//while the series of resets below should work,
-	//we are testing the robustness of the savestate system with this full reset.
-	//the full reset wipes more things, so we can make sure that they are being restored correctly
-	extern bool _HACK_DONT_STOPMOVIE;
-	_HACK_DONT_STOPMOVIE = true;
 	NDS_Reset();
-	_HACK_DONT_STOPMOVIE = false;
 
 	//reset some options to their old defaults which werent saved
 	nds._DebugConsole = FALSE;

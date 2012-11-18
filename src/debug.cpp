@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch HAVE_LUA
+//__LIBRETRO__: Ditch HAVE_LUA, Movie support
 
 /*
 	Copyright (C) 2006 Guillaume Duhamel
@@ -29,7 +29,8 @@
 #include "cp15.h"
 #include "NDSSystem.h"
 #include "utils/xstring.h"
-#include "movie.h"
+
+extern int currFrameCounter;
 
 armcpu_t* TDebugEventData::cpu() { return procnum==0?&NDS_ARM9:&NDS_ARM7; }
 
