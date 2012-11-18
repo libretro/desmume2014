@@ -104,9 +104,8 @@ SOURCES = \
 	texcache.cpp rasterize.cpp \
 	metaspu/metaspu.cpp \
 	version.cpp \
-	mic.cpp \
-	GPU_osd_stub.cpp
-
+	mic.cpp 
+	
 ifeq ($(DESMUME_JIT),1)
 SOURCES += \
 	arm_jit.cpp \

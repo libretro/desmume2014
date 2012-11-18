@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch OSD
+
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2006-2007 Theo Berkau
@@ -30,7 +32,6 @@
 #include "render3D.h"
 #include "gfx3d.h"
 #include "debug.h"
-#include "GPU_osd.h"
 #include "NDSSystem.h"
 #include "readwrite.h"
 
@@ -1859,9 +1860,6 @@ int Screen_Init()
 		((u16*)GPU_screen)[i] = 0x7FFF;
 	disp_fifo.head = disp_fifo.tail = 0;
 
-	if (osd)  {delete osd; osd =NULL; }
-	osd  = new OSDCLASS(-1);
-
 	return 0;
 }
 
@@ -1875,15 +1873,12 @@ void Screen_Reset(void)
 		((u16*)GPU_screen)[i] = 0x7FFF;
 
 	disp_fifo.head = disp_fifo.tail = 0;
-	osd->clear();
 }
 
 void Screen_DeInit(void)
 {
 	GPU_DeInit(MainScreen.gpu);
 	GPU_DeInit(SubScreen.gpu);
-
-	if (osd)  {delete osd; osd =NULL; }
 }
 
 
