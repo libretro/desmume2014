@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch HAVE_LUA
+
 /*
 	Copyright (C) 2005 Guillaume Duhamel
 	Copyright (C) 2008-2012 DeSmuME team
@@ -42,9 +44,6 @@
 	#define HAVE_LIBAGG
 	#define ENABLE_SSE
 	#define ENABLE_SSE2
-	#ifdef DEVELOPER
-		#define HAVE_LUA
-	#endif
 	#define HAVE_JIT
 #endif
 

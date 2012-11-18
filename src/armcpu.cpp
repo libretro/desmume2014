@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch HAVE_LUA
+
 /*
 	Copyright (C) 2006 yopyop
 	Copyright (C) 2009-2012 DeSmuME team
@@ -28,9 +30,6 @@
 #include "Disassembler.h"
 #include "NDSSystem.h"
 #include "MMU_timing.h"
-#ifdef HAVE_LUA
-#include "lua-engine.h"
-#endif
 #ifdef HAVE_JIT
 #include "arm_jit.h"
 #endif
@@ -607,9 +606,6 @@ u32 armcpu_exec()
 			|| (TEST_COND(CONDITION(ARMPROC.instruction), CODE(ARMPROC.instruction), ARMPROC.CPSR)) //handles any condition
 			)
 		{
-#ifdef HAVE_LUA
-			CallRegisteredLuaMemHook(ARMPROC.instruct_adr, 4, ARMPROC.instruction, LUAMEMHOOK_EXEC); // should report even if condition=false?
-#endif
 			#ifdef DEVELOPER
 			DEBUG_statistics.instructionHits[PROCNUM].arm[INSTRUCTION_INDEX(ARMPROC.instruction)]++;
 			#endif
@@ -628,9 +624,6 @@ u32 armcpu_exec()
 		return MMU_fetchExecuteCycles<PROCNUM>(cExecute, cFetch);
 	}
 
-#ifdef HAVE_LUA
-	CallRegisteredLuaMemHook(ARMPROC.instruct_adr, 2, ARMPROC.instruction, LUAMEMHOOK_EXEC);
-#endif
 	#ifdef DEVELOPER
 	DEBUG_statistics.instructionHits[PROCNUM].thumb[ARMPROC.instruction>>6]++;
 	#endif
