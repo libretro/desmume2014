@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie
+//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie, Cheats
 
 /*
 	Copyright (C) 2006 yopyop
@@ -35,7 +35,6 @@
 #include "cp15.h"
 #include "bios.h"
 #include "debug.h"
-#include "cheatSystem.h"
 #include "Disassembler.h"
 #include "readwrite.h"
 #include "debug.h"
@@ -140,9 +139,6 @@ int NDS_Init( void)
 	TSCal.scr.width = (TSCal.scr.x2 - TSCal.scr.x1);
 	TSCal.scr.height = (TSCal.scr.y2 - TSCal.scr.y1);
 
-	cheats = new CHEATS();
-	cheatSearch = new CHEATSEARCH();
-
 	return 0;
 }
 
@@ -156,10 +152,6 @@ void NDS_DeInit(void) {
 	gpu3D->NDS_3D_Close();
 
 	WIFI_DeInit();
-	if (cheats)
-		delete cheats;
-	if (cheatSearch)
-		delete cheatSearch;
 
 #ifdef HAVE_JIT
 	arm_jit_close();
@@ -554,9 +546,6 @@ int NDS_LoadROM(const char *filename, const char *physicalName, const char *logi
 	}
 #endif
 
-	if (cheatSearch)
-		cheatSearch->close();
-
 	MMU_unsetRom();
 	NDS_SetROM((u8*)gameInfo.romdata, gameInfo.mask);
 
@@ -600,11 +589,6 @@ int NDS_LoadROM(const char *filename, const char *physicalName, const char *logi
 	path.getpathnoext(path.BATTERY, buf);
 	strcat(buf, ".dsv");							// DeSmuME memory card	:)
 	MMU_new.backupDevice.load_rom(buf);
-
-	memset(buf, 0, MAX_PATH);
-	path.getpathnoext(path.CHEATS, buf);
-	strcat(buf, ".dct");							// DeSmuME cheat		:)
-	cheats->init(buf);
 
 	NDS_Reset();
 
@@ -2147,8 +2131,6 @@ void NDS_exec(s32 nb)
 	}
 	currFrameCounter++;
 	DEBUG_Notify.NextFrame();
-	if (cheats)
-		cheats->process();
 }
 
 template<int PROCNUM> static void execHardware_interrupts_core()
