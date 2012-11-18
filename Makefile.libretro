@@ -73,7 +73,6 @@ SOURCES = \
 	bios.cpp cp15.cpp \
 	common.cpp \
 	debug.cpp \
-	Disassembler.cpp \
 	emufile.cpp FIFO.cpp \
 	firmware.cpp GPU.cpp \
 	mc.cpp \
