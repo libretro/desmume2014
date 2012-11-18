@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch GDB_STUB
+//__LIBRETRO__: Ditch GDB_STUB, Disassembler
 
 /*
 	Copyright (C) 2006 yopyop
@@ -27,7 +27,6 @@
 #include "cp15.h"
 #include "bios.h"
 #include "debug.h"
-#include "Disassembler.h"
 #include "NDSSystem.h"
 #include "MMU_timing.h"
 #ifdef HAVE_JIT

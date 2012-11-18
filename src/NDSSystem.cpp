@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie, Cheats
+//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie, Cheats, Disassembler
 
 /*
 	Copyright (C) 2006 yopyop
@@ -35,7 +35,6 @@
 #include "cp15.h"
 #include "bios.h"
 #include "debug.h"
-#include "Disassembler.h"
 #include "readwrite.h"
 #include "debug.h"
 #include "firmware.h"

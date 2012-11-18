@@ -1,3 +1,5 @@
+//__LIBRETRO__: Ditch disassembler support
+
 /*	Copyright (C) 2006 yopyop
 	Copyright (C) 2011 Loren Merritt
 	Copyright (C) 2012 DeSmuME team
@@ -32,7 +34,6 @@
 #endif
 #include "instructions.h"
 #include "instruction_attributes.h"
-#include "Disassembler.h"
 #include "MMU.h"
 #include "MMU_timing.h"
 #include "utils/AsmJit/AsmJit.h"
