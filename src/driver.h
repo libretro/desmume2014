@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch View3D support
+//__LIBRETRO__: Ditch View3D support, WAV and AVI recording
 
 /*
 	Copyright (C) 2009-2010 DeSmuME team
@@ -50,10 +50,6 @@ public:
 	virtual int PCAP_sendpacket(pcap_t* dev, const u_char* data, int len) { return -1; }
 	virtual int PCAP_dispatch(pcap_t* dev, int num, pcap_handler callback, u_char* userdata) { return -1; }
 #endif
-
-	virtual void AVI_SoundUpdate(void* soundData, int soundLen) {}
-	virtual bool AVI_IsRecording() { return FALSE; }
-	virtual bool WAV_IsRecording() { return FALSE; }
 
 	virtual void USR_InfoMessage(const char *message) { LOG("%s\n", message); }
 	virtual void USR_RefreshScreen() {}

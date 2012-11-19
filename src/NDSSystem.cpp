@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie, Cheats, Disassembler
+//__LIBRETRO__: Ditch GDB_STUB, Homebrew support, Movie, Cheats, Disassembler, WAV and AVI recording
 
 /*
 	Copyright (C) 2006 yopyop
@@ -1009,9 +1009,7 @@ static FrameSkipper frameSkipper;
 
 
 void NDS_SkipNextFrame() {
-	if (!driver->AVI_IsRecording()) {
-		frameSkipper.RequestSkip();
-	}
+	frameSkipper.RequestSkip();
 }
 void NDS_OmitFrameSkip(int force) {
 	frameSkipper.OmitSkip(force > 0, force > 1);
@@ -1467,8 +1465,6 @@ static void execHardware_hblank()
 	//emulation housekeeping. for some reason we always do this at hblank,
 	//even though it sounds more reasonable to do it at hstart
 	SPU_Emulate_core();
-	driver->AVI_SoundUpdate(SPU_core->outbuf,spu_core_samples);
-	WAV_WavSoundUpdate(SPU_core->outbuf,spu_core_samples);
 }
 
 static void execHardware_hstart_vblankEnd()
