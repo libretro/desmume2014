@@ -3,11 +3,9 @@
 #include "MMU.h"
 #include "NDSSystem.h"
 #include "debug.h"
-#include "render3D.h"
 #include "rasterize.h"
 #include "saves.h"
 #include "firmware.h"
-#include "GPU_osd.h"
 #include "addons.h"
 
 //
@@ -151,14 +149,6 @@ namespace INPUT
     }
 }
 
-GPU3DInterface* core3DList[] =
-{
-	&gpu3DRasterize,
-	NULL
-};
-
-
-
 //
 
 void *retro_get_memory_data(unsigned type)
@@ -256,7 +246,7 @@ void retro_init (void)
     addonsChangePak(NDS_ADDON_NONE);
     NDS_Init();
     NDS_CreateDummyFirmware(&fw_config);
-    NDS_3D_ChangeCore(0);
+    SoftRastInit();
     backup_setManualBackupType(MC_TYPE_AUTODETECT);
 }
 

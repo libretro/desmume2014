@@ -31,7 +31,7 @@
 #include "cp15.h"
 #include "wifi.h"
 #include "registers.h"
-#include "render3D.h"
+#include "rasterize.h"
 #include "gfx3d.h"
 #include "rtc.h"
 #include "mc.h"
@@ -834,7 +834,7 @@ static inline void MMU_VRAMmapControl(u8 block, u8 VRAMBankCnt)
 	{
 		//if(!nds.isIn3dVblank())
 	//		PROGINFO("Changing texture or texture palette mappings outside of 3d vblank\n");
-		gpu3D->NDS_3D_VramReconfigureSignal();
+		SoftRastVramReconfigureSignal();
 	}
 
 	//-------------------------------

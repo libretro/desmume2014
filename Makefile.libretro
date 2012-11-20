@@ -83,7 +83,6 @@ SOURCES = \
 	wifi.cpp \
 	MMU.cpp NDSSystem.cpp \
 	ROMReader.cpp \
-	render3D.cpp \
 	rtc.cpp \
 	saves.cpp \
 	slot1.cpp \

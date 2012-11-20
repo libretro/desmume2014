@@ -40,7 +40,7 @@
 #include "matrix.h"
 #include "bits.h"
 #include "MMU.h"
-#include "render3D.h"
+#include "rasterize.h"
 #include "mem.h"
 #include "types.h"
 #include "saves.h"
@@ -248,7 +248,6 @@ using std::max;
 using std::min;
 
 GFX3D gfx3d;
-Viewer3d_State* viewer3d_state = NULL;
 static GFX3D_Clipper boxtestClipper;
 
 //tables that are provided to anyone
@@ -493,8 +492,6 @@ void gfx3d_reset()
 #endif
 
 	reconstruct(&gfx3d);
-	delete viewer3d_state;
-	viewer3d_state = new Viewer3d_State();
 	
 	gxf_hardware.reset();
 
@@ -2167,13 +2164,13 @@ void gfx3d_VBlankEndSignal(bool skipFrame)
 	drawPending = FALSE;
 
 	//if the null 3d core is chosen, then we need to clear out the 3d buffers to keep old data from being rendered
-	if(gpu3D == &gpu3DNull || !CommonSettings.showGpu.main)
+	if(!CommonSettings.showGpu.main)
 	{
 		memset(gfx3d_convertedScreen,0,sizeof(gfx3d_convertedScreen));
 		return;
 	}
 
-	gpu3D->NDS_3D_Render();
+	SoftRastRender();
 }
 
 //#define _3D_LOG

@@ -18,10 +18,13 @@
 #ifndef _RASTERIZE_H_
 #define _RASTERIZE_H_
 
-#include "render3D.h"
 #include "gfx3d.h"
 
-extern GPU3DInterface gpu3DRasterize;
+char SoftRastInit(void);
+void SoftRastReset();
+void SoftRastClose();
+void SoftRastRender();
+void SoftRastVramReconfigureSignal();
 
 union FragmentColor {
 	u32 color;

@@ -40,7 +40,6 @@
 #include "bits.h"
 #include "common.h"
 #include "matrix.h"
-#include "render3D.h"
 #include "gfx3d.h"
 #include "texcache.h"
 #include "NDSSystem.h"
@@ -1083,7 +1082,7 @@ static void* execRasterizerUnit(void* arg)
 	return 0;
 }
 
-static char SoftRastInit(void)
+char SoftRastInit(void)
 {
 	if(!rasterizerUnitTasksInited)
 	{
@@ -1149,18 +1148,18 @@ static char SoftRastInit(void)
 	return 1;
 }
 
-static void SoftRastReset() {
+void SoftRastReset() {
 	TexCache_Reset();
 }
 
-static void SoftRastClose()
+void SoftRastClose()
 {
 	for(int i=0; i<_MAX_CORES; i++)
 		rasterizerUnitTask[i].shutdown();
 	rasterizerUnitTasksInited = false;
 }
 
-static void SoftRastVramReconfigureSignal() {
+void SoftRastVramReconfigureSignal() {
 	TexCache_Invalidate();
 }
 
@@ -1600,7 +1599,7 @@ void _HACK_Viewer_ExecUnit(SoftRasterizerEngine* engine)
 	_HACK_viewer_rasterizerUnit.mainLoop<false>(engine);
 }
 
-static void SoftRastRender()
+void SoftRastRender()
 {
 	mainSoftRasterizer.polylist = gfx3d.polylist;
 	mainSoftRasterizer.vertlist = gfx3d.vertlist;
@@ -1642,13 +1641,3 @@ static void SoftRastRender()
 	//	printf("rendered %d of %d polys after backface culling\n",gfx3d.polylist->count-culled,gfx3d.polylist->count);
 	SoftRastConvertFramebuffer();
 }
-
-GPU3DInterface gpu3DRasterize = {
-	"SoftRasterizer",
-	SoftRastInit,
-	SoftRastReset,
-	SoftRastClose,
-	SoftRastRender,
-	SoftRastVramReconfigureSignal,
-};
-

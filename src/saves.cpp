@@ -34,7 +34,7 @@
 #include "saves.h"
 #include "MMU.h"
 #include "NDSSystem.h"
-#include "render3D.h"
+#include "rasterize.h"
 #include "cp15.h"
 #include "version.h"
 

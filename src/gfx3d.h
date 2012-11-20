@@ -350,17 +350,6 @@ struct GFX3D_State
 	u8 shininessTable[128];
 };
 
-struct Viewer3d_State
-{
-	int frameNumber;
-	GFX3D_State state;
-	VERTLIST vertlist;
-	POLYLIST polylist;
-	INDEXLIST indexlist;
-};
-
-extern Viewer3d_State* viewer3d_state;
-
 struct GFX3D
 {
 	GFX3D()

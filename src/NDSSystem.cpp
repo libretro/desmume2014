@@ -26,7 +26,7 @@
 
 #include "common.h"
 #include "NDSSystem.h"
-#include "render3D.h"
+#include "rasterize.h"
 #include "MMU.h"
 #include "ROMReader.h"
 #include "gfx3d.h"
@@ -148,7 +148,7 @@ void NDS_DeInit(void) {
 	SPU_Init();
 	Screen_DeInit();
 	MMU_DeInit();
-	gpu3D->NDS_3D_Close();
+	SoftRastClose();
 
 	WIFI_DeInit();
 
@@ -2595,7 +2595,7 @@ void NDS_Reset()
 
 	Screen_Reset();
 	gfx3d_reset();
-	gpu3D->NDS_3D_Reset();
+	SoftRastReset();
 	slot1Reset();
 
 	WIFI_Reset();
