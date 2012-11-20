@@ -116,7 +116,6 @@ SOURCES = \
 	addons/slot1_retail_nand.cpp \
 	texcache.cpp \
 	rasterize.cpp \
-	metaspu/metaspu.cpp \
 	version.cpp \
 	mic.cpp 
 	

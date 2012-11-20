@@ -55,22 +55,11 @@ static inline s8 read_s8(u32 addr) { return (s8)_MMU_read08<ARMCPU_ARM7,MMU_AT_D
 	#define FORCEINLINE
 //#endif
 
-//static ISynchronizingAudioBuffer* synchronizer = metaspu_construct(ESynchMethod_Z);
-static ISynchronizingAudioBuffer* synchronizer = metaspu_construct(ESynchMethod_N);
-
 SPU_struct *SPU_core = 0;
-SPU_struct *SPU_user = 0;
-int SPU_currentCoreNum = SNDCORE_DUMMY;
 static int volume = 100;
 
 
 static size_t buffersize = 0;
-static ESynchMode synchmode = ESynchMode_DualSynchAsynch;
-static ESynchMethod synchmethod = ESynchMethod_N;
-
-static int SNDCoreId=-1;
-static SoundInterface_struct *SNDCore=NULL;
-extern SoundInterface_struct *SNDCoreList[];
 
 //const int shift = (FORMAT == 0 ? 2 : 1);
 static const int format_shift[] = { 2, 1, 3, 0 };
@@ -128,70 +117,7 @@ static FORCEINLINE T MinMax(T val, T min, T max)
 
 //--------------external spu interface---------------
 
-int SPU_ChangeSoundCore(int coreid, int buffersize)
-{
-	int i;
-
-	::buffersize = buffersize;
-
-	delete SPU_user; SPU_user = NULL;
-
-	// Make sure the old core is freed
-	if (SNDCore)
-		SNDCore->DeInit();
-
-	// So which core do we want?
-	if (coreid == SNDCORE_DEFAULT)
-		coreid = 0; // Assume we want the first one
-
-	SPU_currentCoreNum = coreid;
-
-	// Go through core list and find the id
-	for (i = 0; SNDCoreList[i] != NULL; i++)
-	{
-		if (SNDCoreList[i]->id == coreid)
-		{
-			// Set to current core
-			SNDCore = SNDCoreList[i];
-			break;
-		}
-	}
-
-	SNDCoreId = coreid;
-
-	//If the user picked the dummy core, disable the user spu
-	if(SNDCore == &SNDDummy)
-		return 0;
-
-	//If the core wasnt found in the list for some reason, disable the user spu
-	if (SNDCore == NULL)
-		return -1;
-
-	// Since it failed, instead of it being fatal, disable the user spu
-	if (SNDCore->Init(buffersize * 2) == -1)
-	{
-		SNDCore = 0;
-		return -1;
-	}
-
-	SNDCore->SetVolume(volume);
-
-	SPU_SetSynchMode(synchmode,synchmethod);
-
-	return 0;
-}
-
-SoundInterface_struct *SPU_SoundCore()
-{
-	return SNDCore;
-}
-
-void SPU_ReInit()
-{
-	SPU_Init(SNDCoreId, buffersize);
-}
-
-int SPU_Init(int coreid, int buffersize)
+int SPU_Init()
 {
 	int i, j;
 	
@@ -219,79 +145,14 @@ int SPU_Init(int coreid, int buffersize)
 		}
 	}
 
-	return SPU_ChangeSoundCore(coreid, buffersize);
+	return 0;
 }
-
-void SPU_Pause(int pause)
-{
-	if (SNDCore == NULL) return;
-
-	if(pause)
-		SNDCore->MuteAudio();
-	else
-		SNDCore->UnMuteAudio();
-}
-
-void SPU_CloneUser()
-{
-	if(SPU_user) {
-		memcpy(SPU_user->channels,SPU_core->channels,sizeof(SPU_core->channels));
-		SPU_user->regs = SPU_core->regs;
-	}
-}
-
-
-void SPU_SetSynchMode(int mode, int method)
-{
-	synchmode = (ESynchMode)mode;
-	if(synchmethod != (ESynchMethod)method)
-	{
-		synchmethod = (ESynchMethod)method;
-		delete synchronizer;
-		//grr does this need to be locked? spu might need a lock method
-		  // or maybe not, maybe the platform-specific code that calls this function can deal with it.
-		synchronizer = metaspu_construct(synchmethod);
-	}
-
-	delete SPU_user;
-	SPU_user = NULL;
-		
-	if(synchmode == ESynchMode_DualSynchAsynch)
-	{
-		SPU_user = new SPU_struct(buffersize);
-		SPU_CloneUser();
-	}
-}
-
-void SPU_ClearOutputBuffer()
-{
-	if(SNDCore && SNDCore->ClearBuffer)
-		SNDCore->ClearBuffer();
-}
-
-void SPU_SetVolume(int volume)
-{
-	::volume = volume;
-	if (SNDCore)
-		SNDCore->SetVolume(volume);
-}
-
 
 void SPU_Reset(void)
 {
 	int i;
 
 	SPU_core->reset();
-
-	if(SPU_user) {
-		if(SNDCore)
-		{
-			SNDCore->DeInit();
-			SNDCore->Init(SPU_user->bufsize*2);
-			SNDCore->SetVolume(volume);
-		}
-		SPU_user->reset();
-	}
 
 	//zero - 09-apr-2010: this concerns me, regarding savestate synch.
 	//After 0.9.6, lets experiment with removing it and just properly zapping the spu instead
@@ -339,12 +200,7 @@ SPU_struct::~SPU_struct()
 
 void SPU_DeInit(void)
 {
-	if(SNDCore)
-		SNDCore->DeInit();
-	SNDCore = 0;
-
 	delete SPU_core; SPU_core=0;
-	delete SPU_user; SPU_user=0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -752,7 +608,6 @@ void SPU_WriteByte(u32 addr, u8 val)
 	addr &= 0xFFF;
 
 	SPU_core->WriteByte(addr,val);
-	if(SPU_user) SPU_user->WriteByte(addr,val);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -769,7 +624,6 @@ void SPU_WriteWord(u32 addr, u16 val)
 	addr &= 0xFFF;
 
 	SPU_core->WriteWord(addr,val);
-	if(SPU_user) SPU_user->WriteWord(addr,val);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -788,8 +642,6 @@ void SPU_WriteLong(u32 addr, u32 val)
 	addr &= 0xFFF;
 
 	SPU_core->WriteLong(addr,val);
-	if(SPU_user) 
-		SPU_user->WriteLong(addr,val);
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1393,159 +1245,14 @@ int spu_core_samples = 0;
 void SPU_Emulate_core()
 {
 	bool needToMix = true;
-	SoundInterface_struct *soundProcessor = SPU_SoundCore();
 	
 	samples += samples_per_hline;
 	spu_core_samples = (int)(samples);
 	samples -= spu_core_samples;
-	
-	// We don't need to mix audio for Dual Synch/Asynch mode since we do this
-	// later in SPU_Emulate_user(). Disable mixing here to speed up processing.
-	// However, recording still needs to mix the audio, so make sure we're also
-	// not recording before we disable mixing.
-	if ( synchmode == ESynchMode_DualSynchAsynch )
-	{
-		needToMix = false;
-	}
-	
+		
 	SPU_MixAudio(needToMix, SPU_core, spu_core_samples);
-	
-	if (soundProcessor == NULL)
-	{
-		return;
-	}
-	
-	if (soundProcessor->FetchSamples != NULL)
-	{
-		soundProcessor->FetchSamples(SPU_core->outbuf, spu_core_samples, synchmode, synchronizer);
-	}
-	else
-	{
-		SPU_DefaultFetchSamples(SPU_core->outbuf, spu_core_samples, synchmode, synchronizer);
-	}
+	frontend_process_samples(spu_core_samples, SPU_core->outbuf);
 }
-
-void SPU_Emulate_user(bool mix)
-{
-	static s16 *postProcessBuffer = NULL;
-	static size_t postProcessBufferSize = 0;
-	size_t freeSampleCount = 0;
-	size_t processedSampleCount = 0;
-	SoundInterface_struct *soundProcessor = SPU_SoundCore();
-	
-	if (soundProcessor == NULL)
-	{
-		return;
-	}
-	
-	// Check to see how many free samples are available.
-	// If there are some, fill up the output buffer.
-	freeSampleCount = soundProcessor->GetAudioSpace();
-	if (freeSampleCount == 0)
-	{
-		return;
-	}
-	
-	//printf("mix %i samples\n", audiosize);
-	if (freeSampleCount > buffersize)
-	{
-		freeSampleCount = buffersize;
-	}
-	
-	// If needed, resize the post-process buffer to guarantee that
-	// we can store all the sound data.
-	if (postProcessBufferSize < freeSampleCount * 2 * sizeof(s16))
-	{
-		postProcessBufferSize = freeSampleCount * 2 * sizeof(s16);
-		postProcessBuffer = (s16 *)realloc(postProcessBuffer, postProcessBufferSize);
-	}
-	
-	if (soundProcessor->PostProcessSamples != NULL)
-	{
-		processedSampleCount = soundProcessor->PostProcessSamples(postProcessBuffer, freeSampleCount, synchmode, synchronizer);
-	}
-	else
-	{
-		processedSampleCount = SPU_DefaultPostProcessSamples(postProcessBuffer, freeSampleCount, synchmode, synchronizer);
-	}
-	
-	soundProcessor->UpdateAudio(postProcessBuffer, processedSampleCount);
-}
-
-void SPU_DefaultFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer)
-{
-	if (synchMode == ESynchMode_Synchronous)
-	{
-		theSynchronizer->enqueue_samples(sampleBuffer, sampleCount);
-	}
-}
-
-size_t SPU_DefaultPostProcessSamples(s16 *postProcessBuffer, size_t requestedSampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer)
-{
-	size_t processedSampleCount = 0;
-	
-	switch (synchMode)
-	{
-		case ESynchMode_DualSynchAsynch:
-			if(SPU_user != NULL)
-			{
-				SPU_MixAudio(true, SPU_user, requestedSampleCount);
-				memcpy(postProcessBuffer, SPU_user->outbuf, requestedSampleCount * 2 * sizeof(s16));
-				processedSampleCount = requestedSampleCount;
-			}
-			break;
-			
-		case ESynchMode_Synchronous:
-			processedSampleCount = theSynchronizer->output_samples(postProcessBuffer, requestedSampleCount);
-			break;
-			
-		default:
-			break;
-	}
-	
-	return processedSampleCount;
-}
-
-//////////////////////////////////////////////////////////////////////////////
-// Dummy Sound Interface
-//////////////////////////////////////////////////////////////////////////////
-
-int SNDDummyInit(int buffersize);
-void SNDDummyDeInit();
-void SNDDummyUpdateAudio(s16 *buffer, u32 num_samples);
-u32 SNDDummyGetAudioSpace();
-void SNDDummyMuteAudio();
-void SNDDummyUnMuteAudio();
-void SNDDummySetVolume(int volume);
-void SNDDummyClearBuffer();
-void SNDDummyFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer);
-size_t SNDDummyPostProcessSamples(s16 *postProcessBuffer, size_t requestedSampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer);
-
-SoundInterface_struct SNDDummy = {
-	SNDCORE_DUMMY,
-	"Dummy Sound Interface",
-	SNDDummyInit,
-	SNDDummyDeInit,
-	SNDDummyUpdateAudio,
-	SNDDummyGetAudioSpace,
-	SNDDummyMuteAudio,
-	SNDDummyUnMuteAudio,
-	SNDDummySetVolume,
-	SNDDummyClearBuffer,
-	SNDDummyFetchSamples,
-	SNDDummyPostProcessSamples
-};
-
-int SNDDummyInit(int buffersize) { return 0; }
-void SNDDummyDeInit() {}
-void SNDDummyUpdateAudio(s16 *buffer, u32 num_samples) { }
-u32 SNDDummyGetAudioSpace() { return DESMUME_SAMPLE_RATE/60 + 5; }
-void SNDDummyMuteAudio() {}
-void SNDDummyUnMuteAudio() {}
-void SNDDummySetVolume(int volume) {}
-void SNDDummyClearBuffer() {}
-void SNDDummyFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer) {}
-size_t SNDDummyPostProcessSamples(s16 *postProcessBuffer, size_t requestedSampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer) { return 0; }
 
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1710,9 +1417,6 @@ bool spu_loadstate(EMUFILE* is, int size)
 		spu->regs.mastervol = T1ReadByte(MMU.ARM7_REG, 0x500) & 0x7F;
 		spu->regs.masteren = BIT15(T1ReadWord(MMU.ARM7_REG, 0x500));
 	}
-
-	//copy the core spu (the more accurate) to the user spu
-	SPU_CloneUser();
 
 	return true;
 }

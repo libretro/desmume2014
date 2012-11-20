@@ -3,7 +3,6 @@
 #include "MMU.h"
 #include "NDSSystem.h"
 #include "debug.h"
-#include "sndsdl.h"
 #include "render3D.h"
 #include "rasterize.h"
 #include "saves.h"
@@ -82,36 +81,14 @@ namespace VIDEO
 namespace AUDIO
 {
     static unsigned frames;
-    
-    int SNDRetroInit(int buffersize){return 0;}
-    void SNDRetroDeInit(){}
-    void SNDRetroMuteAudio(){}
-    void SNDRetroUnMuteAudio(){}
-    void SNDRetroSetVolume(int volume){}
-    
-    
-    void SNDRetroUpdateAudio(s16 *buffer, u32 num_samples)
-    {
-        audio_batch_cb(buffer, num_samples);
-        frames += num_samples;
-    }
-    
-    u32 SNDRetroGetAudioSpace(){return 735 - frames;}
-    
-    const int SNDCORE_RETRO = 2000;
-    SoundInterface_struct SNDRetro =
-    {
-        SNDCORE_RETRO,
-        "libretro Sound Interface",
-        SNDRetroInit,
-        SNDRetroDeInit,
-        SNDRetroUpdateAudio,
-        SNDRetroGetAudioSpace,
-        SNDRetroMuteAudio,
-        SNDRetroUnMuteAudio,
-        SNDRetroSetVolume
-    };
 }
+
+void frontend_process_samples(u32 frames, const s16* data)
+{
+    audio_batch_cb(data, frames);
+    AUDIO::frames += frames;
+}
+
 
 namespace INPUT
 {
@@ -173,13 +150,6 @@ namespace INPUT
         }
     }
 }
-
-SoundInterface_struct* SNDCoreList[] =
-{
-	&SNDDummy,
-	&AUDIO::SNDRetro,
-	NULL
-};
 
 GPU3DInterface* core3DList[] =
 {
@@ -287,7 +257,6 @@ void retro_init (void)
     NDS_Init();
     NDS_CreateDummyFirmware(&fw_config);
     NDS_3D_ChangeCore(0);
-    SPU_ChangeSoundCore(AUDIO::SNDCORE_RETRO, 735 * 2);
     backup_setManualBackupType(MC_TYPE_AUTODETECT);
 }
 
@@ -384,7 +353,6 @@ void retro_run (void)
 
     // RUN
     NDS_exec<false>();
-    SPU_Emulate_user();
     
     // VIDEO: Swap screen colors and pass on
     if(RETRO_PIXEL_FORMAT_XRGB8888 == VIDEO::colorMode)

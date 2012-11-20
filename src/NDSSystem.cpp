@@ -119,7 +119,7 @@ int NDS_Init( void)
 	armcpu_new(&NDS_ARM7,1);
 	armcpu_new(&NDS_ARM9,0);
 
-	if (SPU_Init(SNDCORE_DUMMY, 740) != 0)
+	if (SPU_Init() != 0)
 		return -1;
 
 	WIFI_Init() ;
@@ -145,7 +145,7 @@ void NDS_DeInit(void) {
 	if(MMU.CART_ROM != MMU.UNUSED_RAM)
 		NDS_FreeROM();
 
-	SPU_DeInit();
+	SPU_Init();
 	Screen_DeInit();
 	MMU_DeInit();
 	gpu3D->NDS_3D_Close();
@@ -2183,7 +2183,7 @@ void NDS_Reset()
     lastLag = 0;
     TotalLagFrames = 0;
 
-	SPU_DeInit();
+	SPU_Init();
 
 	MMU_Reset();
 
@@ -2604,7 +2604,7 @@ void NDS_Reset()
 
 	initSchedule();
 
-	SPU_ReInit();
+	SPU_Init();
 }
 
 static std::string MakeInputDisplayString(u16 pad, const std::string* Buttons, int count) {

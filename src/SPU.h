@@ -1,4 +1,4 @@
-//__LIBRETRO__: Ditch WAV and AVI support
+//__LIBRETRO__: Ditch WAV and AVI support, spu rate adjust
 
 /*
 	Copyright 2006 Theo Berkau
@@ -27,8 +27,8 @@
 #include "types.h"
 #include "matrix.h"
 #include "emufile.h"
-#include "metaspu/metaspu.h"
 
+extern void frontend_process_samples(u32 frames, const s16* data);
 
 #define SNDCORE_DEFAULT         -1
 #define SNDCORE_DUMMY           0
@@ -50,26 +50,6 @@ enum SPUInterpolationMode
 	SPUInterpolation_Linear = 1,
 	SPUInterpolation_Cosine = 2
 };
-
-struct SoundInterface_struct
-{
-   int id;
-   const char *Name;
-   int (*Init)(int buffersize);
-   void (*DeInit)();
-   void (*UpdateAudio)(s16 *buffer, u32 num_samples);
-   u32 (*GetAudioSpace)();
-   void (*MuteAudio)();
-   void (*UnMuteAudio)();
-   void (*SetVolume)(int volume);
-   void (*ClearBuffer)();
-	void (*FetchSamples)(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer);
-	size_t (*PostProcessSamples)(s16 *postProcessBuffer, size_t requestedSampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer);
-};
-
-extern SoundInterface_struct SNDDummy;
-extern SoundInterface_struct SNDFile;
-extern int SPU_currentCoreNum;
 
 struct channel_struct
 {
@@ -193,17 +173,8 @@ public:
    void ShutUp();
 };
 
-int SPU_ChangeSoundCore(int coreid, int buffersize);
-SoundInterface_struct *SPU_SoundCore();
-
-void SPU_ReInit();
-int SPU_Init(int coreid, int buffersize);
-void SPU_Pause(int pause);
-void SPU_SetVolume(int volume);
-void SPU_SetSynchMode(int mode, int method);
-void SPU_ClearOutputBuffer(void);
+int SPU_Init();
 void SPU_Reset(void);
-void SPU_DeInit(void);
 void SPU_KeyOn(int channel);
 void SPU_WriteByte(u32 addr, u8 val);
 void SPU_WriteWord(u32 addr, u16 val);
@@ -212,11 +183,7 @@ u8 SPU_ReadByte(u32 addr);
 u16 SPU_ReadWord(u32 addr);
 u32 SPU_ReadLong(u32 addr);
 void SPU_Emulate_core(void);
-void SPU_Emulate_user(bool mix = true);
-void SPU_DefaultFetchSamples(s16 *sampleBuffer, size_t sampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer);
-size_t SPU_DefaultPostProcessSamples(s16 *postProcessBuffer, size_t requestedSampleCount, ESynchMode synchMode, ISynchronizingAudioBuffer *theSynchronizer);
 
-extern SPU_struct *SPU_core, *SPU_user;
 extern int spu_core_samples;
 
 void spu_savestate(EMUFILE* os);
