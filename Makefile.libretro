@@ -91,8 +91,6 @@ SOURCES = \
 	gfx3d.cpp \
 	thumb_instructions.cpp \
 	utils/datetime.cpp \
-    utils/guid.cpp \
-	utils/md5.cpp \
 	utils/xstring.cpp \
 	utils/decrypt/crc.cpp \
 	utils/decrypt/decrypt.cpp \
