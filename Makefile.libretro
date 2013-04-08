@@ -25,64 +25,64 @@ else ifneq ($(findstring MINGW,$(shell uname -a)),)
 endif
 
 ifeq ($(platform), unix)
-   TARGET := libretro.so
+   TARGET := desmume_libretro.so
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=libretro/link.T
 else ifeq ($(platform), osx)
-   TARGET := libretro.dylib
+   TARGET := desmume_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
 else ifeq ($(platform), ios)
-   TARGET := libretro.dylib
+   TARGET := desmume_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
 
    CC = clang -arch armv7 -isysroot $(IOSSDK)
    CXX = clang++ -arch armv7 -isysroot $(IOSSDK)
 else ifeq ($(platform), ps3)
-   TARGET := libretro_ps3.a
+   TARGET := desmume_libretro_ps3.a
    CC = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-gcc.exe
    CXX = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-g++.exe
    AR = $(CELL_SDK)/host-win32/ppu/bin/ppu-lv2-ar.exe
    CPPFLAGS += -D__ppc__ -D__CELLOS_LV2__
 INCLUDE_ZLIB_HEADERS = 1
 else ifeq ($(platform), sncps3)
-   TARGET := libretro_ps3.a
+   TARGET := desmume_libretro_ps3.a
    CC = $(CELL_SDK)/host-win32/sn/bin/ps3ppusnc.exe
    CXX = $(CELL_SDK)/host-win32/sn/bin/ps3ppusnc.exe
    AR = $(CELL_SDK)/host-win32/sn/bin/ps3snarl.exe
    CPPFLAGS += -D__ppc__-D__CELLOS_LV2__
 INCLUDE_ZLIB_HEADERS = 1
 else ifeq ($(platform), psl1ght)
-   TARGET := libretro_psl1ght.a
+   TARGET := desmume_libretro_psl1ght.a
    CC = $(PS3DEV)/ppu/bin/ppu-gcc$(EXE_EXT)
    CXX = $(PS3DEV)/ppu/bin/ppu-g++$(EXE_EXT)
    AR = $(PS3DEV)/ppu/bin/ppu-ar$(EXE_EXT)
    CPPFLAGS += -D__ppc__ -D__CELLOS_LV2__
 INCLUDE_ZLIB_HEADERS = 1
 else ifeq ($(platform), psp1)
-   TARGET := libretro_psp1.a
+   TARGET := desmume_libretro_psp1.a
    CC = psp-gcc$(EXE_EXT)
    CXX = psp-g++$(EXE_EXT)
    AR = psp-ar$(EXE_EXT)
    CPPFLAGS += -DPSP -G0
 INCLUDE_ZLIB_HEADERS = 1
 else ifeq ($(platform), xenon)
-   TARGET := libretro_xenon360.a
+   TARGET := desmume_libretro_xenon360.a
    CC = xenon-gcc$(EXE_EXT)
    CXX = xenon-g++$(EXE_EXT)
    AR = xenon-ar$(EXE_EXT)
    CPPFLAGS += -D__LIBXENON__ -m32 -D__ppc__
 INCLUDE_ZLIB_HEADERS = 1
 else ifeq ($(platform), wii)
-   TARGET := libretro_wii.a
+   TARGET := desmume_libretro_wii.a
    CC = $(DEVKITPPC)/bin/powerpc-eabi-gcc$(EXE_EXT)
    CXX = $(DEVKITPPC)/bin/powerpc-eabi-g++$(EXE_EXT)
    AR = $(DEVKITPPC)/bin/powerpc-eabi-ar$(EXE_EXT)
    CFLAGS += -DGEKKO -mrvl -mcpu=750 -meabi -mhard-float -D__ppc__
 INCLUDE_ZLIB_HEADERS = 1
 else ifeq ($(platform), android)
-   TARGET := libretro_desmume.so
+   TARGET := desmume_libretro_desmume.so
    CC = arm-linux-androideabi-gcc$(EXE_EXT)
    CXX = arm-linux-androideabi-g++$(EXE_EXT)
    fpic := -fPIC
@@ -164,19 +164,35 @@ SOURCES = \
 ifeq ($(DESMUME_JIT),1)
 SOURCES += \
 	arm_jit.cpp \
-	utils/AsmJit/AssemblerX86X64.cpp \
-	utils/AsmJit/CodeGenerator.cpp \
-	utils/AsmJit/Compiler.cpp \
-	utils/AsmJit/CompilerX86X64.cpp \
-	utils/AsmJit/CpuInfo.cpp \
-	utils/AsmJit/Defs.cpp \
-	utils/AsmJit/DefsX86X64.cpp \
-	utils/AsmJit/Logger.cpp \
-	utils/AsmJit/MemoryManager.cpp \
-	utils/AsmJit/MemoryMarker.cpp \
-	utils/AsmJit/OperandX86X64.cpp \
-	utils/AsmJit/Platform.cpp \
-	utils/AsmJit/Util.cpp	
+   utils/AsmJit/core/assembler.cpp \
+   utils/AsmJit/core/assert.cpp \
+   utils/AsmJit/core/buffer.cpp \
+   utils/AsmJit/core/compiler.cpp \
+   utils/AsmJit/core/compilercontext.cpp \
+   utils/AsmJit/core/compilerfunc.cpp \
+   utils/AsmJit/core/compileritem.cpp \
+   utils/AsmJit/core/context.cpp \
+   utils/AsmJit/core/cpuinfo.cpp \
+   utils/AsmJit/core/defs.cpp \
+   utils/AsmJit/core/func.cpp \
+   utils/AsmJit/core/logger.cpp \
+   utils/AsmJit/core/memorymanager.cpp \
+   utils/AsmJit/core/memorymarker.cpp \
+   utils/AsmJit/core/operand.cpp \
+   utils/AsmJit/core/stringbuilder.cpp \
+   utils/AsmJit/core/stringutil.cpp \
+   utils/AsmJit/core/virtualmemory.cpp \
+   utils/AsmJit/core/zonememory.cpp \
+   utils/AsmJit/x86/x86assembler.cpp \
+   utils/AsmJit/x86/x86compiler.cpp \
+   utils/AsmJit/x86/x86compilercontext.cpp \
+   utils/AsmJit/x86/x86compilerfunc.cpp \
+   utils/AsmJit/x86/x86compileritem.cpp \
+   utils/AsmJit/x86/x86cpuinfo.cpp \
+   utils/AsmJit/x86/x86defs.cpp \
+   utils/AsmJit/x86/x86func.cpp \
+   utils/AsmJit/x86/x86operand.cpp \
+   utils/AsmJit/x86/x86util.cpp
 CPPFLAGS += -DHAVE_JIT
 endif
 
