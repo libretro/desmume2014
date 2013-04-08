@@ -18,6 +18,11 @@
 //TODO - move this into ndssystem where it belongs probably
 
 #include <string.h>
+
+#ifdef __LIBRETRO__ // Need ctype.h
+#include <ctype.h>
+#endif
+
 #include <string>
 #include "common.h"
 

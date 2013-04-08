@@ -22,6 +22,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
+#ifdef __LIBRETRO__ // Compat fixes
 #if !defined(WIN32)
 #include <unistd.h>
 #endif
@@ -29,6 +30,7 @@ THE SOFTWARE.
 #ifdef PSP
 //forward declaration - PSP doesn't have this so have to bake it in
 int ftruncate(int fd, off_t length);
+#endif
 #endif
 
 #include "emufile.h"
