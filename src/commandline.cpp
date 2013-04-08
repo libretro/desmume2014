@@ -28,7 +28,7 @@
 #include "NDSSystem.h"
 #include "utils/xstring.h"
 
-int scanline_filter_a = 0, scanline_filter_b = 2, scanline_filter_c = 2, scanline_filter_d = 4;
+int _scanline_filter_a = 0, _scanline_filter_b = 2, _scanline_filter_c = 2, _scanline_filter_d = 4;
 int _commandline_linux_nojoy = 0;
 
 CommandLine::CommandLine()
@@ -51,6 +51,7 @@ CommandLine::CommandLine()
 , _slot1_fat_dir(NULL)
 #ifdef HAVE_JIT
 , _cpu_mode(-1)
+, _jit_size(-1)
 #endif
 , _console_type(NULL)
 , depth_threshold(-1)
@@ -91,10 +92,10 @@ void CommandLine::loadCommonOptions()
 		{ "bios-swi", 0, 0, G_OPTION_ARG_INT, &_bios_swi, "Uses SWI from the provided bios files", "BIOS_SWI"},
 		{ "spu-advanced", 0, 0, G_OPTION_ARG_INT, &_spu_advanced, "Uses advanced SPU capture functions", "SPU_ADVANCED"},
 		{ "num-cores", 0, 0, G_OPTION_ARG_INT, &_num_cores, "Override numcores detection and use this many", "NUM_CORES"},
-		{ "scanline-filter-a", 0, 0, G_OPTION_ARG_INT, &scanline_filter_a, "Intensity of fadeout for scanlines filter (topleft) (default 0)", "SCANLINE_FILTER_A"},
-		{ "scanline-filter-b", 0, 0, G_OPTION_ARG_INT, &scanline_filter_b, "Intensity of fadeout for scanlines filter (topright) (default 2)", "SCANLINE_FILTER_B"},
-		{ "scanline-filter-c", 0, 0, G_OPTION_ARG_INT, &scanline_filter_c, "Intensity of fadeout for scanlines filter (bottomleft) (default 2)", "SCANLINE_FILTER_C"},
-		{ "scanline-filter-d", 0, 0, G_OPTION_ARG_INT, &scanline_filter_d, "Intensity of fadeout for scanlines filter (bottomright) (default 4)", "SCANLINE_FILTER_D"},
+		{ "scanline-filter-a", 0, 0, G_OPTION_ARG_INT, &_scanline_filter_a, "Intensity of fadeout for scanlines filter (topleft) (default 0)", "SCANLINE_FILTER_A"},
+		{ "scanline-filter-b", 0, 0, G_OPTION_ARG_INT, &_scanline_filter_b, "Intensity of fadeout for scanlines filter (topright) (default 2)", "SCANLINE_FILTER_B"},
+		{ "scanline-filter-c", 0, 0, G_OPTION_ARG_INT, &_scanline_filter_c, "Intensity of fadeout for scanlines filter (bottomleft) (default 2)", "SCANLINE_FILTER_C"},
+		{ "scanline-filter-d", 0, 0, G_OPTION_ARG_INT, &_scanline_filter_d, "Intensity of fadeout for scanlines filter (bottomright) (default 4)", "SCANLINE_FILTER_D"},
 		{ "rigorous-timing", 0, 0, G_OPTION_ARG_INT, &_rigorous_timing, "Use some rigorous timings instead of unrealistically generous (default 0)", "RIGOROUS_TIMING"},
 		{ "advanced-timing", 0, 0, G_OPTION_ARG_INT, &_advanced_timing, "Use advanced BUS-level timing (default 1)", "ADVANCED_TIMING"},
 		{ "slot1", 0, 0, G_OPTION_ARG_STRING, &_slot1, "Device to load in slot 1 (default retail)", "SLOT1"},
@@ -103,6 +104,7 @@ void CommandLine::loadCommonOptions()
 		{ "console-type", 0, 0, G_OPTION_ARG_STRING, &_console_type, "Select console type: {fat,lite,ique,debug,dsi}", "CONSOLETYPE" },
 #ifdef HAVE_JIT
 		{ "cpu-mode", 0, 0, G_OPTION_ARG_INT, &_cpu_mode, "ARM CPU emulation mode: 0 - interpreter, 1 - dynarec (default 1)", NULL},
+		{ "jit-size", 0, 0, G_OPTION_ARG_INT, &_jit_size, "ARM JIT block size: 1..100 (1 - accuracy, 100 - faster) (default 100)", NULL},
 #endif
 #ifndef _MSC_VER
 		{ "disable-sound", 0, 0, G_OPTION_ARG_NONE, &disable_sound, "Disables the sound emulation", NULL},
@@ -146,6 +148,13 @@ bool CommandLine::parse(int argc,char **argv)
 	if(_advanced_timing != -1) CommonSettings.advanced_timing = _advanced_timing==1;
 #ifdef HAVE_JIT
 	if(_cpu_mode != -1) CommonSettings.use_jit = (_cpu_mode==1);
+	if(_jit_size != -1) 
+	{
+		if ((_jit_size < 1) || (_jit_size > 100)) 
+			CommonSettings.jit_max_block_size = 100;
+		else
+			CommonSettings.jit_max_block_size = _jit_size;
+	}
 #endif
 	if(depth_threshold != -1)
 		CommonSettings.GFX3D_Zelda_Shadow_Depth_Hack = depth_threshold;
@@ -235,6 +244,9 @@ bool CommandLine::validate()
 #ifdef HAVE_JIT
 	if (_cpu_mode < -1 || _cpu_mode > 1) {
 		g_printerr("Invalid cpu mode emulation (0 - interpreter, 1 - dynarec)\n");
+	}
+	if (_jit_size < 1 || _jit_size > 100) {
+		g_printerr("Invalid jit block size [1..100]. set to 100\n");
 	}
 #endif
 

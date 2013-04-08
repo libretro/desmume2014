@@ -1,5 +1,5 @@
 /*
-	Copyright (C) 2009-2012 DeSmuME team
+	Copyright (C) 2009-2013 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -67,7 +67,7 @@ static u8 decal_table[32][64][64];
 static u8 index_lookup_table[65];
 static u8 index_start_table[8];
 
-
+static bool softRastHasNewData = false;
 
 ////optimized float floor useful in limited cases
 ////from http://www.stereopsis.com/FPU.html#convert
@@ -1073,7 +1073,7 @@ static SoftRasterizerEngine mainSoftRasterizer;
 static Task rasterizerUnitTask[_MAX_CORES];
 static RasterizerUnit<true> rasterizerUnit[_MAX_CORES];
 static RasterizerUnit<false> _HACK_viewer_rasterizerUnit;
-static int rasterizerCores;
+static unsigned int rasterizerCores = 0;
 static bool rasterizerUnitTasksInited = false;
 
 static void* execRasterizerUnit(void* arg)
@@ -1085,6 +1085,12 @@ static void* execRasterizerUnit(void* arg)
 
 static char SoftRastInit(void)
 {
+	char result = Default3D_Init();
+	if (result == 0)
+	{
+		return result;
+	}
+	
 	if(!rasterizerUnitTasksInited)
 	{
 		rasterizerUnitTasksInited = true;
@@ -1095,7 +1101,7 @@ static char SoftRastInit(void)
 		rasterizerCores = CommonSettings.num_cores;
 		if (rasterizerCores > _MAX_CORES) 
 			rasterizerCores = _MAX_CORES;
-		if(CommonSettings.num_cores == 1)
+		if(CommonSettings.num_cores <= 1)
 		{
 			rasterizerCores = 1;
 			rasterizerUnit[0].SLI_MASK = 0;
@@ -1146,22 +1152,44 @@ static char SoftRastInit(void)
 	TexCache_Reset();
 
 	printf("SoftRast Initialized with cores=%d\n",rasterizerCores);
-	return 1;
+	return result;
 }
 
-static void SoftRastReset() {
-	TexCache_Reset();
+static void SoftRastReset()
+{
+	if (rasterizerCores > 1)
+	{
+		for(unsigned int i = 0; i < rasterizerCores; i++)
+		{
+			rasterizerUnitTask[i].finish();
+		}
+	}
+	
+	softRastHasNewData = false;
+	
+	Default3D_Reset();
 }
 
 static void SoftRastClose()
 {
-	for(int i=0; i<_MAX_CORES; i++)
-		rasterizerUnitTask[i].shutdown();
+	if (rasterizerCores > 1)
+	{
+		for(unsigned int i = 0; i < rasterizerCores; i++)
+		{
+			rasterizerUnitTask[i].finish();
+			rasterizerUnitTask[i].shutdown();
+		}
+	}
+	
 	rasterizerUnitTasksInited = false;
+	softRastHasNewData = false;
+	
+	Default3D_Close();
 }
 
-static void SoftRastVramReconfigureSignal() {
-	TexCache_Invalidate();
+static void SoftRastVramReconfigureSignal()
+{
+	Default3D_VramReconfigureSignal();
 }
 
 static void SoftRastConvertFramebuffer()
@@ -1223,10 +1251,9 @@ void SoftRasterizerEngine::initFramebuffer(const int width, const int height, co
 				
 				//this is tested quite well in the sonic chronicles main map mode
 				//where depth values are used for trees etc you can walk behind
-				u32 depth = clearDepth[adr];
+				u16 depth = clearDepth[adr];
 				dst->fogged = BIT15(depth);
-				//TODO - might consider a lookup table for this
-				dst->depth = gfx3d_extendDepth_15_to_24(depth&0x7FFF);
+				dst->depth = DS_DEPTH15TO24(depth);
 
 				dstColor++;
 				dst++;
@@ -1326,7 +1353,7 @@ void SoftRasterizerEngine::framebufferProcess()
 	// - the edges are completely sharp/opaque on the very brief title screen intro,
 	// - the level-start intro gets a pseudo-antialiasing effect around the silhouette,
 	// - the character edges in-level are clearly transparent, and also show well through shield powerups.
-	if(gfx3d.renderState.enableEdgeMarking && CommonSettings.GFX3D_EdgeMark)
+	if(gfx3d.renderState.enableEdgeMarking)
 	{ 
 		//TODO - need to test and find out whether these get grabbed at flush time, or at render time
 		//we can do this by rendering a 3d frame and then freezing the system, but only changing the edge mark colors
@@ -1399,7 +1426,7 @@ void SoftRasterizerEngine::framebufferProcess()
 		}
 	}
 
-	if(gfx3d.renderState.enableFog && CommonSettings.GFX3D_Fog)
+	if(gfx3d.renderState.enableFog)
 	{
 		u32 r = GFX3D_5TO6((gfx3d.renderState.fogColor)&0x1F);
 		u32 g = GFX3D_5TO6((gfx3d.renderState.fogColor>>5)&0x1F);
@@ -1602,6 +1629,15 @@ void _HACK_Viewer_ExecUnit(SoftRasterizerEngine* engine)
 
 static void SoftRastRender()
 {
+	// Force threads to finish before rendering with new data
+	if (rasterizerCores > 1)
+	{
+		for(unsigned int i = 0; i < rasterizerCores; i++)
+		{
+			rasterizerUnitTask[i].finish();
+		}
+	}
+	
 	mainSoftRasterizer.polylist = gfx3d.polylist;
 	mainSoftRasterizer.vertlist = gfx3d.vertlist;
 	mainSoftRasterizer.indexlist = &gfx3d.indexlist;
@@ -1611,7 +1647,7 @@ static void SoftRastRender()
 	mainSoftRasterizer.height = 192;
 
 	//setup fog variables (but only if fog is enabled)
-	if(gfx3d.renderState.enableFog && CommonSettings.GFX3D_Fog)
+	if(gfx3d.renderState.enableFog)
 		mainSoftRasterizer.updateFogTable();
 	
 	mainSoftRasterizer.initFramebuffer(256,192,gfx3d.renderState.enableClearImage?true:false);
@@ -1623,24 +1659,44 @@ static void SoftRastRender()
 	mainSoftRasterizer.performCoordAdjustment(true);
 	mainSoftRasterizer.setupTextures(true);
 
-
-	if(rasterizerCores==1)
+	softRastHasNewData = true;
+	
+	if (rasterizerCores > 1)
 	{
-		rasterizerUnit[0].mainLoop<false>(&mainSoftRasterizer);
+		for(unsigned int i = 0; i < rasterizerCores; i++)
+		{
+			rasterizerUnitTask[i].execute(&execRasterizerUnit, (void *)i);
+		}
 	}
 	else
 	{
-		for(int i=0;i<rasterizerCores;i++) rasterizerUnitTask[i].execute(execRasterizerUnit,(void*)i);
-		for(int i=0;i<rasterizerCores;i++) rasterizerUnitTask[i].finish();
+		rasterizerUnit[0].mainLoop<false>(&mainSoftRasterizer);
 	}
+}
 
+static void SoftRastRenderFinish()
+{
+	if (!softRastHasNewData)
+	{
+		return;
+	}
+	
+	if (rasterizerCores > 1)
+	{
+		for(unsigned int i = 0; i < rasterizerCores; i++)
+		{
+			rasterizerUnitTask[i].finish();
+		}
+	}
+	
 	TexCache_EvictFrame();
-
-
+	
 	mainSoftRasterizer.framebufferProcess();
-
+	
 	//	printf("rendered %d of %d polys after backface culling\n",gfx3d.polylist->count-culled,gfx3d.polylist->count);
 	SoftRastConvertFramebuffer();
+	
+	softRastHasNewData = false;
 }
 
 GPU3DInterface gpu3DRasterize = {
@@ -1649,6 +1705,7 @@ GPU3DInterface gpu3DRasterize = {
 	SoftRastReset,
 	SoftRastClose,
 	SoftRastRender,
-	SoftRastVramReconfigureSignal,
+	SoftRastRenderFinish,
+	SoftRastVramReconfigureSignal
 };
 

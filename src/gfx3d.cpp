@@ -1,6 +1,6 @@
 /*	
 	Copyright (C) 2006 yopyop
-	Copyright (C) 2008-2012 DeSmuME team
+	Copyright (C) 2008-2013 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -253,6 +253,7 @@ CACHE_ALIGN u32 color_15bit_to_24bit_reverse[32768];
 CACHE_ALIGN u32 color_15bit_to_24bit[32768];
 CACHE_ALIGN u16 color_15bit_to_16bit_reverse[32768];
 CACHE_ALIGN u8 mixTable555[32][32][32];
+CACHE_ALIGN u32 dsDepthExtend_15bit_to_24bit[32768];
 
 //is this a crazy idea? this table spreads 5 bits evenly over 31 from exactly 0 to INT_MAX
 CACHE_ALIGN const int material_5bit_to_31bit[] = {
@@ -329,7 +330,7 @@ static u8 MM3x3ind = 0;
 // Data for vertex submission
 static CACHE_ALIGN s16		s16coord[4] = {0, 0, 0, 0};
 static char		coordind = 0;
-static u32 vtxFormat = 0;
+static u32 vtxFormat = GFX3D_TRIANGLES;
 static BOOL inBegin = FALSE;
 
 // Data for basic transforms
@@ -424,17 +425,18 @@ static void makeTables() {
 
 	//produce the color bits of a 24bpp color from a DS RGB15 using bit logic (internal use only)
 	#define RGB15TO24_BITLOGIC(col) ( (material_5bit_to_8bit[((col)>>10)&0x1F]<<16) | (material_5bit_to_8bit[((col)>>5)&0x1F]<<8) | material_5bit_to_8bit[(col)&0x1F] )
-
-	for(int i=0;i<32768;i++)
-		color_15bit_to_24bit[i] = RGB15TO24_BITLOGIC((u16)i);
-
+	
 	//produce the color bits of a 24bpp color from a DS RGB15 using bit logic (internal use only). RGB are reverse of usual
 	#define RGB15TO24_BITLOGIC_REVERSE(col) ( (material_5bit_to_8bit[(col)&0x1F]<<16) | (material_5bit_to_8bit[((col)>>5)&0x1F]<<8) | material_5bit_to_8bit[((col)>>10)&0x1F] )
 
-	for(int i=0;i<32768;i++)
+	for(u16 i=0;i<32768;i++)
 	{
-		color_15bit_to_24bit_reverse[i] = RGB15TO24_BITLOGIC_REVERSE((u16)i);
+		color_15bit_to_24bit[i] = LE_TO_LOCAL_32( RGB15TO24_BITLOGIC(i) );
+		color_15bit_to_24bit_reverse[i] = LE_TO_LOCAL_32( RGB15TO24_BITLOGIC_REVERSE(i) );
 		color_15bit_to_16bit_reverse[i] = (((i & 0x001F) << 11) | (material_5bit_to_6bit[(i & 0x03E0) >> 5] << 5) | ((i & 0x7C00) >> 10));
+		
+		// 15-bit to 24-bit depth formula from http://nocash.emubase.de/gbatek.htm#ds3drearplane
+		dsDepthExtend_15bit_to_24bit[i] = LE_TO_LOCAL_32( (i*0x200)+((i+1)>>15)*0x01FF );
 	}
 
 	for (int i = 0; i < 65536; i++)
@@ -485,6 +487,8 @@ void gfx3d_init()
 
 void gfx3d_reset()
 {
+	gpu3D->NDS_3D_RenderFinish();
+	
 #ifdef _SHOW_VTX_COUNTERS
 	max_polys = max_verts = 0;
 #endif
@@ -513,7 +517,7 @@ void gfx3d_reset()
 	mode = 0;
 	s16coord[0] = s16coord[1] = s16coord[2] = s16coord[3] = 0;
 	coordind = 0;
-	vtxFormat = 0;
+	vtxFormat = GFX3D_TRIANGLES;
 	memset(trans, 0, sizeof(trans));
 	transind = 0;
 	memset(scale, 0, sizeof(scale));
@@ -555,7 +559,7 @@ void gfx3d_reset()
 
 	memset(gfx3d_convertedScreen,0,sizeof(gfx3d_convertedScreen));
 
-	gfx3d.state.clearDepth = gfx3d_extendDepth_15_to_24(0x7FFF);
+	gfx3d.state.clearDepth = DS_DEPTH15TO24(0x7FFF);
 	
 	clInd2 = 0;
 	isSwapBuffers = FALSE;
@@ -628,9 +632,9 @@ static void SetVertex()
 	//TODO - viewport transform?
 
 	int continuation = 0;
-	if(vtxFormat==2 && !tempVertInfo.first)
+	if(vtxFormat==GFX3D_TRIANGLE_STRIP && !tempVertInfo.first)
 		continuation = 2;
-	else if(vtxFormat==3 && !tempVertInfo.first)
+	else if(vtxFormat==GFX3D_QUAD_STRIP && !tempVertInfo.first)
 		continuation = 2;
 
 	//record the vertex
@@ -669,7 +673,7 @@ static void SetVertex()
 	{
 		polygonListCompleted = 2;
 		switch(vtxFormat) {
-			case 0: //GL_TRIANGLES
+			case GFX3D_TRIANGLES:
 				if(tempVertInfo.count!=3)
 					break;
 				polygonListCompleted = 1;
@@ -681,7 +685,7 @@ static void SetVertex()
 				polylist->list[polylist->count].type = 3;
 				tempVertInfo.count = 0;
 				break;
-			case 1: //GL_QUADS
+			case GFX3D_QUADS:
 				if(tempVertInfo.count!=4)
 					break;
 				polygonListCompleted = 1;
@@ -693,7 +697,7 @@ static void SetVertex()
 				polylist->list[polylist->count].type = 4;
 				tempVertInfo.count = 0;
 				break;
-			case 2: //GL_TRIANGLE_STRIP
+			case GFX3D_TRIANGLE_STRIP:
 				if(tempVertInfo.count!=3)
 					break;
 				polygonListCompleted = 1;
@@ -716,14 +720,14 @@ static void SetVertex()
 				tempVertInfo.first = false;
 				tempVertInfo.count = 2;
 				break;
-			case 3: //GL_QUAD_STRIP
+			case GFX3D_QUAD_STRIP:
 				if(tempVertInfo.count!=4)
 					break;
 				polygonListCompleted = 1;
 				SUBMITVERTEX(0,0);
-				SUBMITVERTEX(1,1);	// TODO:
-				SUBMITVERTEX(2,3);	// OpenGL Quad_Strip must be	: 3,3
-				SUBMITVERTEX(3,2);	//								: 2,2
+				SUBMITVERTEX(1,1);
+				SUBMITVERTEX(2,3);
+				SUBMITVERTEX(3,2);
 				polylist->list[polylist->count].type = 4;
 				tempVertInfo.map[0] = vertlist->count+2-continuation;
 				tempVertInfo.map[1] = vertlist->count+3-continuation;
@@ -1643,8 +1647,7 @@ void gfx3d_glFogOffset (u32 v)
 
 void gfx3d_glClearDepth(u32 v)
 {
-	v &= 0x7FFF;
-	gfx3d.state.clearDepth = gfx3d_extendDepth_15_to_24(v);
+	gfx3d.state.clearDepth = DS_DEPTH15TO24(v);
 }
 
 // Ignored for now
@@ -2072,9 +2075,16 @@ static void gfx3d_doFlush()
 	gfx3d.state.wbuffer = BIT1(gfx3d.state.activeFlushCommand);
 
 	gfx3d.renderState = gfx3d.state;
-
+	
+	// Override render states per user settings
 	if(!CommonSettings.GFX3D_Texture)
 		gfx3d.renderState.enableTexturing = false;
+	
+	if(!CommonSettings.GFX3D_EdgeMark)
+		gfx3d.renderState.enableEdgeMarking = false;
+	
+	if(!CommonSettings.GFX3D_Fog)
+		gfx3d.renderState.enableFog = false;
 	
 	gfx3d.state.activeFlushCommand = gfx3d.state.pendingFlushCommand;
 
@@ -2173,13 +2183,12 @@ void gfx3d_VBlankEndSignal(bool skipFrame)
 
 	drawPending = FALSE;
 
-	//if the null 3d core is chosen, then we need to clear out the 3d buffers to keep old data from being rendered
-	if(gpu3D == &gpu3DNull || !CommonSettings.showGpu.main)
+	if(!CommonSettings.showGpu.main)
 	{
 		memset(gfx3d_convertedScreen,0,sizeof(gfx3d_convertedScreen));
 		return;
 	}
-
+	
 	gpu3D->NDS_3D_Render();
 }
 
@@ -2291,6 +2300,7 @@ void gfx3d_glGetLightColor(unsigned int index, unsigned int* dest)
 
 void gfx3d_GetLineData(int line, u8** dst)
 {
+	gpu3D->NDS_3D_RenderFinish();
 	*dst = gfx3d_convertedScreen+((line)<<(8+2));
 }
 
@@ -2406,6 +2416,8 @@ SFORMAT SF_GFX3D[]={
 //-------------savestate
 void gfx3d_savestate(EMUFILE* os)
 {
+	gpu3D->NDS_3D_RenderFinish();
+	
 	//version
 	write32le(4,os);
 

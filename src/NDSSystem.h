@@ -1,6 +1,6 @@
 /*
 	Copyright (C) 2006 yopyop
-	Copyright (C) 2008-2012 DeSmuME team
+	Copyright (C) 2008-2013 DeSmuME team
 
 	This file is free software: you can redistribute it and/or modify
 	it under the terms of the GNU General Public License as published by
@@ -489,6 +489,8 @@ extern struct TCommonSettings {
 		, GFX3D_Texture(true)
 		, GFX3D_LineHack(true)
 		, GFX3D_Zelda_Shadow_Depth_Hack(0)
+		, GFX3D_Renderer_Multisample(false)
+		, jit_max_block_size(100)
 		, UseExtBIOS(false)
 		, SWIFromBIOS(false)
 		, PatchSWI3(false)
@@ -539,6 +541,7 @@ extern struct TCommonSettings {
 	bool GFX3D_Texture;
 	bool GFX3D_LineHack;
 	int  GFX3D_Zelda_Shadow_Depth_Hack;
+	bool GFX3D_Renderer_Multisample;
 
 	bool UseExtBIOS;
 	char ARM9BIOS[256];
@@ -569,6 +572,7 @@ extern struct TCommonSettings {
 	FAST_ALIGN bool advanced_timing;
 
 	bool use_jit;
+	u32	jit_max_block_size;
 	
 	struct _Wifi {
 		int mode;
