@@ -23,44 +23,9 @@ retro_environment_t environ_cb = NULL;
 
 volatile bool execute = false;
 
-// Video buffer
-static uint16_t screenSwap[256 * 192 * 2];
-
 #ifndef SWAPTYPE
 # define SWAPTYPE uint32_t
 #endif
-
-namespace VIDEO
-{
-    retro_pixel_format colorMode;
-    
-    template<typename T, unsigned EXTRA>
-    void SwapScreen(void* aOut, const void* aIn, uint32_t aPitchInPix)
-    {
-        static const uint32_t pixPerT = sizeof(T) / 2;
-        static const uint32_t pixPerLine = 256 / pixPerT;
-        static const T colorMask = (pixPerT == 1) ? 0x001F : ((pixPerT == 2) ? 0x001F001F : 0x001F001F001F001FULL);
-        
-        assert(pixPerT == 1 || pixPerT == 2 || pixPerT == 4);
-        
-        const uint32_t pitchInT = aPitchInPix / pixPerT;
-        const T* inPix = (const T*)aIn;
-        
-        for(int i = 0; i < 192; i ++)
-        {
-            T* outPix = (T*)aOut + (i * pitchInT);
-
-            for(int j = 0; j < pixPerLine; j ++)
-            {
-                const T p = *inPix++;            
-                const T r = ((p >> 10) & colorMask);
-                const T g = ((p >> 5) & colorMask) << 5 + EXTRA;
-                const T b = ((p >> 0) & colorMask) << 10 + EXTRA;
-                *outPix++ = r | g | b;
-            }
-        }
-    }
-}
 
 namespace INPUT
 {
@@ -93,13 +58,13 @@ namespace INPUT
         0, 0, 0, 0, 0, 2, 2, 2, 
     };
 
-    unsigned Devices[2] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_MOUSE};
+    static unsigned Devices[2] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_MOUSE};
     
-    const uint32_t FramesWithPointerBase = 60 * 10;
-    uint32_t FramesWithPointer = FramesWithPointerBase;
+    static const uint32_t FramesWithPointerBase = 60 * 10;
+    static uint32_t FramesWithPointer = FramesWithPointerBase;
 
     template<uint16_t COLOR>
-    void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
+    static void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
     {
         if(FramesWithPointer > 0)
         {
@@ -113,6 +78,82 @@ namespace INPUT
                             aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = COLOR;
         }
     }
+}
+
+
+namespace VIDEO
+{
+    static uint16_t screenSwap[256 * 192 * 2];
+    static retro_pixel_format colorMode;
+
+    struct LayoutData
+    {
+        const char* name;
+        uint16_t* screens[2];
+        uint32_t width;
+        uint32_t height;
+        uint32_t pitchInPix;
+    };
+
+    static const LayoutData layouts[] =
+    {
+        { "main_top_ext_bottom", { &screenSwap[0], &screenSwap[256 * 192] }, 256, 384, 256 },
+        { "main_bottom_ext_top", { &screenSwap[256 * 192], &screenSwap[0] }, 256, 384, 256 },
+        { "main_left_ext_right", { &screenSwap[0], &screenSwap[256] }, 512, 192, 512 },
+        { "main_right_ext_left", { &screenSwap[256], &screenSwap[0] }, 512, 192, 512 },
+        { 0, 0, 0, 0 }
+    };
+
+    static const LayoutData* screenLayout = &layouts[0];
+
+    template<typename T, unsigned EXTRA>
+    static void SwapScreen(void* aOut, const void* aIn, uint32_t aPitchInPix)
+    {
+        static const uint32_t pixPerT = sizeof(T) / 2;
+        static const uint32_t pixPerLine = 256 / pixPerT;
+        static const T colorMask = (pixPerT == 1) ? 0x001F : ((pixPerT == 2) ? 0x001F001F : 0x001F001F001F001FULL);
+        
+        assert(pixPerT == 1 || pixPerT == 2 || pixPerT == 4);
+        
+        const uint32_t pitchInT = aPitchInPix / pixPerT;
+        const T* inPix = (const T*)aIn;
+        
+        for(int i = 0; i < 192; i ++)
+        {
+            T* outPix = (T*)aOut + (i * pitchInT);
+
+            for(int j = 0; j < pixPerLine; j ++)
+            {
+                const T p = *inPix++;            
+                const T r = ((p >> 10) & colorMask);
+                const T g = ((p >> 5) & colorMask) << 5 + EXTRA;
+                const T b = ((p >> 0) & colorMask) << 10 + EXTRA;
+                *outPix++ = r | g | b;
+            }
+        }
+    }
+
+    void SetupScreens(const char* aLayout)
+    {
+        screenLayout = &layouts[0];
+
+        for(int i = 0; aLayout && layouts[i].name; i ++)
+            if(strcmp(aLayout, layouts[i].name) == 0)
+                screenLayout = &layouts[i];
+    }
+
+    template<unsigned EXTRA>
+    void SwapScreensFn()
+    {
+        static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
+        SwapScreen<SWAPTYPE, EXTRA>(screenLayout->screens[0], screenSource[0], screenLayout->pitchInPix);
+        SwapScreen<SWAPTYPE, EXTRA>(screenLayout->screens[1], screenSource[1], screenLayout->pitchInPix);
+        INPUT::DrawPointer<EXTRA ? 0xFFFF : 0x7FFF>(screenLayout->screens[1], screenLayout->pitchInPix);
+
+        video_cb(screenSwap, screenLayout->width, screenLayout->height, screenLayout->pitchInPix * 2);
+    }
+
+    void (*SwapScreens)();
 }
 
 void frontend_process_samples(u32 frames, const s16* data)
@@ -176,6 +217,14 @@ void retro_set_input_state(retro_input_state_t cb)
 void retro_set_environment(retro_environment_t cb)
 {
    environ_cb = cb;
+
+   static const retro_variable values[] =
+   {
+      { "desmume_screens_layout", "Screen Latout; main_top_ext_bottom|main_bottom_ext_top|main_left_ext_right|main_right_ext_left" },
+      { 0, 0 }
+   };
+
+   environ_cb(RETRO_ENVIRONMENT_SET_VARIABLES, (void*)values);
 }
 
 void retro_get_system_info(struct retro_system_info *info)
@@ -196,20 +245,29 @@ void retro_set_controller_port_device(unsigned in_port, unsigned device)
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
     // TODO
-    info->geometry.base_width = 256;
-    info->geometry.base_height = 192*2;
-    info->geometry.max_width = 256;
-    info->geometry.max_height = 192*2;
-    info->geometry.aspect_ratio = 256.0 / (192.0 * 2.0);
+    info->geometry.base_width = VIDEO::screenLayout->width;
+    info->geometry.base_height = VIDEO::screenLayout->height;
+    info->geometry.max_width = VIDEO::screenLayout->width;
+    info->geometry.max_height = VIDEO::screenLayout->height;
+    info->geometry.aspect_ratio = 0.0;
     info->timing.fps = 60.0;
     info->timing.sample_rate = 44100.0;
 }
 
 void retro_init (void)
 {
-    VIDEO::colorMode = RETRO_PIXEL_FORMAT_RGB565;
-    if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &VIDEO::colorMode))
-        VIDEO::colorMode = RETRO_PIXEL_FORMAT_0RGB1555;
+    using namespace VIDEO;
+
+    colorMode = RETRO_PIXEL_FORMAT_RGB565;
+    if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &colorMode))
+        colorMode = RETRO_PIXEL_FORMAT_0RGB1555;
+
+    SwapScreens = (colorMode == RETRO_PIXEL_FORMAT_RGB565) ? SwapScreensFn<1> : SwapScreensFn<0>;
+
+    // Screen layout
+    retro_variable layout = { "desmume_screens_layout", 0 };
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &layout);
+    VIDEO::SetupScreens(layout.value);
 
     // Init DeSmuME
     struct NDS_fw_config_data fw_config;
@@ -313,23 +371,7 @@ void retro_run (void)
     NDS_exec<false>();
     
     // VIDEO: Swap screen colors and pass on
-    static uint16_t* const screenDest[2] = {&screenSwap[0], &screenSwap[256 * 192]};
-    static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
-
-    if(VIDEO::colorMode == RETRO_PIXEL_FORMAT_RGB565)
-    {
-        VIDEO::SwapScreen<SWAPTYPE, 1>(screenDest[0], screenSource[0], 256);
-        VIDEO::SwapScreen<SWAPTYPE, 1>(screenDest[1], screenSource[1], 256);
-        INPUT::DrawPointer<0xFFFF>(screenDest[1], 256);
-    }
-    else if(VIDEO::colorMode == RETRO_PIXEL_FORMAT_0RGB1555)
-    {
-        VIDEO::SwapScreen<SWAPTYPE, 0>(screenDest[0], screenSource[0], 256);
-        VIDEO::SwapScreen<SWAPTYPE, 0>(screenDest[1], screenSource[1], 256);
-        INPUT::DrawPointer<0x7FFF>(screenDest[1], 256);
-    }
-
-    video_cb(screenSwap, 256, 192 * 2, 256 * 2);
+    VIDEO::SwapScreens();
 }
 
 size_t retro_serialize_size (void)
