@@ -29,6 +29,8 @@ volatile bool execute = false;
 
 namespace /* INPUT */
 {
+    static bool absolutePointer;
+
     template<int min, int max>
     static int32_t ClampedMove(int32_t aTarget, int32_t aValue)
     {
@@ -37,42 +39,27 @@ namespace /* INPUT */
 
     static int32_t TouchX;
     static int32_t TouchY;
-    
-    static const uint8_t CursorImage[16*8] =
-    {
-        2, 0, 0, 0, 0, 0, 0, 0, 
-        2, 2, 0, 0, 0, 0, 0, 0, 
-        2, 1, 2, 0, 0, 0, 0, 0, 
-        2, 1, 1, 2, 0, 0, 0, 0, 
-        2, 1, 1, 1, 2, 0, 0, 0, 
-        2, 1, 1, 1, 1, 2, 0, 0, 
-        2, 1, 1, 1, 1, 1, 2, 0, 
-        2, 1, 1, 1, 1, 1, 1, 2, 
-        2, 1, 1, 1, 1, 1, 2, 2, 
-        2, 1, 1, 1, 1, 2, 0, 0, 
-        2, 1, 2, 1, 1, 2, 0, 0, 
-        2, 2, 0, 2, 1, 2, 0, 0, 
-        2, 0, 0, 0, 2, 1, 2, 0, 
-        0, 0, 0, 0, 2, 1, 2, 0, 
-        0, 0, 0, 0, 0, 2, 1, 2, 
-        0, 0, 0, 0, 0, 2, 2, 2, 
-    };
 
     static const uint32_t FramesWithPointerBase = 60 * 10;
-    static uint32_t FramesWithPointer = FramesWithPointerBase;
+    static int32_t FramesWithPointer;
+
+    template<uint16_t COLOR>
+    static void DrawPointerLine(uint16_t* aOut, uint32_t aPitchInPix)
+    {
+        for(int i = 0; i < 5; i ++)
+            aOut[aPitchInPix * i] = COLOR;
+    }
 
     template<uint16_t COLOR>
     static void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
     {
-        if(FramesWithPointer > 0)
-        {
-            FramesWithPointer --;
-        
-            // Draw pointer
-            for(int i = 0; i < 16 && TouchY + i < 192; i ++)
-                for(int j = 0; j < 8 && TouchX + j < 256; j ++)
-                    aOut[(i + TouchY) * aPitchInPix + TouchX + j] |= CursorImage[i * 8 + j] ? COLOR : 0;
-        }
+        if(FramesWithPointer-- < 0)
+            return;
+
+        if(TouchX >   5) DrawPointerLine<COLOR>(&aOut[TouchY * aPitchInPix + TouchX - 5], 1);
+        if(TouchX < 251) DrawPointerLine<COLOR>(&aOut[TouchY * aPitchInPix + TouchX + 1], 1);
+        if(TouchY >   5) DrawPointerLine<COLOR>(&aOut[(TouchY - 5) * aPitchInPix + TouchX], aPitchInPix);
+        if(TouchY < 251) DrawPointerLine<COLOR>(&aOut[(TouchY + 1) * aPitchInPix + TouchX], aPitchInPix);
     }
 }
 
@@ -86,6 +73,8 @@ namespace /* VIDEO */
     {
         const char* name;
         uint16_t* screens[2];
+        uint32_t touchScreenX;
+        uint32_t touchScreenY;
         uint32_t width;
         uint32_t height;
         uint32_t pitchInPix;
@@ -93,10 +82,10 @@ namespace /* VIDEO */
 
     static const LayoutData layouts[] =
     {
-        { "main_top_ext_bottom", { &screenSwap[0], &screenSwap[256 * 192] }, 256, 384, 256 },
-        { "main_bottom_ext_top", { &screenSwap[256 * 192], &screenSwap[0] }, 256, 384, 256 },
-        { "main_left_ext_right", { &screenSwap[0], &screenSwap[256] }, 512, 192, 512 },
-        { "main_right_ext_left", { &screenSwap[256], &screenSwap[0] }, 512, 192, 512 },
+        { "main_top_ext_bottom", { &screenSwap[0], &screenSwap[256 * 192] }, 0, 192, 256, 384, 256 },
+        { "main_bottom_ext_top", { &screenSwap[256 * 192], &screenSwap[0] }, 0, 0, 256, 384, 256 },
+        { "main_left_ext_right", { &screenSwap[0], &screenSwap[256] }, 256, 0, 512, 192, 512 },
+        { "main_right_ext_left", { &screenSwap[256], &screenSwap[0] }, 0, 0, 512, 192, 512 },
         { 0, 0, 0, 0 }
     };
 
@@ -152,6 +141,17 @@ namespace /* VIDEO */
     void (*SwapScreens)();
 }
 
+static void CheckSettings()
+{
+    retro_variable layout = { "desmume_screens_layout", 0 };
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &layout);
+    SetupScreens(layout.value);
+
+    retro_variable pointer = { "desmume_pointer_type", 0 };
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &pointer);
+    absolutePointer = pointer.value && (strcmp(pointer.value, "absolute") == 0);
+}
+
 void frontend_process_samples(u32 frames, const s16* data)
 {
     audio_batch_cb(data, frames);
@@ -182,7 +182,8 @@ void retro_set_environment(retro_environment_t cb)
 
    static const retro_variable values[] =
    {
-      { "desmume_screens_layout", "Screen Latout; main_top_ext_bottom|main_bottom_ext_top|main_left_ext_right|main_right_ext_left" },
+      { "desmume_screens_layout", "Screen Layout; main_top_ext_bottom|main_bottom_ext_top|main_left_ext_right|main_right_ext_left" },
+      { "desmume_pointer_type", "Pointer Mode; relative|absolute" },
       { 0, 0 }
    };
 
@@ -218,10 +219,7 @@ void retro_init (void)
 
     SwapScreens = (colorMode == RETRO_PIXEL_FORMAT_RGB565) ? SwapScreensFn<1> : SwapScreensFn<0>;
 
-    // Screen layout
-    retro_variable layout = { "desmume_screens_layout", 0 };
-    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &layout);
-    SetupScreens(layout.value);
+    CheckSettings();
 
     // Init DeSmuME
     struct NDS_fw_config_data fw_config;
@@ -249,6 +247,12 @@ void retro_reset (void)
 
 void retro_run (void)
 {
+    // Settings
+    bool changed = false;
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE_UPDATE, &changed);
+    if(changed)
+        CheckSettings();
+
     poll_cb();
 
     bool haveTouch = false;
@@ -263,29 +267,32 @@ void retro_run (void)
     FramesWithPointer = (analogX || analogY) ? FramesWithPointerBase : FramesWithPointer;
 
     // TOUCH: Mouse
-    const int16_t mouseX = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
-    const int16_t mouseY = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
-    haveTouch = haveTouch || input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
-    
-    TouchX = ClampedMove<0, 255>(TouchX, mouseX);
-    TouchY = ClampedMove<0, 191>(TouchY, mouseY);
-    FramesWithPointer = (mouseX || mouseY) ? FramesWithPointerBase : FramesWithPointer;
-
-    // TOUCH: Pointer
-    if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
+    if(!absolutePointer)
     {
-        haveTouch = true;
+        const int16_t mouseX = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+        const int16_t mouseY = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+        haveTouch = haveTouch || input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
     
-        static const float X_FACTOR = (256.0f / 65536.0f);
-        static const float Y_FACTOR = (384.0f / 65536.0f);
+        TouchX = ClampedMove<0, 255>(TouchX, mouseX);
+        TouchY = ClampedMove<0, 191>(TouchY, mouseY);
+        FramesWithPointer = (mouseX || mouseY) ? FramesWithPointerBase : FramesWithPointer;
+    }
+    // TOUCH: Pointer
+    else if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
+    {
+        const float X_FACTOR = ((float)screenLayout->width / 65536.0f);
+        const float Y_FACTOR = ((float)screenLayout->height / 65536.0f);
     
         float x = (input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_X) + 32768.0f) * X_FACTOR;
         float y = (input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_Y) + 32768.0f) * Y_FACTOR;
-        
-        if(y >= 192.0f)
+
+        if (x >= screenLayout->touchScreenX && x < screenLayout->touchScreenX + 256 &&
+            y >= screenLayout->touchScreenY && y < screenLayout->touchScreenY + 192)
         {
-            TouchX = x;
-            TouchY = y - 192.0f;
+            haveTouch = true;
+
+            TouchX = x - screenLayout->touchScreenX;
+            TouchY = y - screenLayout->touchScreenY;
         }
     }
 
