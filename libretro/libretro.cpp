@@ -176,43 +176,11 @@ GPU3DInterface* core3DList[] =
 
 //
 
-void *retro_get_memory_data(unsigned type)
-{
-   return 0;
-}
-
-size_t retro_get_memory_size(unsigned type)
-{
-   return 0;
-}
-
-unsigned retro_api_version(void)
-{
-   return RETRO_API_VERSION;
-}
-
-void retro_set_video_refresh(retro_video_refresh_t cb)
-{
-   video_cb = cb;
-}
-
-void retro_set_audio_sample(retro_audio_sample_t cb)
-{}
-
-void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb)
-{
-   audio_batch_cb = cb;
-}
-
-void retro_set_input_poll(retro_input_poll_t cb)
-{
-   poll_cb = cb;
-}
-
-void retro_set_input_state(retro_input_state_t cb)
-{
-   input_cb = cb;
-}
+void retro_set_video_refresh(retro_video_refresh_t cb) { video_cb = cb; }
+void retro_set_audio_sample(retro_audio_sample_t cb)   { }
+void retro_set_audio_sample_batch(retro_audio_sample_batch_t cb) { audio_batch_cb = cb; }
+void retro_set_input_poll(retro_input_poll_t cb) { poll_cb = cb; }
+void retro_set_input_state(retro_input_state_t cb) { input_cb = cb; }
 
 void retro_set_environment(retro_environment_t cb)
 {
@@ -398,12 +366,6 @@ bool retro_unserialize(const void * data, size_t size)
     return savestate_load(&state);
 }
 
-void retro_cheat_reset(void)
-{}
-
-void retro_cheat_set(unsigned unused, bool unused1, const char* unused2)
-{}
-
 bool retro_load_game(const struct retro_game_info *game)
 {
     execute = NDS_LoadROM(game->path);
@@ -428,10 +390,13 @@ void retro_unload_game (void)
     execute = false;
 }
 
-unsigned retro_get_region (void)
-{ 
-   return RETRO_REGION_NTSC; 
-}
+// Stubs
+void *retro_get_memory_data(unsigned type) { return 0; }
+size_t retro_get_memory_size(unsigned type) { return 0; }
+unsigned retro_api_version(void) { return RETRO_API_VERSION; }
+void retro_cheat_reset(void) { }
+void retro_cheat_set(unsigned unused, bool unused1, const char* unused2) { }
+unsigned retro_get_region (void) { return RETRO_REGION_NTSC; }
 
 #ifdef PSP
 int ftruncate(int fd, off_t length)
