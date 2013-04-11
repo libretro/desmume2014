@@ -24,7 +24,7 @@ retro_environment_t environ_cb = NULL;
 volatile bool execute = false;
 
 // Video buffer
-static uint8_t screenSwap[256 * 192 * 2 * 4];
+static uint16_t screenSwap[256 * 192 * 2];
 
 #ifndef SWAPTYPE
 # define SWAPTYPE uint32_t
@@ -33,26 +33,9 @@ static uint8_t screenSwap[256 * 192 * 2 * 4];
 namespace VIDEO
 {
     retro_pixel_format colorMode;
-
-    void SwapScreen32(uint32_t* aOut, const uint16_t* aIn, uint32_t aPitchInPix)
-    {    
-        for(int i = 0; i != 192; i ++)
-        {
-            uint32_t* out = (uint32_t*)&aOut[i * aPitchInPix];
-        
-            for(int j = 0; j != 256; j ++)
-            {
-                const uint16_t p = *aIn++;
-                const uint32_t r = (p & 0x1F) << 19;
-                const uint32_t g = ((p >> 5) & 0x1F) << 11;
-                const uint32_t b = ((p >> 10) & 0x1F) << 3;
-                *out++ = r | g | b;
-            }
-        }
-    }
     
     template<typename T, unsigned EXTRA>
-    void SwapScreen16(void* aOut, const void* aIn, uint32_t aPitchInPix)
+    void SwapScreen(void* aOut, const void* aIn, uint32_t aPitchInPix)
     {
         static const uint32_t pixPerT = sizeof(T) / 2;
         static const uint32_t pixPerLine = 256 / pixPerT;
@@ -63,10 +46,10 @@ namespace VIDEO
         const uint32_t pitchInT = aPitchInPix / pixPerT;
         const T* inPix = (const T*)aIn;
         
-        for(int i = 0; i != 192; i ++)
+        for(int i = 0; i < 192; i ++)
         {
             T* outPix = (T*)aOut + (i * pitchInT);
-        
+
             for(int j = 0; j != pixPerLine; j ++)
             {
                 const T p = *inPix++;            
@@ -149,8 +132,8 @@ namespace INPUT
     const uint32_t FramesWithPointerBase = 60 * 10;
     uint32_t FramesWithPointer = FramesWithPointerBase;
 
-    template<unsigned COLOR, typename PIXTYPE>
-    void DrawPointer(PIXTYPE* aOut, uint32_t aPitchInPix)
+    template<uint16_t COLOR>
+    void DrawPointer(uint16_t* aOut, uint32_t aPitchInPix)
     {
         if(FramesWithPointer > 0)
         {
@@ -265,16 +248,9 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 
 void retro_init (void)
 {
-    // Get Color 32->16->15
-    VIDEO::colorMode = RETRO_PIXEL_FORMAT_XRGB8888;
+    VIDEO::colorMode = RETRO_PIXEL_FORMAT_RGB565;
     if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &VIDEO::colorMode))
-    {
-        VIDEO::colorMode = RETRO_PIXEL_FORMAT_RGB565;
-        if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &VIDEO::colorMode))
-        {
-            VIDEO::colorMode = RETRO_PIXEL_FORMAT_0RGB1555;
-        }
-    }
+        VIDEO::colorMode = RETRO_PIXEL_FORMAT_0RGB1555;
 
     // Init DeSmuME
     struct NDS_fw_config_data fw_config;
@@ -387,39 +363,23 @@ void retro_run (void)
     SPU_Emulate_user();
     
     // VIDEO: Swap screen colors and pass on
-    if(RETRO_PIXEL_FORMAT_XRGB8888 == VIDEO::colorMode)
+    static uint16_t* const screenDest[2] = {&screenSwap[0], &screenSwap[256 * 192]};
+    static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
+
+    if(VIDEO::colorMode == RETRO_PIXEL_FORMAT_RGB565)
     {
-        static uint32_t* const screenDest[2] = {(uint32_t*)&screenSwap[0], (uint32_t*)&screenSwap[256 * 192 * 4]};
-        static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
-    
-        VIDEO::SwapScreen32(screenDest[0], screenSource[0], 256);
-        VIDEO::SwapScreen32(screenDest[1], screenSource[1], 256);
-        INPUT::DrawPointer<0xFFFFFF>(screenDest[1], 256);
-        
-        video_cb(screenSwap, 256, 192 * 2, 256 * 4);
-    }
-    else if(RETRO_PIXEL_FORMAT_RGB565 == VIDEO::colorMode)
-    {
-        static uint16_t* const screenDest[2] = {(uint16_t*)&screenSwap[0], (uint16_t*)&screenSwap[256 * 192 * 2]};
-        static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
-    
-        VIDEO::SwapScreen16<SWAPTYPE, 1>(screenDest[0], screenSource[0], 256);
-        VIDEO::SwapScreen16<SWAPTYPE, 1>(screenDest[1], screenSource[1], 256);
+        VIDEO::SwapScreen<SWAPTYPE, 1>(screenDest[0], screenSource[0], 256);
+        VIDEO::SwapScreen<SWAPTYPE, 1>(screenDest[1], screenSource[1], 256);
         INPUT::DrawPointer<0xFFFF>(screenDest[1], 256);
-        
-        video_cb(screenSwap, 256, 192 * 2, 256 * 2);
     }
-    else if(RETRO_PIXEL_FORMAT_0RGB1555 == VIDEO::colorMode)
+    else if(VIDEO::colorMode == RETRO_PIXEL_FORMAT_0RGB1555)
     {
-        static uint16_t* const screenDest[2] = {(uint16_t*)&screenSwap[0], (uint16_t*)&screenSwap[256 * 192 * 2]};
-        static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
-    
-        VIDEO::SwapScreen16<SWAPTYPE, 0>(screenDest[0], screenSource[0], 256);
-        VIDEO::SwapScreen16<SWAPTYPE, 0>(screenDest[1], screenSource[1], 256);
+        VIDEO::SwapScreen<SWAPTYPE, 0>(screenDest[0], screenSource[0], 256);
+        VIDEO::SwapScreen<SWAPTYPE, 0>(screenDest[1], screenSource[1], 256);
         INPUT::DrawPointer<0x7FFF>(screenDest[1], 256);
-        
-        video_cb(screenSwap, 256, 192 * 2, 256 * 2);
     }
+
+    video_cb(screenSwap, 256, 192 * 2, 256 * 2);
 }
 
 size_t retro_serialize_size (void)
