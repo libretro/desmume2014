@@ -262,7 +262,7 @@ void retro_run (void)
 
 #ifndef HAVE_ABSOLUTE_POINTER
     // TOUCH: Mouse
-    const bool haveMouse = (RETRO_DEVICE_MOUSE == INPUT::Devices[1]);
+    const bool haveMouse = (INPUT::Devices[1] == RETRO_DEVICE_MOUSE);
     const int16_t mouseX = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) : 0;
     const int16_t mouseY = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) : 0;
     haveTouch = haveTouch || (haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) : false);
@@ -386,7 +386,7 @@ bool retro_load_game(const struct retro_game_info *game)
 
 bool retro_load_game_special(unsigned game_type, const struct retro_game_info *info, size_t num_info)
 {
-    if(RETRO_GAME_TYPE_SUPER_GAME_BOY == game_type && 2 == num_info)
+    if(game_type == RETRO_GAME_TYPE_SUPER_GAME_BOY && num_info == 2)
     {
         strncpy(GBAgameName, info[1].path, sizeof(GBAgameName));
         addonsChangePak(NDS_ADDON_GBAGAME);
