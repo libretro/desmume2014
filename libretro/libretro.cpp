@@ -58,8 +58,6 @@ namespace /* INPUT */
         0, 0, 0, 0, 0, 2, 2, 2, 
     };
 
-    static unsigned Devices[2] = {RETRO_DEVICE_JOYPAD, RETRO_DEVICE_MOUSE};
-    
     static const uint32_t FramesWithPointerBase = 60 * 10;
     static uint32_t FramesWithPointer = FramesWithPointerBase;
 
@@ -71,11 +69,9 @@ namespace /* INPUT */
             FramesWithPointer --;
         
             // Draw pointer
-            if(Devices[1] == RETRO_DEVICE_MOUSE)
-                for(int i = 0; i < 16 && TouchY + i < 192; i ++)
-                    for(int j = 0; j < 8 && TouchX + j < 256; j ++)
-                        if(CursorImage[i * 8 + j])
-                            aOut[(i + TouchY) * aPitchInPix + TouchX + j] = COLOR;
+            for(int i = 0; i < 16 && TouchY + i < 192; i ++)
+                for(int j = 0; j < 8 && TouchX + j < 256; j ++)
+                    aOut[(i + TouchY) * aPitchInPix + TouchX + j] |= CursorImage[i * 8 + j] ? COLOR : 0;
         }
     }
 }
@@ -163,16 +159,14 @@ void frontend_process_samples(u32 frames, const s16* data)
 
 SoundInterface_struct* SNDCoreList[] =
 {
-	NULL
+    NULL
 };
 
 GPU3DInterface* core3DList[] =
 {
-	&gpu3DRasterize,
-	NULL
+    &gpu3DRasterize,
+    NULL
 };
-
-
 
 //
 
@@ -202,12 +196,6 @@ void retro_get_system_info(struct retro_system_info *info)
    info->valid_extensions = "nds";
    info->need_fullpath = true;   
    info->block_extract = false;
-}
-
-void retro_set_controller_port_device(unsigned in_port, unsigned device)
-{
-    if(in_port < 2)
-        Devices[in_port] = device;
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
@@ -251,7 +239,7 @@ void retro_init (void)
 
 void retro_deinit(void)
 {
-	NDS_DeInit();
+    NDS_DeInit();
 }
 
 void retro_reset (void)
@@ -274,17 +262,15 @@ void retro_run (void)
     TouchY = ClampedMove<0, 191>(TouchY, analogY);
     FramesWithPointer = (analogX || analogY) ? FramesWithPointerBase : FramesWithPointer;
 
-#ifndef HAVE_ABSOLUTE_POINTER
     // TOUCH: Mouse
-    const bool haveMouse = (Devices[1] == RETRO_DEVICE_MOUSE);
-    const int16_t mouseX = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) : 0;
-    const int16_t mouseY = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) : 0;
-    haveTouch = haveTouch || (haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) : false);
+    const int16_t mouseX = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X);
+    const int16_t mouseY = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
+    haveTouch = haveTouch || input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
     
     TouchX = ClampedMove<0, 255>(TouchX, mouseX);
     TouchY = ClampedMove<0, 191>(TouchY, mouseY);
     FramesWithPointer = (mouseX || mouseY) ? FramesWithPointerBase : FramesWithPointer;
-#else
+
     // TOUCH: Pointer
     if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
     {
@@ -302,7 +288,6 @@ void retro_run (void)
             TouchY = y - 192.0f;
         }
     }
-#endif
 
     // TOUCH: Final        
     if(haveTouch)
@@ -312,26 +297,23 @@ void retro_run (void)
 
 
     // BUTTONS
-    if(Devices[0] == RETRO_DEVICE_JOYPAD)
-    {
-        NDS_beginProcessingInput();
-        UserButtons& input = NDS_getProcessingUserInput().buttons;
-        input.G = 0; // debug
-        input.E = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R); // right shoulder
-        input.W = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L); // left shoulder
-        input.X = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X);
-        input.Y = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y);
-        input.A = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A);
-        input.B = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B);
-        input.S = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START);
-        input.T = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT);
-        input.U = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP);
-        input.D = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN);
-        input.L = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT);
-        input.R = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT);
-        input.F = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2); //Lid
-        NDS_endProcessingInput();
-    }
+    NDS_beginProcessingInput();
+    UserButtons& input = NDS_getProcessingUserInput().buttons;
+    input.G = 0; // debug
+    input.E = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R); // right shoulder
+    input.W = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L); // left shoulder
+    input.X = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_X);
+    input.Y = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_Y);
+    input.A = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_A);
+    input.B = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_B);
+    input.S = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_START);
+    input.T = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_SELECT);
+    input.U = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_UP);
+    input.D = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_DOWN);
+    input.L = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_LEFT);
+    input.R = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_RIGHT);
+    input.F = input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_L2); //Lid
+    NDS_endProcessingInput();
 
     // RUN
     NDS_exec<false>();
@@ -391,6 +373,7 @@ void retro_unload_game (void)
 }
 
 // Stubs
+void retro_set_controller_port_device(unsigned in_port, unsigned device) { }
 void *retro_get_memory_data(unsigned type) { return 0; }
 size_t retro_get_memory_size(unsigned type) { return 0; }
 unsigned retro_api_version(void) { return RETRO_API_VERSION; }
