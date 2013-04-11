@@ -217,7 +217,11 @@ int SPU_Init(int coreid, int buffersize)
 		}
 	}
 
+#ifdef __LIBRETRO__ // Direct Audio
+   return 0;
+#else
 	return SPU_ChangeSoundCore(coreid, buffersize);
+#endif
 }
 
 void SPU_Pause(int pause)
@@ -1397,6 +1401,11 @@ void SPU_Emulate_core()
 	spu_core_samples = (int)(samples);
 	samples -= spu_core_samples;
 	
+#ifdef __LIBRETRO__ // Direct Audio
+	SPU_MixAudio(needToMix, SPU_core, spu_core_samples);
+	frontend_process_samples(spu_core_samples, SPU_core->outbuf);
+#else
+
 	// We don't need to mix audio for Dual Synch/Asynch mode since we do this
 	// later in SPU_Emulate_user(). Disable mixing here to speed up processing.
 	// However, recording still needs to mix the audio, so make sure we're also
@@ -1422,6 +1431,7 @@ void SPU_Emulate_core()
 	{
 		SPU_DefaultFetchSamples(SPU_core->outbuf, spu_core_samples, synchmode, synchronizer);
 	}
+#endif
 }
 
 void SPU_Emulate_user(bool mix)

@@ -27,6 +27,9 @@
 #include "emufile.h"
 #include "metaspu/metaspu.h"
 
+#ifdef __LIBRETRO__ // Direct Audio
+extern void frontend_process_samples(u32 frames, const s16* data);
+#endif
 
 #define SNDCORE_DEFAULT         -1
 #define SNDCORE_DUMMY           0
