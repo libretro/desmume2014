@@ -27,7 +27,7 @@ volatile bool execute = false;
 # define SWAPTYPE uint32_t
 #endif
 
-namespace INPUT
+namespace /* INPUT */
 {
     template<int min, int max>
     static int32_t ClampedMove(int32_t aTarget, int32_t aValue)
@@ -71,17 +71,17 @@ namespace INPUT
             FramesWithPointer --;
         
             // Draw pointer
-            if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
-                for(int i = 0; i < 16 && INPUT::TouchY + i < 192; i ++)
-                    for(int j = 0; j < 8 && INPUT::TouchX + j < 256; j ++)
-                        if(INPUT::CursorImage[i * 8 + j])
-                            aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = COLOR;
+            if(Devices[1] == RETRO_DEVICE_MOUSE)
+                for(int i = 0; i < 16 && TouchY + i < 192; i ++)
+                    for(int j = 0; j < 8 && TouchX + j < 256; j ++)
+                        if(CursorImage[i * 8 + j])
+                            aOut[(i + TouchY) * aPitchInPix + TouchX + j] = COLOR;
         }
     }
 }
 
 
-namespace VIDEO
+namespace /* VIDEO */
 {
     static uint16_t screenSwap[256 * 192 * 2];
     static retro_pixel_format colorMode;
@@ -148,7 +148,7 @@ namespace VIDEO
         static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
         SwapScreen<SWAPTYPE, EXTRA>(screenLayout->screens[0], screenSource[0], screenLayout->pitchInPix);
         SwapScreen<SWAPTYPE, EXTRA>(screenLayout->screens[1], screenSource[1], screenLayout->pitchInPix);
-        INPUT::DrawPointer<EXTRA ? 0xFFFF : 0x7FFF>(screenLayout->screens[1], screenLayout->pitchInPix);
+        DrawPointer<EXTRA ? 0xFFFF : 0x7FFF>(screenLayout->screens[1], screenLayout->pitchInPix);
 
         video_cb(screenSwap, screenLayout->width, screenLayout->height, screenLayout->pitchInPix * 2);
     }
@@ -239,16 +239,16 @@ void retro_get_system_info(struct retro_system_info *info)
 void retro_set_controller_port_device(unsigned in_port, unsigned device)
 {
     if(in_port < 2)
-        INPUT::Devices[in_port] = device;
+        Devices[in_port] = device;
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
 {
     // TODO
-    info->geometry.base_width = VIDEO::screenLayout->width;
-    info->geometry.base_height = VIDEO::screenLayout->height;
-    info->geometry.max_width = VIDEO::screenLayout->width;
-    info->geometry.max_height = VIDEO::screenLayout->height;
+    info->geometry.base_width = screenLayout->width;
+    info->geometry.base_height = screenLayout->height;
+    info->geometry.max_width = screenLayout->width;
+    info->geometry.max_height = screenLayout->height;
     info->geometry.aspect_ratio = 0.0;
     info->timing.fps = 60.0;
     info->timing.sample_rate = 44100.0;
@@ -256,8 +256,6 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
 
 void retro_init (void)
 {
-    using namespace VIDEO;
-
     colorMode = RETRO_PIXEL_FORMAT_RGB565;
     if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &colorMode))
         colorMode = RETRO_PIXEL_FORMAT_0RGB1555;
@@ -267,7 +265,7 @@ void retro_init (void)
     // Screen layout
     retro_variable layout = { "desmume_screens_layout", 0 };
     environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &layout);
-    VIDEO::SetupScreens(layout.value);
+    SetupScreens(layout.value);
 
     // Init DeSmuME
     struct NDS_fw_config_data fw_config;
@@ -304,20 +302,20 @@ void retro_run (void)
     const int16_t analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / 2048;
     haveTouch = haveTouch || input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);    
 
-    INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, analogX);
-    INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, analogY);
-    INPUT::FramesWithPointer = (analogX || analogY) ? INPUT::FramesWithPointerBase : INPUT::FramesWithPointer;
+    TouchX = ClampedMove<0, 255>(TouchX, analogX);
+    TouchY = ClampedMove<0, 191>(TouchY, analogY);
+    FramesWithPointer = (analogX || analogY) ? FramesWithPointerBase : FramesWithPointer;
 
 #ifndef HAVE_ABSOLUTE_POINTER
     // TOUCH: Mouse
-    const bool haveMouse = (INPUT::Devices[1] == RETRO_DEVICE_MOUSE);
+    const bool haveMouse = (Devices[1] == RETRO_DEVICE_MOUSE);
     const int16_t mouseX = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_X) : 0;
     const int16_t mouseY = haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y) : 0;
     haveTouch = haveTouch || (haveMouse ? input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT) : false);
     
-    INPUT::TouchX = INPUT::ClampedMove<0, 255>(INPUT::TouchX, mouseX);
-    INPUT::TouchY = INPUT::ClampedMove<0, 191>(INPUT::TouchY, mouseY);
-    INPUT::FramesWithPointer = (mouseX || mouseY) ? INPUT::FramesWithPointerBase : INPUT::FramesWithPointer;
+    TouchX = ClampedMove<0, 255>(TouchX, mouseX);
+    TouchY = ClampedMove<0, 191>(TouchY, mouseY);
+    FramesWithPointer = (mouseX || mouseY) ? FramesWithPointerBase : FramesWithPointer;
 #else
     // TOUCH: Pointer
     if(input_cb(0, RETRO_DEVICE_POINTER, 0, RETRO_DEVICE_ID_POINTER_PRESSED))
@@ -332,21 +330,21 @@ void retro_run (void)
         
         if(y >= 192.0f)
         {
-            INPUT::TouchX = x;
-            INPUT::TouchY = y - 192.0f;
+            TouchX = x;
+            TouchY = y - 192.0f;
         }
     }
 #endif
 
     // TOUCH: Final        
     if(haveTouch)
-        NDS_setTouchPos(INPUT::TouchX, INPUT::TouchY);
+        NDS_setTouchPos(TouchX, TouchY);
     else
         NDS_releaseTouch();
 
 
     // BUTTONS
-    if(INPUT::Devices[0] == RETRO_DEVICE_JOYPAD)
+    if(Devices[0] == RETRO_DEVICE_JOYPAD)
     {
         NDS_beginProcessingInput();
         UserButtons& input = NDS_getProcessingUserInput().buttons;
@@ -371,7 +369,7 @@ void retro_run (void)
     NDS_exec<false>();
     
     // VIDEO: Swap screen colors and pass on
-    VIDEO::SwapScreens();
+    SwapScreens();
 }
 
 size_t retro_serialize_size (void)
