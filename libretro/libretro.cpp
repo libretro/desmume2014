@@ -50,7 +50,7 @@ namespace VIDEO
         {
             T* outPix = (T*)aOut + (i * pitchInT);
 
-            for(int j = 0; j != pixPerLine; j ++)
+            for(int j = 0; j < pixPerLine; j ++)
             {
                 const T p = *inPix++;            
                 const T r = ((p >> 10) & colorMask);
@@ -107,18 +107,10 @@ namespace INPUT
         
             // Draw pointer
             if(INPUT::Devices[1] == RETRO_DEVICE_MOUSE)
-            {
-                for(int i = 0; i != 16 && INPUT::TouchY + i < 192; i ++)
-                {
-                    for(int j = 0; j != 8 && INPUT::TouchX + j < 256; j ++)
-                    {
+                for(int i = 0; i < 16 && INPUT::TouchY + i < 192; i ++)
+                    for(int j = 0; j < 8 && INPUT::TouchX + j < 256; j ++)
                         if(INPUT::CursorImage[i * 8 + j])
-                        {
                             aOut[(i + INPUT::TouchY) * aPitchInPix + INPUT::TouchX + j] = COLOR;
-                        }
-                    }
-                }
-            }
         }
     }
 }
@@ -198,9 +190,7 @@ void retro_get_system_info(struct retro_system_info *info)
 void retro_set_controller_port_device(unsigned in_port, unsigned device)
 {
     if(in_port < 2)
-    {
         INPUT::Devices[in_port] = device;
-    }
 }
 
 void retro_get_system_av_info(struct retro_system_av_info *info)
@@ -292,13 +282,9 @@ void retro_run (void)
 
     // TOUCH: Final        
     if(haveTouch)
-    {
         NDS_setTouchPos(INPUT::TouchX, INPUT::TouchY);
-    }
     else
-    {
         NDS_releaseTouch();
-    }
 
 
     // BUTTONS
