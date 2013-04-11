@@ -2,8 +2,19 @@ libretro wrapper for desmume NDS emulator.
 
 Build with 'make -f Makfile.libretro'.
 
-The mouse is used for touch screen support.
 Save games are stored in the system directory reported from the frontend. If one isn't provided whatever '.' resolves to will be used.
 Tested on OS X and Android, should work on linux, may not work on windows yet.
 
 If building for X86/X64 platforms put DESMUME_JIT=1 in environment to enable JIT CPU core.
+
+Core Options
+ 
+ * desmume_screens_layout: Main is the top screen, and ext is the touch screen
+  1.  main_top_ext_bottom
+  2.  main_bottom_ext_top
+  3.  main_left_ext_right
+  4.  main_right_ext_left
+
+ * desmume_pointer_type:
+  1.  relative - Mouse style input
+  2.  absolute - Touch screen style input
