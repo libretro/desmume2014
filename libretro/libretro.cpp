@@ -138,6 +138,9 @@ namespace /* VIDEO */
         video_cb(screenSwap, screenLayout->width, screenLayout->height, screenLayout->pitchInPix * 2);
     }
 
+    template void SwapScreensFn<0>();
+    template void SwapScreensFn<1>();
+
     void (*SwapScreens)();
 }
 
