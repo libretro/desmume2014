@@ -35,7 +35,7 @@ enum AG_ALU_OP
 {
    AND, ANDS, EOR, EORS, SUB, SUBS, RSB, RSBS,
    ADD, ADDS, ADC, ADCS, SBC, SBCS, RSC, RSCS,
-   TST, TSTS, TEQ, TEQS, CMP, CMPS, CMN, CMNS,
+   XX1, TST , XX2, TEQ , XX3, CMP , XX4, CMN ,
    ORR, ORRS, MOV, MOVS, BIC, BICS, MVN, MVNS,
    OPINVALID
 };
@@ -64,12 +64,12 @@ struct alu2
       alu2(uint32_t val) : encoding(val) { }
 
    public:
-      static alu2 shift_reg(reg_t rm, AG_ALU_SHIFT type, reg_t rs)      { return alu2(rm | (type << 5) | 0x10 | (rs << 8)); }
-      static alu2 shift_imm(reg_t rm, AG_ALU_SHIFT type, uint32_t imm)  { return alu2(rm | (type << 5) | (imm << 7)); }
-      static alu2 imm_ror(uint32_t val, uint32_t ror)                   { return alu2((1 << 25) | ((ror / 2) << 8) | val); }
+      static alu2 reg_shift_reg(reg_t rm, AG_ALU_SHIFT type, reg_t rs)     { return alu2(rm | (type << 5) | 0x10 | (rs << 8)); }
+      static alu2 reg_shift_imm(reg_t rm, AG_ALU_SHIFT type, uint32_t imm) { return alu2(rm | (type << 5) | (imm << 7)); }
+      static alu2 imm_ror(uint32_t val, uint32_t ror)                      { return alu2((1 << 25) | ((ror / 2) << 8) | val); }
 
-      static alu2 reg(reg_t rm)                                         { return shift_imm(rm, LSL, 0); }
-      static alu2 imm(uint8_t val)                                      { return imm_ror(val, 0); }
+      static alu2 reg(reg_t rm)                                            { return reg_shift_imm(rm, LSL, 0); }
+      static alu2 imm(uint8_t val)                                         { return imm_ror(val, 0); }
 
       const uint32_t encoding;
 };
@@ -80,11 +80,11 @@ struct mem2
       mem2(uint32_t val) : encoding(val) { }
 
    public:
-      static mem2 shift_imm(reg_t rm, AG_ALU_SHIFT type, uint32_t imm) { return mem2((1 << 25) | rm | (type << 5) | (imm << 7)); }
-      static mem2 imm_ror(uint32_t val, uint32_t ror)                  { return mem2(((ror / 2) << 8) | val); }
+      static mem2 reg_shift_imm(reg_t rm, AG_ALU_SHIFT type, uint32_t imm) { return mem2((1 << 25) | rm | (type << 5) | (imm << 7)); }
+      static mem2 imm_ror(uint32_t val, uint32_t ror)                      { return mem2(((ror / 2) << 8) | val); }
 
-      static mem2 reg(reg_t rm)                                        { return shift_imm(rm, LSL, 0); }
-      static mem2 imm(uint32_t val)                                    { return imm_ror(val, 0); }
+      static mem2 reg(reg_t rm)                                            { return reg_shift_imm(rm, LSL, 0); }
+      static mem2 imm(uint32_t val)                                        { return imm_ror(val, 0); }
 
       const uint32_t encoding;
 };
@@ -156,16 +156,16 @@ struct iblock
 
    // Code Gen: Memory
    void mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg, AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL);
-   void ldr (reg_t rd, reg_t base, const mem2& arg = mem2::zero(), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
+   void ldr (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
       { mem_op(LDR , rd, base, arg, flags, cond); }
 
-   void str (reg_t rd, reg_t base, const mem2& arg = mem2::zero(), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
+   void str (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
       { mem_op(STR , rd, base, arg, flags, cond); }
 
-   void ldrb(reg_t rd, reg_t base, const mem2& arg = mem2::zero(), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
+   void ldrb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
       { mem_op(LDRB, rd, base, arg, flags, cond); }
 
-   void strb(reg_t rd, reg_t base, const mem2& arg = mem2::zero(), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
+   void strb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
       { mem_op(STRB, rd, base, arg, flags, cond); }
 
 

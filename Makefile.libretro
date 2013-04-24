@@ -170,6 +170,7 @@ SOURCES += \
    ../arm_arm/arm_gen.cpp \
    ../arm_arm/arm_jit.cpp
 CPPFLAGS += -DHAVE_JIT
+LDFLAGS += -llog
 endif
 
 ifeq ($(DESMUME_JIT),1)
