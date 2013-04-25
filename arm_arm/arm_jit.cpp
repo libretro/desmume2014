@@ -80,18 +80,15 @@ static void write_status(iblock* block, AG_COND cond = AL)
    block->strb(0, 7, mem2::imm(offsetof(armcpu_t, CPSR) + 3), MEM_NONE, cond);
 }
 
-template <int PROCNUM, bool THUMB>
-static void arm_jit_prefetch(iblock* block)
+template <int PROCNUM>
+static void arm_jit_prefetch(iblock* block, uint32_t pc, uint32_t opcode, bool thumb)
 {
-   const uint32_t imask = THUMB ? 0xFFFFFFFE : 0xFFFFFFFC;
-   const uint32_t isize = THUMB ? 2 : 4;
-   const uint32_t iread = THUMB ? (uint32_t)&_MMU_read16<PROCNUM, MMU_AT_CODE>
+   const uint32_t imask = thumb ? 0xFFFFFFFE : 0xFFFFFFFC;
+   const uint32_t isize = thumb ? 2 : 4;
+   const uint32_t iread = thumb ? (uint32_t)&_MMU_read16<PROCNUM, MMU_AT_CODE>
                                 : (uint32_t)&_MMU_read32<PROCNUM, MMU_AT_CODE>;
 
-   block->ldr(0, 7, mem2::imm(offsetof(armcpu_t, next_instruction)));
-   block->load_constant(1, imask);
-   block->and_(0, alu2::reg(1));
-
+   block->load_constant(0, pc & imask);
    block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruct_adr)));
 
    block->add(0, alu2::imm(isize));
@@ -100,9 +97,7 @@ static void arm_jit_prefetch(iblock* block)
    block->add(0, alu2::imm(isize));
    write_emu_register(block, 0, 15);
 
-   block->sub(0, 0, alu2::imm(isize * 2));
-   block->load_constant(1, iread);
-   block->blx(1);
+   block->load_constant(0, opcode);
    block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruction)));
 }
 
@@ -426,30 +421,6 @@ static const ArmOpCompiler arm_instruction_compilers[4096] = {
 #undef TABDECL
 };
 
-template<int PROCNUM>
-static void arm_arm_gen_code_for(iblock* block, uint32_t address, uint32_t opcode)
-{
-   // NOTE: Expected register usage
-   // R0 - R3 = Used and clobbered internally
-   // R5 = Pointer to armcpu_exec function
-   // R6 = Cycle counter
-   // R7 = Pointer to ARMPROC
-
-   ArmOpCompiler compiler = arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
-   if (compiler && (compiler(block, opcode) == 0))
-   {
-      // HACK: Use real cycles
-      block->add(6, alu2::imm(4));
-      arm_jit_prefetch<PROCNUM, false>(block);
-   }
-   else
-   {
-      block->blx(5);
-      block->add(6, 6, alu2::reg(0));
-   }
-}
-
-
 ////////
 // THUMB
 ////////
@@ -661,33 +632,6 @@ static const ArmOpCompiler thumb_instruction_compilers[1024] = {
 #undef TABDECL
 };
 
-template<int PROCNUM>
-static void arm_thumb_gen_code_for(iblock* block, uint32_t address, uint32_t opcode)
-{
-   assert(opcode < 0x10000);
-
-   // NOTE: Expected register usage
-   // R0 - R3 = Used and clobbered internally
-   // R5 = Pointer to armcpu_exec function
-   // R6 = Cycle counter
-   // R7 = Pointer to ARMPROC
-
-   ArmOpCompiler compiler = thumb_instruction_compilers[opcode >> 6];
-   if (compiler)
-   {
-      compiler(block, opcode);
-
-      // HACK: Use real cycles
-      block->add(6, alu2::imm(4));
-      arm_jit_prefetch<PROCNUM, true>(block);
-   }
-   else
-   {
-      block->blx(5);
-      block->add(6, 6, alu2::reg(0));
-   }
-}
-
 
 
 // ============================================================================================= IMM
@@ -725,27 +669,50 @@ static ArmOpCompiled compile_basicblock(iblock* block)
    const u32 base = ARMPROC.instruct_adr;
    const u32 isize = thumb ? 2 : 4;
 
+   uint32_t pc = base;
+   bool compiled_op = false;
+
+   // NOTE: Expected register usage
+   // R0 - R3 = Used and clobbered internally
+   // R5 = Pointer to armcpu_exec function
+   // R6 = Cycle counter
+   // R7 = Pointer to ARMPROC
+
+
    block->push(0x40F0);                          // push {r4-r7, r14}
 
    block->load_constant(7, (uint32_t)&ARMPROC);  // r7 = cpu_state
    block->load_constant(6, 0);                   // r6 = cycle count
    block->load_constant(5, (uint32_t)&armcpu_exec<PROCNUM>);
 
-   for (uint32_t i = 0; i < CommonSettings.jit_max_block_size; i ++)
+   for (uint32_t i = 0; i < CommonSettings.jit_max_block_size; i ++, pc += isize)
    {
-      uint32_t pc = base + i * isize;
       uint32_t opcode = thumb ? _MMU_read16<PROCNUM, MMU_AT_CODE>(pc) : _MMU_read32<PROCNUM, MMU_AT_CODE>(pc);
 
-      if (thumb)
+      ArmOpCompiler compiler = thumb ? thumb_instruction_compilers[opcode >> 6]
+                                     : arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
+
+      const bool is_end = instr_is_branch(thumb, opcode) || (i + 1) == CommonSettings.jit_max_block_size;
+      if (compiler && compiler(block, opcode) == 0 && !is_end)
       {
-         arm_thumb_gen_code_for<PROCNUM>(block, pc, opcode);
+         compiled_op = true;
+
+         // HACK: Use real cycles
+         block->add(6, alu2::imm(4));
       }
       else
       {
-         arm_arm_gen_code_for<PROCNUM>(block, pc, opcode);
+         if (compiled_op)
+         {
+            arm_jit_prefetch<PROCNUM>(block, pc, opcode, thumb);
+            compiled_op = false;
+         }
+
+         block->blx(5);
+         block->add(6, 6, alu2::reg(0));
       }
 
-      if (instr_is_branch(thumb, opcode))
+      if (is_end)
          break;
    }
 
