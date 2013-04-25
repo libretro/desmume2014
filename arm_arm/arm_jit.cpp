@@ -38,6 +38,8 @@ using namespace arm_gen;
 #include "bios.h"
 #include "armcpu.h"
 
+typedef int32_t (*ArmOpCompiler)(iblock*, uint32_t);
+
 static u8 recompile_counts[(1<<26)/16];
 
 DS_ALIGN(4096) uintptr_t compiled_funcs[1<<26] = {0};
@@ -78,247 +80,548 @@ static void write_status(iblock* block)
    block->strb(0, 7, mem2::imm(offsetof(armcpu_t, CPSR) + 3));
 }
 
-template <int PROCNUM>
-static void thumb_prefetch(iblock* block)
+template <int PROCNUM, bool THUMB>
+static void arm_jit_prefetch(iblock* block)
 {
+   const uint32_t imask = THUMB ? 0xFFFFFFFE : 0xFFFFFFFC;
+   const uint32_t isize = THUMB ? 2 : 4;
+   const uint32_t iread = THUMB ? (uint32_t)&_MMU_read16<PROCNUM, MMU_AT_CODE>
+                                : (uint32_t)&_MMU_read32<PROCNUM, MMU_AT_CODE>;
+
    block->ldr(0, 7, mem2::imm(offsetof(armcpu_t, next_instruction)));
-   block->load_constant(1, 0xFFFFFFFE);
+   block->load_constant(1, imask);
    block->and_(0, alu2::reg(1));
 
    block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruct_adr)));
 
-   block->add(0, alu2::imm(2));
+   block->add(0, alu2::imm(isize));
    block->str(0, 7, mem2::imm(offsetof(armcpu_t, next_instruction)));
 
-   block->add(0, alu2::imm(2));
+   block->add(0, alu2::imm(isize));
    write_emu_register(block, 0, 15);
 
-   block->sub(0, 0, alu2::imm(4));
-   block->load_constant(1, (uint32_t)&_MMU_read16<PROCNUM, MMU_AT_CODE>);
+   block->sub(0, 0, alu2::imm(isize * 2));
+   block->load_constant(1, iread);
    block->blx(1);
    block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruction)));
+}
+
+/////////
+/// ARM
+/////////
+#define ARM_ALU_OP_DEF(T) \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = 0
+
+ARM_ALU_OP_DEF(AND);
+ARM_ALU_OP_DEF(AND_S);
+ARM_ALU_OP_DEF(EOR);
+ARM_ALU_OP_DEF(EOR_S);
+ARM_ALU_OP_DEF(SUB);
+ARM_ALU_OP_DEF(SUB_S);
+ARM_ALU_OP_DEF(RSB);
+ARM_ALU_OP_DEF(RSB_S);
+ARM_ALU_OP_DEF(ADD);
+ARM_ALU_OP_DEF(ADD_S);
+ARM_ALU_OP_DEF(ADC);
+ARM_ALU_OP_DEF(ADC_S);
+ARM_ALU_OP_DEF(SBC);
+ARM_ALU_OP_DEF(SBC_S);
+ARM_ALU_OP_DEF(RSC);
+ARM_ALU_OP_DEF(RSC_S);
+ARM_ALU_OP_DEF(TST);
+ARM_ALU_OP_DEF(TEQ);
+ARM_ALU_OP_DEF(CMP);
+ARM_ALU_OP_DEF(CMN);
+ARM_ALU_OP_DEF(ORR);
+ARM_ALU_OP_DEF(ORR_S);
+ARM_ALU_OP_DEF(MOV);
+ARM_ALU_OP_DEF(MOV_S);
+ARM_ALU_OP_DEF(BIC);
+ARM_ALU_OP_DEF(BIC_S);
+ARM_ALU_OP_DEF(MVN);
+ARM_ALU_OP_DEF(MVN_S);
+
+#define ARM_MEM_OP_DEF(T, Q) \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_##Q = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_##Q = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_##Q = 0; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_##Q = 0
+
+ARM_MEM_OP_DEF(STR_M,   IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(LDR_M,   IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(STRB_M,  IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(LDRB_M,  IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(STR_P,   IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(LDR_P,   IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_POSTIND);
+ARM_MEM_OP_DEF(STR_M,   IMM_OFF);
+ARM_MEM_OP_DEF(LDR_M,   IMM_OFF);
+ARM_MEM_OP_DEF(STR_M,   IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(LDR_M,   IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(STRB_M,  IMM_OFF);
+ARM_MEM_OP_DEF(LDRB_M,  IMM_OFF);
+ARM_MEM_OP_DEF(STRB_M,  IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(LDRB_M,  IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(STR_P,   IMM_OFF);
+ARM_MEM_OP_DEF(LDR_P,   IMM_OFF);
+ARM_MEM_OP_DEF(STR_P,   IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(LDR_P,   IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(STRB_P,  IMM_OFF);
+ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF);
+ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_PREIND);
+ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
+
+#define ARM_OP_MUL 0
+#define ARM_OP_STRH_POS_INDE_M_REG_OFF 0
+#define ARM_OP_LDRD_STRD_POST_INDEX 0
+#define ARM_OP_MUL_S 0
+#define ARM_OP_LDRH_POS_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSB_POS_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSH_POS_INDE_M_REG_OFF 0
+#define ARM_OP_MLA 0
+#define ARM_OP_UND 0
+#define ARM_OP_MLA_S 0
+#define ARM_OP_STRH_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRH_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSB_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSH_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_UMULL 0
+#define ARM_OP_STRH_POS_INDE_P_REG_OFF 0
+#define ARM_OP_UMULL_S 0
+#define ARM_OP_LDRH_POS_INDE_P_REG_OFF 0
+#define ARM_OP_LDRSB_POS_INDE_P_REG_OFF 0
+#define ARM_OP_LDRSH_POS_INDE_P_REG_OFF 0
+#define ARM_OP_UMLAL 0
+#define ARM_OP_UMLAL_S 0
+#define ARM_OP_SMULL 0
+#define ARM_OP_STRH_POS_INDE_P_IMM_OFF 0
+#define ARM_OP_SMULL_S 0
+#define ARM_OP_LDRH_POS_INDE_P_IMM_OFF 0
+#define ARM_OP_LDRSB_POS_INDE_P_IMM_OFF 0
+#define ARM_OP_LDRSH_POS_INDE_P_IMM_OFF 0
+#define ARM_OP_SMLAL 0
+#define ARM_OP_SMLAL_S 0
+#define ARM_OP_MRS_CPSR 0
+#define ARM_OP_QADD 0
+#define ARM_OP_SMLA_B_B 0
+#define ARM_OP_SWP 0
+#define ARM_OP_SMLA_T_B 0
+#define ARM_OP_STRH_M_REG_OFF 0
+#define ARM_OP_SMLA_B_T 0
+#define ARM_OP_LDRD_STRD_OFFSET_PRE_INDEX 0
+#define ARM_OP_SMLA_T_T 0
+#define ARM_OP_LDRH_M_REG_OFF 0
+#define ARM_OP_LDRSB_M_REG_OFF 0
+#define ARM_OP_LDRSH_M_REG_OFF 0
+#define ARM_OP_MSR_CPSR 0
+#define ARM_OP_BX 0
+#define ARM_OP_BLX_REG 0
+#define ARM_OP_QSUB 0
+#define ARM_OP_BKPT 0
+#define ARM_OP_SMLAW_B 0
+#define ARM_OP_SMULW_B 0
+#define ARM_OP_STRH_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_SMLAW_T 0
+#define ARM_OP_SMULW_T 0
+#define ARM_OP_LDRH_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSB_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_MRS_SPSR 0
+#define ARM_OP_QDADD 0
+#define ARM_OP_SMLAL_B_B 0
+#define ARM_OP_SWPB 0
+#define ARM_OP_SMLAL_T_B 0
+#define ARM_OP_STRH_M_IMM_OFF 0
+#define ARM_OP_SMLAL_B_T 0
+#define ARM_OP_SMLAL_T_T 0
+#define ARM_OP_LDRH_M_IMM_OFF 0
+#define ARM_OP_LDRSB_M_IMM_OFF 0
+#define ARM_OP_LDRSH_M_IMM_OFF 0
+#define ARM_OP_MSR_SPSR 0
+#define ARM_OP_CLZ 0
+#define ARM_OP_QDSUB 0
+#define ARM_OP_SMUL_B_B 0
+#define ARM_OP_SMUL_T_B 0
+#define ARM_OP_STRH_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_SMUL_B_T 0
+#define ARM_OP_SMUL_T_T 0
+#define ARM_OP_LDRH_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSB_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_STREX 0
+#define ARM_OP_STRH_P_REG_OFF 0
+#define ARM_OP_LDREX 0
+#define ARM_OP_LDRH_P_REG_OFF 0
+#define ARM_OP_LDRSB_P_REG_OFF 0
+#define ARM_OP_LDRSH_P_REG_OFF 0
+#define ARM_OP_STRH_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_LDRH_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_LDRSB_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_STRH_P_IMM_OFF 0
+#define ARM_OP_LDRH_P_IMM_OFF 0
+#define ARM_OP_LDRSB_P_IMM_OFF 0
+#define ARM_OP_LDRSH_P_IMM_OFF 0
+#define ARM_OP_STRH_PRE_INDE_P_IMM_OFF 0
+#define ARM_OP_LDRH_PRE_INDE_P_IMM_OFF 0 
+#define ARM_OP_LDRSB_PRE_INDE_P_IMM_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_P_IMM_OFF 0
+#define ARM_OP_MSR_CPSR_IMM_VAL 0
+#define ARM_OP_MSR_SPSR_IMM_VAL 0
+#define ARM_OP_STR_M_IMM_OFF_POSTIND 0
+#define ARM_OP_LDR_M_IMM_OFF_POSTIND 0
+#define ARM_OP_STRB_M_IMM_OFF_POSTIND 0
+#define ARM_OP_LDRB_M_IMM_OFF_POSTIND 0
+#define ARM_OP_STR_P_IMM_OFF_POSTIND 0
+#define ARM_OP_LDR_P_IMM_OFF_POSTIND 0
+#define ARM_OP_STRB_P_IMM_OFF_POSTIND 0
+#define ARM_OP_LDRB_P_IMM_OFF_POSTIND 0
+#define ARM_OP_STR_M_IMM_OFF 0
+#define ARM_OP_LDR_M_IMM_OFF 0
+#define ARM_OP_STR_M_IMM_OFF_PREIND 0
+#define ARM_OP_LDR_M_IMM_OFF_PREIND 0
+#define ARM_OP_STRB_M_IMM_OFF 0
+#define ARM_OP_LDRB_M_IMM_OFF 0
+#define ARM_OP_STRB_M_IMM_OFF_PREIND 0
+#define ARM_OP_LDRB_M_IMM_OFF_PREIND 0
+#define ARM_OP_STR_P_IMM_OFF 0
+#define ARM_OP_LDR_P_IMM_OFF 0
+#define ARM_OP_STR_P_IMM_OFF_PREIND 0
+#define ARM_OP_LDR_P_IMM_OFF_PREIND 0
+#define ARM_OP_STRB_P_IMM_OFF 0
+#define ARM_OP_LDRB_P_IMM_OFF 0
+#define ARM_OP_STRB_P_IMM_OFF_PREIND 0
+#define ARM_OP_LDRB_P_IMM_OFF_PREIND 0
+#define ARM_OP_STMDA 0
+#define ARM_OP_LDMDA 0
+#define ARM_OP_STMDA_W 0
+#define ARM_OP_LDMDA_W 0
+#define ARM_OP_STMDA2 0
+#define ARM_OP_LDMDA2 0
+#define ARM_OP_STMDA2_W 0
+#define ARM_OP_LDMDA2_W 0
+#define ARM_OP_STMIA 0
+#define ARM_OP_LDMIA 0
+#define ARM_OP_STMIA_W 0
+#define ARM_OP_LDMIA_W 0
+#define ARM_OP_STMIA2 0
+#define ARM_OP_LDMIA2 0
+#define ARM_OP_STMIA2_W 0
+#define ARM_OP_LDMIA2_W 0
+#define ARM_OP_STMDB 0
+#define ARM_OP_LDMDB 0
+#define ARM_OP_STMDB_W 0
+#define ARM_OP_LDMDB_W 0
+#define ARM_OP_STMDB2 0
+#define ARM_OP_LDMDB2 0
+#define ARM_OP_STMDB2_W 0
+#define ARM_OP_LDMDB2_W 0
+#define ARM_OP_STMIB 0
+#define ARM_OP_LDMIB 0
+#define ARM_OP_STMIB_W 0
+#define ARM_OP_LDMIB_W 0
+#define ARM_OP_STMIB2 0
+#define ARM_OP_LDMIB2 0
+#define ARM_OP_STMIB2_W 0
+#define ARM_OP_LDMIB2_W 0
+#define ARM_OP_B 0
+#define ARM_OP_BL 0
+#define ARM_OP_STC_OPTION 0
+#define ARM_OP_LDC_OPTION 0
+#define ARM_OP_STC_M_POSTIND 0
+#define ARM_OP_LDC_M_POSTIND 0
+#define ARM_OP_STC_P_POSTIND 0
+#define ARM_OP_LDC_P_POSTIND 0
+#define ARM_OP_STC_M_IMM_OFF 0
+#define ARM_OP_LDC_M_IMM_OFF 0
+#define ARM_OP_STC_M_PREIND 0
+#define ARM_OP_LDC_M_PREIND 0
+#define ARM_OP_STC_P_IMM_OFF 0
+#define ARM_OP_LDC_P_IMM_OFF 0
+#define ARM_OP_STC_P_PREIND 0
+#define ARM_OP_LDC_P_PREIND 0
+#define ARM_OP_CDP 0
+#define ARM_OP_MCR 0
+#define ARM_OP_MRC 0
+#define ARM_OP_SWI 0
+
+static const ArmOpCompiler arm_instruction_compilers[4096] = {
+#define TABDECL(x) ARM_##x
+#include "instruction_tabdef.inc"
+#undef TABDECL
+};
+
+template<int PROCNUM>
+static void arm_arm_gen_code_for(iblock* block, uint32_t address, uint32_t opcode)
+{
+   // NOTE: Expected register usage
+   // R0 - R3 = Used and clobbered internally
+   // R5 = Pointer to armcpu_exec function
+   // R6 = Cycle counter
+   // R7 = Pointer to ARMPROC
+
+   ArmOpCompiler compiler = arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
+   if (compiler)
+   {
+      compiler(block, opcode);
+
+      // HACK: Use real cycles
+      block->add(6, alu2::imm(4));
+      arm_jit_prefetch<PROCNUM, false>(block);
+   }
+   else
+   {
+      block->blx(5);
+      block->add(6, 6, alu2::reg(0));
+   }
 }
 
 
 ////////
 // THUMB
 ////////
-static const uint8_t thumb_op_types[] =
+static int32_t THUMB_OP_SHIFT(iblock* block, uint32_t opcode)
 {
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1, 
-    2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2, 
-    2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2,  2, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3,  3, 
-    4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4,  4, 
-    5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5,  5, 
-    6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6, 
-    6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6,  6, 
-    7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  8,  8, 
-    7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  8,  8, 
-    7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  8,  8, 
-    7,  7,  7,  7,  7,  7,  7,  7,  8,  8,  8,  8,  8,  8,  8,  8, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-    9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9,  9, 
-   10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 
-   10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 
-   10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 
-   10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 
-   11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 
-   11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 
-   11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 
-   11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 
-   12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 
-   12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 
-   12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 
-   12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 
-   13, 13, 13, 13,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
-   14, 14, 14, 14, 14, 14, 14, 14,  0,  0,  0,  0,  0,  0,  0,  0, 
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
-   14, 14, 14, 14, 14, 14, 14, 14,  0,  0,  0,  0,  0,  0,  0,  0, 
-   15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 
-   15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 
-   15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 
-   15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 
-   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 
-   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 
-   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 
-   16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 
-   17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 
-   17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0, 
-   18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 
-   18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 
-   18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 
-   18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18
+   const uint32_t rd = bit(opcode, 0, 3);
+   const uint32_t rs = bit(opcode, 3, 3);
+   const uint32_t imm = bit(opcode, 6, 5);
+   const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
+
+   load_status(block);
+
+   read_emu_register(block, 0, rs);
+   block->movs(0, alu2::reg_shift_imm(0, op, imm));
+   write_emu_register(block, 0, rd);
+
+   write_status(block);
+
+   return 0;
+}
+
+static int32_t THUMB_OP_ADDSUB_REGIMM(iblock* block, uint32_t opcode)
+{
+   const uint32_t rd = bit(opcode, 0, 3);
+   const uint32_t rs = bit(opcode, 3, 3);
+   const AG_ALU_OP op = bit(opcode, 9) ? SUBS : ADDS;
+   const bool arg_type = bit(opcode, 10);
+   const uint32_t arg = bit(opcode, 6, 3);
+
+   load_status(block);
+   read_emu_register(block, 0, rs);
+
+   if (arg_type) // Immediate
+   {
+      block->alu_op(op, 0, 0, alu2::imm(arg));
+   }
+   else
+   {
+      read_emu_register(block, 1, arg);
+      block->alu_op(op, 0, 0, alu2::reg(1));
+   }
+
+   write_emu_register(block, 0, rd);
+   write_status(block);
+
+   return 0;
+}
+
+static int32_t THUMB_OP_MCAS_IMM8(iblock* block, uint32_t opcode)
+{
+   const reg_t rd = bit(opcode, 8, 3);
+   const uint32_t op = bit(opcode, 11, 2);
+   const uint32_t imm = bit(opcode, 0, 8);
+
+   load_status(block);
+   read_emu_register(block, 0, rd);
+   
+   switch (op)
+   {
+      case 0: block->alu_op(MOVS, 0, 0, alu2::imm(imm)); break;
+      case 1: block->alu_op(CMP , 0, 0, alu2::imm(imm)); break;
+      case 2: block->alu_op(ADDS, 0, 0, alu2::imm(imm)); break;
+      case 3: block->alu_op(SUBS, 0, 0, alu2::imm(imm)); break;
+   }
+
+   if (op != 1) // Don't keep the result of a CMP instruction
+   {
+      write_emu_register(block, 0, rd);
+   }
+
+   write_status(block);
+
+   return 0;
+}
+
+static int32_t THUMB_OP_ALU(iblock* block, uint32_t opcode)
+{
+   const uint32_t rd = bit(opcode, 0, 3);
+   const uint32_t rs = bit(opcode, 3, 3);
+   const uint32_t op = bit(opcode, 6, 4);
+   bool need_writeback = false;
+
+   if (op == 13) // TODO: The MULS is interpreted for now
+   {
+      return 1;
+   }
+
+   load_status(block);
+   read_emu_register(block, 0, rd);
+   read_emu_register(block, 1, rs);
+
+   switch (op)
+   {
+      case  0: block->ands(0, alu2::reg(1)); break;
+      case  1: block->eors(0, alu2::reg(1)); break;
+      case  5: block->adcs(0, alu2::reg(1)); break;
+      case  6: block->sbcs(0, alu2::reg(1)); break;
+      case  8: block->tst (0, alu2::reg(1)); break;
+      case 10: block->cmp (0, alu2::reg(1)); break;
+      case 11: block->cmn (0, alu2::reg(1)); break;
+      case 12: block->orrs(0, alu2::reg(1)); break;
+      case 14: block->bics(0, alu2::reg(1)); break;
+      case 15: block->mvns(0, alu2::reg(1)); break;
+
+      case  2: block->movs(0, alu2::reg_shift_reg(0, LSL, 1)); break;
+      case  3: block->movs(0, alu2::reg_shift_reg(0, LSR, 1)); break;
+      case  4: block->movs(0, alu2::reg_shift_reg(0, ASR, 1)); break;
+      case  7: block->movs(0, alu2::reg_shift_reg(0, arm_gen::ROR, 1)); break;
+
+      case  9: block->rsbs(0, 1, alu2::imm(0)); break;
+
+      case 13: abort(); break;// TODO: MULS
+   }
+
+   static const bool op_wb[16] = { 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1 };
+   if (op_wb[op])
+   {
+      write_emu_register(block, 0, rd);
+   }
+
+   write_status(block);
+
+   return 0;
+}
+
+#define THUMB_OP_INTERPRET       0
+#define THUMB_OP_UND_THUMB       THUMB_OP_INTERPRET
+
+#define THUMB_OP_LSL             THUMB_OP_SHIFT
+#define THUMB_OP_LSL_0           THUMB_OP_SHIFT
+#define THUMB_OP_LSR             THUMB_OP_SHIFT
+#define THUMB_OP_LSR_0           THUMB_OP_SHIFT
+#define THUMB_OP_ASR             THUMB_OP_SHIFT
+#define THUMB_OP_ASR_0           THUMB_OP_SHIFT
+
+#define THUMB_OP_ADD_REG         THUMB_OP_ADDSUB_REGIMM
+#define THUMB_OP_SUB_REG         THUMB_OP_ADDSUB_REGIMM
+#define THUMB_OP_ADD_IMM3        THUMB_OP_ADDSUB_REGIMM
+#define THUMB_OP_SUB_IMM3        THUMB_OP_ADDSUB_REGIMM
+
+#define THUMB_OP_MOV_IMM8        THUMB_OP_MCAS_IMM8
+#define THUMB_OP_CMP_IMM8        THUMB_OP_MCAS_IMM8
+#define THUMB_OP_ADD_IMM8        THUMB_OP_MCAS_IMM8
+#define THUMB_OP_SUB_IMM8        THUMB_OP_MCAS_IMM8
+
+#define THUMB_OP_AND             THUMB_OP_ALU
+#define THUMB_OP_EOR             THUMB_OP_ALU
+#define THUMB_OP_LSL_REG         THUMB_OP_ALU
+#define THUMB_OP_LSR_REG         THUMB_OP_ALU
+#define THUMB_OP_ASR_REG         THUMB_OP_ALU
+#define THUMB_OP_ADC_REG         THUMB_OP_ALU
+#define THUMB_OP_SBC_REG         THUMB_OP_ALU
+#define THUMB_OP_ROR_REG         THUMB_OP_ALU
+#define THUMB_OP_TST             THUMB_OP_ALU
+#define THUMB_OP_NEG             THUMB_OP_ALU
+#define THUMB_OP_CMP             THUMB_OP_ALU
+#define THUMB_OP_CMN             THUMB_OP_ALU
+#define THUMB_OP_ORR             THUMB_OP_ALU
+#define THUMB_OP_MUL_REG         THUMB_OP_INTERPRET
+#define THUMB_OP_BIC             THUMB_OP_ALU
+#define THUMB_OP_MVN             THUMB_OP_ALU
+
+// UNDEFINED OPS
+#define THUMB_OP_ADD_SPE         THUMB_OP_INTERPRET
+#define THUMB_OP_CMP_SPE         THUMB_OP_INTERPRET
+#define THUMB_OP_MOV_SPE         THUMB_OP_INTERPRET
+#define THUMB_OP_BX_THUMB        THUMB_OP_INTERPRET
+#define THUMB_OP_BLX_THUMB       THUMB_OP_INTERPRET
+
+#define THUMB_OP_LDR_PCREL       THUMB_OP_INTERPRET
+
+#define THUMB_OP_STR_REG_OFF     THUMB_OP_INTERPRET
+#define THUMB_OP_STRH_REG_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_STRB_REG_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_LDRSB_REG_OFF   THUMB_OP_INTERPRET
+#define THUMB_OP_LDR_REG_OFF     THUMB_OP_INTERPRET
+#define THUMB_OP_LDRH_REG_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_LDRB_REG_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_LDRSH_REG_OFF   THUMB_OP_INTERPRET
+#define THUMB_OP_STR_IMM_OFF     THUMB_OP_INTERPRET
+#define THUMB_OP_LDR_IMM_OFF     THUMB_OP_INTERPRET
+#define THUMB_OP_STRB_IMM_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_LDRB_IMM_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_STRH_IMM_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_INTERPRET
+#define THUMB_OP_STR_SPREL       THUMB_OP_INTERPRET
+#define THUMB_OP_LDR_SPREL       THUMB_OP_INTERPRET
+#define THUMB_OP_ADD_2PC         THUMB_OP_INTERPRET
+#define THUMB_OP_ADD_2SP         THUMB_OP_INTERPRET
+#define THUMB_OP_ADJUST_P_SP     THUMB_OP_INTERPRET
+#define THUMB_OP_ADJUST_M_SP     THUMB_OP_INTERPRET
+#define THUMB_OP_PUSH            THUMB_OP_INTERPRET
+#define THUMB_OP_PUSH_LR         THUMB_OP_INTERPRET
+#define THUMB_OP_POP             THUMB_OP_INTERPRET
+#define THUMB_OP_POP_PC          THUMB_OP_INTERPRET
+#define THUMB_OP_BKPT_THUMB      THUMB_OP_INTERPRET
+#define THUMB_OP_STMIA_THUMB     THUMB_OP_INTERPRET
+#define THUMB_OP_LDMIA_THUMB     THUMB_OP_INTERPRET
+#define THUMB_OP_B_COND          THUMB_OP_INTERPRET
+#define THUMB_OP_SWI_THUMB       THUMB_OP_INTERPRET
+#define THUMB_OP_B_UNCOND        THUMB_OP_INTERPRET
+#define THUMB_OP_BLX             THUMB_OP_INTERPRET
+#define THUMB_OP_BL_10           THUMB_OP_INTERPRET
+#define THUMB_OP_BL_11           THUMB_OP_INTERPRET
+
+static const ArmOpCompiler thumb_instruction_compilers[1024] = {
+#define TABDECL(x) THUMB_##x
+#include "thumb_tabdef.inc"
+#undef TABDECL
 };
 
 template<int PROCNUM>
-static bool arm_thumb_gen_code_for(iblock* block, uint32_t address, uint32_t opcode)
+static void arm_thumb_gen_code_for(iblock* block, uint32_t address, uint32_t opcode)
 {
-   // Extract common fields
-   const uint32_t RD_ = bit(opcode, 0, 3);
-   const uint32_t RS_ = bit(opcode, 3, 3);
+   assert(opcode < 0x10000);
 
-   switch (thumb_op_types[opcode >> 6])
+   // NOTE: Expected register usage
+   // R0 - R3 = Used and clobbered internally
+   // R5 = Pointer to armcpu_exec function
+   // R6 = Cycle counter
+   // R7 = Pointer to ARMPROC
+
+   ArmOpCompiler compiler = thumb_instruction_compilers[opcode >> 6];
+   if (compiler)
    {
-      case 1: // move shifted register
-      {
-         const uint32_t imm = bit(opcode, 6, 5);
-         const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
+      compiler(block, opcode);
 
-         load_status(block);
-
-         read_emu_register(block, 0, RS_);
-         block->movs(0, alu2::reg_shift_imm(0, op, imm));
-         write_emu_register(block, 0, RD_);
-
-         write_status(block);
-
-         break;
-      }
-
-      case 2: // add/subtract
-      {
-         const AG_ALU_OP op = bit(opcode, 9) ? SUBS : ADDS;
-         const bool arg_type = bit(opcode, 10);
-         const uint32_t arg = bit(opcode, 6, 3);
-
-         load_status(block);
-         read_emu_register(block, 0, RS_);
-
-         if (arg_type) // Immediate
-         {
-            block->alu_op(op, 0, 0, alu2::imm(arg));
-         }
-         else
-         {
-            read_emu_register(block, 1, arg);
-            block->alu_op(op, 0, 0, alu2::reg(1));
-         }
-
-         write_emu_register(block, 0, RD_);
-         write_status(block);
-         break;
-      }
-
-      case 3: // move/compare/add/subtract immediate
-      {
-         const reg_t rd = bit(opcode, 8, 3);
-         const uint32_t op = bit(opcode, 11, 2);
-         const uint32_t imm = bit(opcode, 0, 8);
-
-         load_status(block);
-         read_emu_register(block, 0, rd);
-         
-         switch (op)
-         {
-            case 0: block->alu_op(MOVS, 0, 0, alu2::imm(imm)); break;
-            case 1: block->alu_op(CMP , 0, 0, alu2::imm(imm)); break;
-            case 2: block->alu_op(ADDS, 0, 0, alu2::imm(imm)); break;
-            case 3: block->alu_op(SUBS, 0, 0, alu2::imm(imm)); break;
-         }
-
-         if (op != 1) // Don't keep the result of a CMP instruction
-         {
-            write_emu_register(block, 0, rd);
-         }
-
-         write_status(block);
-         break;
-      }
-
-      case 4: // ALU operations
-      {
-         const uint32_t op = bit(opcode, 6, 4);
-         bool need_writeback = false;
-
-         if (op == 13) // TODO: The MULS is interpreted for now
-         {
-            return false;
-         }
-
-         load_status(block);
-         read_emu_register(block, 0, RD_);
-         read_emu_register(block, 1, RS_);
-
-         switch (op)
-         {
-            case  0: block->ands(0, alu2::reg(1)); break;
-            case  1: block->eors(0, alu2::reg(1)); break;
-            case  5: block->adcs(0, alu2::reg(1)); break;
-            case  6: block->sbcs(0, alu2::reg(1)); break;
-            case  8: block->tst (0, alu2::reg(1)); break;
-            case 10: block->cmp (0, alu2::reg(1)); break;
-            case 11: block->cmn (0, alu2::reg(1)); break;
-            case 12: block->orrs(0, alu2::reg(1)); break;
-            case 14: block->bics(0, alu2::reg(1)); break;
-            case 15: block->mvns(0, alu2::reg(1)); break;
-
-            case  2: block->movs(0, alu2::reg_shift_reg(0, LSL, 1)); break;
-            case  3: block->movs(0, alu2::reg_shift_reg(0, LSR, 1)); break;
-            case  4: block->movs(0, alu2::reg_shift_reg(0, ASR, 1)); break;
-            case  7: block->movs(0, alu2::reg_shift_reg(0, arm_gen::ROR, 1)); break;
-
-            case  9: block->rsbs(0, 1, alu2::imm(0)); break;
-
-            case 13: abort(); break;// TODO: MULS
-         }
-
-         static const bool op_wb[16] = { 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1 };
-         if (op_wb[op])
-         {
-            write_emu_register(block, 0, RD_);
-         }
-
-         write_status(block);
-
-         break;
-      }
-
-#if 0
-      case 5: // Hi register operations/branch exchange
-      case 6: // PC-relative load
-      case 7: // load/store with register offset
-      case 8: // load/store sign-extended byte/halfword
-      case 9: // load/store with immediate offset
-      case 10: // load/store halfword
-      case 11: // SP-relative load/store
-      case 12: // load address
-      case 13: // add offset to Stack Pointer
-      case 14: // push/pop registers
-      case 15: // multiple load/store
-      case 16: // conditional branch | software interrupt
-      case 17: // unconditional branch
-      case 18: // long branch with link
-#endif
-      default: return false;
+      // HACK: Use real cycles
+      block->add(6, alu2::imm(4));
+      arm_jit_prefetch<PROCNUM, true>(block);
    }
-
-   // HACK
-   block->add(6, alu2::imm(4)); // HACK!
- 
-   thumb_prefetch<PROCNUM>(block);
-   return true;
-
+   else
+   {
+      block->blx(5);
+      block->add(6, 6, alu2::reg(0));
+   }
 }
 
 
@@ -351,23 +654,6 @@ static bool instr_is_branch(bool thumb, u32 opcode)
           || (x & JIT_BYPASS);
 }
 
-/*
-static void arm_arm_prefetch(iblock* block)
-{
-   block->ldr(0, 7, mem2::imm(offsetof(armcpu_t, next_instruction)));
-   block->load_constant(1, 0xFFFFFFFC);
-   block->and_(0, alu2::reg(1));
-
-   block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruct_adr)));
-
-   block->add(0, alu2::imm(4));
-   block->str(0, 7, mem2::imm(offsetof(armcpu_t, next_instruction)));
-
-   block->add(0, alu2::imm(4));
-   block->str(0, 7, mem2::imm(offsetof(armcpu_t, R) + 15 * 4));
-}
-}*/
-
 template<int PROCNUM>
 static ArmOpCompiled compile_basicblock(iblock* block)
 {
@@ -386,7 +672,11 @@ static ArmOpCompiled compile_basicblock(iblock* block)
       uint32_t pc = base + i * isize;
       uint32_t opcode = thumb ? _MMU_read16<PROCNUM, MMU_AT_CODE>(pc) : _MMU_read32<PROCNUM, MMU_AT_CODE>(pc);
 
-      if (!(thumb && arm_thumb_gen_code_for<PROCNUM>(block, pc, opcode)))
+      if (thumb)
+      {
+         arm_thumb_gen_code_for<PROCNUM>(block, pc, opcode);
+      }
+      else
       {
          block->blx(5);
          block->add(6, 6, alu2::reg(0));
