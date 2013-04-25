@@ -718,8 +718,7 @@ static ArmOpCompiled compile_basicblock(iblock* block)
 
    block->mov(0, alu2::reg(RCYC));
 
-   block->pop(0x40F0);
-   block->bx(14);
+   block->pop(0x80F0);
    block->cache_flush();
 
    JIT_COMPILED_FUNC(base, PROCNUM) = (uintptr_t)block->fn_pointer();
