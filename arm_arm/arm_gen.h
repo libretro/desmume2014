@@ -199,7 +199,7 @@ struct iblock
    void blx(reg_t target_reg, AG_COND cond = AL)
                { insert_instruction( 0x012FFF30 | target_reg, cond ); }
 
-   void b(const char* target, bool link, AG_COND cond = AL);
+   void b(const char* target, AG_COND cond = AL);
 
    void push(uint16_t regs, AG_COND cond = AL)
                { insert_instruction( 0x092D0000 | regs, cond ); }

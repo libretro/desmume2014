@@ -127,8 +127,8 @@ static int32_t ARM_OP_ALU(iblock* block, uint32_t opcode)
 
    load_status(block);
 
-   block->b("RUN", false, cond);
-   block->b("SKIP", false);
+   block->b("RUN", cond);
+   block->b("SKIP");
 
    block->set_label("RUN");
 

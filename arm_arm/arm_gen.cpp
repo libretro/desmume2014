@@ -180,7 +180,7 @@ void iblock::mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg,
    insert_instruction( instruction, cond );
 }
 
-void iblock::b(const char* target, bool link, AG_COND cond)
+void iblock::b(const char* target, AG_COND cond)
 {
    assert(target);
 
@@ -190,7 +190,7 @@ void iblock::b(const char* target, bool link, AG_COND cond)
       {
          branches[i].name = target;
          branches[i].position = count;
-         insert_instruction( 0x0A000000 | (link ? 1 << 24 : 0), cond );
+         insert_instruction( 0x0A000000, cond );
          return;
       }
    }
