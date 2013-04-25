@@ -44,6 +44,9 @@ static u8 recompile_counts[(1<<26)/16];
 
 DS_ALIGN(4096) uintptr_t compiled_funcs[1<<26] = {0};
 
+const reg_t RCPU = 4;
+const reg_t RCYC = 5;
+
 ///////
 // HELPERS
 ///////
@@ -59,17 +62,17 @@ static uint32_t bit(uint32_t value, uint32_t first, uint32_t count)
 
 static uint32_t read_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
 {
-   block->ldr(native, 7, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
+   block->ldr(native, RCPU, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
 }
 
 static void write_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
 {
-   block->str(native, 7, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
+   block->str(native, RCPU, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
 }
 
 static void load_status(iblock* block)
 {
-   block->ldr(0, 7, mem2::imm(offsetof(armcpu_t, CPSR)));
+   block->ldr(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
    block->set_status(0);
 }
 
@@ -77,7 +80,7 @@ static void write_status(iblock* block, AG_COND cond = AL)
 {
    block->get_status(0, cond);
    block->mov(0, alu2::reg_shift_imm(0, LSR, 24), cond);
-   block->strb(0, 7, mem2::imm(offsetof(armcpu_t, CPSR) + 3), MEM_NONE, cond);
+   block->strb(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR) + 3), MEM_NONE, cond);
 }
 
 template <int PROCNUM>
@@ -89,16 +92,16 @@ static void arm_jit_prefetch(iblock* block, uint32_t pc, uint32_t opcode, bool t
                                 : (uint32_t)&_MMU_read32<PROCNUM, MMU_AT_CODE>;
 
    block->load_constant(0, pc & imask);
-   block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
 
    block->add(0, alu2::imm(isize));
-   block->str(0, 7, mem2::imm(offsetof(armcpu_t, next_instruction)));
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, next_instruction)));
 
    block->add(0, alu2::imm(isize));
    write_emu_register(block, 0, 15);
 
    block->load_constant(0, opcode);
-   block->str(0, 7, mem2::imm(offsetof(armcpu_t, instruction)));
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruction)));
 }
 
 /////////
@@ -673,17 +676,13 @@ static ArmOpCompiled compile_basicblock(iblock* block)
    bool compiled_op = false;
 
    // NOTE: Expected register usage
-   // R0 - R3 = Used and clobbered internally
-   // R5 = Pointer to armcpu_exec function
+   // R5 = Pointer to ARMPROC
    // R6 = Cycle counter
-   // R7 = Pointer to ARMPROC
 
+   block->push(0x40F0);
 
-   block->push(0x40F0);                          // push {r4-r7, r14}
-
-   block->load_constant(7, (uint32_t)&ARMPROC);  // r7 = cpu_state
-   block->load_constant(6, 0);                   // r6 = cycle count
-   block->load_constant(5, (uint32_t)&armcpu_exec<PROCNUM>);
+   block->load_constant(RCPU, (uint32_t)&ARMPROC);
+   block->load_constant(RCYC, 0);
 
    for (uint32_t i = 0; i < CommonSettings.jit_max_block_size; i ++, pc += isize)
    {
@@ -708,17 +707,18 @@ static ArmOpCompiled compile_basicblock(iblock* block)
             compiled_op = false;
          }
 
-         block->blx(5);
-         block->add(6, 6, alu2::reg(0));
+         block->load_constant(0, (uint32_t)&armcpu_exec<PROCNUM>);
+         block->blx(0);
+         block->add(RCYC, alu2::reg(0));
       }
 
       if (is_end)
          break;
    }
 
-   block->mov(0, alu2::reg(6));
+   block->mov(0, alu2::reg(RCYC));
 
-   block->pop(0x40F0); // pop {r4-r7, r14}
+   block->pop(0x40F0);
    block->bx(14);
    block->cache_flush();
 
