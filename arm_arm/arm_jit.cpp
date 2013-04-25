@@ -60,6 +60,12 @@ static uint32_t bit(uint32_t value, uint32_t first, uint32_t count)
    return (value >> first) & ((1 << count) - 1);
 }
 
+static uint32_t bit_write(uint32_t value, uint32_t first, uint32_t count, uint32_t insert)
+{
+   uint32_t result = value & ~(((1 << count) - 1) << first);
+   return result | (insert << first);
+}
+
 static uint32_t read_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
 {
    block->ldr(native, RCPU, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
@@ -244,45 +250,114 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF);
 ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_PREIND);
 ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 
-#define ARM_OP_MUL 0
+static int32_t ARM_OP_MUL_32(iblock* block, uint32_t opcode)
+{
+   const reg_t rd = bit(opcode, 16, 4);
+   const reg_t rn = bit(opcode, 12, 4);
+   const reg_t rs = bit(opcode, 8, 4);
+   const reg_t rm = bit(opcode, 0, 4);
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
+   const bool accumulate = bit(opcode, 21);
+   const bool update_status = bit(opcode, 20);
+
+   if (rn == 0xF || rd == 0xF || rm == 0xF || rs == 0xF)
+      return 1;
+
+   load_status(block);
+
+   block->b("RUN", cond);
+   block->b("SKIP");
+   block->set_label("RUN");
+
+   read_emu_register(block, 0, rs);
+   opcode = bit_write(opcode, 8, 4, 0);
+
+   read_emu_register(block, 1, rm);
+   opcode = bit_write(opcode, 0, 4, 1);
+
+   if (accumulate)
+   {
+      read_emu_register(block, 2, rn);
+      opcode = bit_write(opcode, 12, 4, 2);
+   }
+
+   opcode = bit_write(opcode, 16, 4, 0);
+
+   block->insert_instruction(opcode, AL);
+
+   write_emu_register(block, 0, rd);
+
+   if (update_status)
+   {
+      write_status(block);
+   }
+
+   block->set_label("SKIP");
+   block->resolve_label("RUN");
+   block->resolve_label("SKIP");
+
+   return 0;
+}
+
+#define ARM_OP_MUL   ARM_OP_MUL_32
+#define ARM_OP_MUL_S ARM_OP_MUL_32
+#define ARM_OP_MLA   ARM_OP_MUL_32
+#define ARM_OP_MLA_S ARM_OP_MUL_32
+
+
+#define ARM_OP_UMULL 0
+#define ARM_OP_UMULL_S 0
+#define ARM_OP_UMLAL 0
+#define ARM_OP_UMLAL_S 0
+#define ARM_OP_SMLAL 0
+#define ARM_OP_SMLAL_S 0
+#define ARM_OP_SMULL 0
+#define ARM_OP_SMULL_S 0
+
+#define ARM_OP_SMUL_B_B 0
+#define ARM_OP_SMUL_T_B 0
+#define ARM_OP_SMUL_B_T 0
+#define ARM_OP_SMUL_T_T 0
+
+#define ARM_OP_SMLA_B_B 0
+#define ARM_OP_SMLA_T_B 0
+#define ARM_OP_SMLA_B_T 0
+#define ARM_OP_SMLA_T_T 0
+
+#define ARM_OP_SMLAW_B 0
+#define ARM_OP_SMULW_B 0
+#define ARM_OP_SMLAW_T 0
+#define ARM_OP_SMULW_T 0
+
+#define ARM_OP_SMLAL_B_B 0
+#define ARM_OP_SMLAL_T_B 0
+#define ARM_OP_SMLAL_B_T 0
+#define ARM_OP_SMLAL_T_T 0
+
 #define ARM_OP_STRH_POS_INDE_M_REG_OFF 0
 #define ARM_OP_LDRD_STRD_POST_INDEX 0
-#define ARM_OP_MUL_S 0
 #define ARM_OP_LDRH_POS_INDE_M_REG_OFF 0
 #define ARM_OP_LDRSB_POS_INDE_M_REG_OFF 0
 #define ARM_OP_LDRSH_POS_INDE_M_REG_OFF 0
-#define ARM_OP_MLA 0
 #define ARM_OP_UND 0
-#define ARM_OP_MLA_S 0
 #define ARM_OP_STRH_POS_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRH_POS_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRSB_POS_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRSH_POS_INDE_M_IMM_OFF 0
-#define ARM_OP_UMULL 0
 #define ARM_OP_STRH_POS_INDE_P_REG_OFF 0
-#define ARM_OP_UMULL_S 0
 #define ARM_OP_LDRH_POS_INDE_P_REG_OFF 0
 #define ARM_OP_LDRSB_POS_INDE_P_REG_OFF 0
 #define ARM_OP_LDRSH_POS_INDE_P_REG_OFF 0
-#define ARM_OP_UMLAL 0
-#define ARM_OP_UMLAL_S 0
-#define ARM_OP_SMULL 0
 #define ARM_OP_STRH_POS_INDE_P_IMM_OFF 0
-#define ARM_OP_SMULL_S 0
 #define ARM_OP_LDRH_POS_INDE_P_IMM_OFF 0
 #define ARM_OP_LDRSB_POS_INDE_P_IMM_OFF 0
 #define ARM_OP_LDRSH_POS_INDE_P_IMM_OFF 0
-#define ARM_OP_SMLAL 0
-#define ARM_OP_SMLAL_S 0
 #define ARM_OP_MRS_CPSR 0
 #define ARM_OP_QADD 0
-#define ARM_OP_SMLA_B_B 0
 #define ARM_OP_SWP 0
-#define ARM_OP_SMLA_T_B 0
 #define ARM_OP_STRH_M_REG_OFF 0
-#define ARM_OP_SMLA_B_T 0
+
 #define ARM_OP_LDRD_STRD_OFFSET_PRE_INDEX 0
-#define ARM_OP_SMLA_T_T 0
 #define ARM_OP_LDRH_M_REG_OFF 0
 #define ARM_OP_LDRSB_M_REG_OFF 0
 #define ARM_OP_LDRSH_M_REG_OFF 0
@@ -291,33 +366,22 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 #define ARM_OP_BLX_REG 0
 #define ARM_OP_QSUB 0
 #define ARM_OP_BKPT 0
-#define ARM_OP_SMLAW_B 0
-#define ARM_OP_SMULW_B 0
 #define ARM_OP_STRH_PRE_INDE_M_REG_OFF 0
-#define ARM_OP_SMLAW_T 0
-#define ARM_OP_SMULW_T 0
 #define ARM_OP_LDRH_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_LDRSB_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_LDRSH_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_MRS_SPSR 0
 #define ARM_OP_QDADD 0
-#define ARM_OP_SMLAL_B_B 0
+
 #define ARM_OP_SWPB 0
-#define ARM_OP_SMLAL_T_B 0
 #define ARM_OP_STRH_M_IMM_OFF 0
-#define ARM_OP_SMLAL_B_T 0
-#define ARM_OP_SMLAL_T_T 0
 #define ARM_OP_LDRH_M_IMM_OFF 0
 #define ARM_OP_LDRSB_M_IMM_OFF 0
 #define ARM_OP_LDRSH_M_IMM_OFF 0
 #define ARM_OP_MSR_SPSR 0
 #define ARM_OP_CLZ 0
 #define ARM_OP_QDSUB 0
-#define ARM_OP_SMUL_B_B 0
-#define ARM_OP_SMUL_T_B 0
 #define ARM_OP_STRH_PRE_INDE_M_IMM_OFF 0
-#define ARM_OP_SMUL_B_T 0
-#define ARM_OP_SMUL_T_T 0
 #define ARM_OP_LDRH_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRSB_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRSH_PRE_INDE_M_IMM_OFF 0
