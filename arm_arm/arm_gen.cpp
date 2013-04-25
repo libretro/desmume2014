@@ -93,6 +93,59 @@ iblock* get_empty_block(uint32_t pc, uint32_t tag)
 
 /////////////////////////////////
 // Instruction Blocks
+void iblock::cache_flush()
+{
+   __clear_cache(&_instructions[first], &_instructions[first + count]);
+}
+
+void* iblock::fn_pointer() const
+{
+   return (void*)&_instructions[first];
+}
+
+void iblock::set_label(const char* name)
+{
+   for (int i = 0; i < TARGET_COUNT; i ++)
+   {
+      if (labels[i].name == 0)
+      {
+         labels[i].name = name;
+         labels[i].position = count;
+         return;
+      }
+   }
+
+   assert(false);
+}
+
+void iblock::resolve_label(const char* name)
+{
+   for (int i = 0; i < TARGET_COUNT; i ++)
+   {
+      if (labels[i].name != name)
+      {
+         continue;
+      }
+
+      for (int j = 0; j < TARGET_COUNT; j ++)
+      {
+         if (branches[j].name != name)
+         {
+            continue;
+         }
+
+         const uint32_t source = branches[j].position;
+         const uint32_t target = labels[i].position;
+         _instructions[first + source] |= ((target - source) - 2) & 0xFFFFFF;
+
+         branches[j].name = 0;
+      }
+
+      labels[i].name = 0;
+      break;
+   }
+}
+
 void iblock::insert_instruction(uint32_t op, AG_COND cond)
 {
    assert(cond < CONDINVALID);
@@ -102,16 +155,6 @@ void iblock::insert_instruction(uint32_t op, AG_COND cond)
 void iblock::insert_raw_instruction(uint32_t op)
 {
    _instructions[first + count ++] = op;
-}
-
-void iblock::cache_flush()
-{
-   __clear_cache(&_instructions[first], &_instructions[first + count]);
-}
-
-void* iblock::fn_pointer() const
-{
-   return (void*)&_instructions[first];
 }
 
 void iblock::alu_op(AG_ALU_OP op, reg_t rd, reg_t rn,
@@ -137,7 +180,24 @@ void iblock::mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg,
    insert_instruction( instruction, cond );
 }
 
-// Other
+void iblock::b(const char* target, bool link, AG_COND cond)
+{
+   assert(target);
+
+   for (int i = 0; i < TARGET_COUNT; i ++)
+   {
+      if (branches[i].name == 0)
+      {
+         branches[i].name = target;
+         branches[i].position = count;
+         insert_instruction( 0x0A000000 | (link ? 1 << 24 : 0), cond );
+         return;
+      }
+   }
+
+   assert(false);
+}
+
 void iblock::load_constant(reg_t target_reg, uint32_t constant, AG_COND cond)
 {
    // TODO: Support another method for ARM procs that don't have movw|movt
@@ -156,5 +216,12 @@ void iblock::load_constant(reg_t target_reg, uint32_t constant, AG_COND cond)
       insert_instruction( instructions[i], cond );
    }
 }
+
+// DEBUG ONLY
+const uint32_t* iblock::get_instruction_stream() const
+{
+   return &_instructions[first];
+}
+
 
 } // namespace arm_gen

@@ -96,12 +96,27 @@ struct iblock
    uint32_t pc;
    uint32_t tag;
 
-   void insert_instruction(uint32_t op, AG_COND cond = AL);
-   void insert_raw_instruction(uint32_t op);
+   struct target
+   {
+      const char* name;
+      uint32_t position;
+   };
+
+   static const uint32_t TARGET_COUNT = 16;
+
+   target labels[TARGET_COUNT];
+   target branches[TARGET_COUNT];
 
    void cache_flush();
-
    void* fn_pointer() const;
+
+   // Relocs
+   void set_label(const char* name);
+   void resolve_label(const char* name);
+
+   // Code Gen: Generic
+   void insert_instruction(uint32_t op, AG_COND cond = AL);
+   void insert_raw_instruction(uint32_t op);
 
    // Code Gen: ALU
    void alu_op(AG_ALU_OP op, reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL);
@@ -184,14 +199,16 @@ struct iblock
    void blx(reg_t target_reg, AG_COND cond = AL)
                { insert_instruction( 0x012FFF30 | target_reg, cond ); }
 
-//   void gen_branch(int32_t offset, bool link, AG_COND cond = AL)
-//               { insert_instruction( 0x0A000000 | (link ? 1 << 24 : 0) | (offset + 8), cond ); }
+   void b(const char* target, bool link, AG_COND cond = AL);
 
    void push(uint16_t regs, AG_COND cond = AL)
                { insert_instruction( 0x092D0000 | regs, cond ); }
 
    void pop(uint16_t regs, AG_COND cond = AL)
                { insert_instruction( 0x08BD0000 | regs, cond ); }
+
+   // DEBUG ONLY
+   const uint32_t* get_instruction_stream() const;
 };
 
 bool init();

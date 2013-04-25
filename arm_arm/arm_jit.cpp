@@ -57,7 +57,7 @@ static uint32_t bit(uint32_t value, uint32_t first, uint32_t count)
    return (value >> first) & ((1 << count) - 1);
 }
 
-static void read_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
+static uint32_t read_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
 {
    block->ldr(native, 7, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
 }
@@ -73,11 +73,11 @@ static void load_status(iblock* block)
    block->set_status(0);
 }
 
-static void write_status(iblock* block)
+static void write_status(iblock* block, AG_COND cond = AL)
 {
-   block->get_status(0);
-   block->mov(0, alu2::reg_shift_imm(0, LSR, 24));
-   block->strb(0, 7, mem2::imm(offsetof(armcpu_t, CPSR) + 3));
+   block->get_status(0, cond);
+   block->mov(0, alu2::reg_shift_imm(0, LSR, 24), cond);
+   block->strb(0, 7, mem2::imm(offsetof(armcpu_t, CPSR) + 3), MEM_NONE, cond);
 }
 
 template <int PROCNUM, bool THUMB>
@@ -109,16 +109,82 @@ static void arm_jit_prefetch(iblock* block)
 /////////
 /// ARM
 /////////
+static int32_t ARM_OP_ALU(iblock* block, uint32_t opcode)
+{
+   const reg_t rn = bit(opcode, 16, 4);
+   const reg_t rd = bit(opcode, 12, 4);
+   const reg_t rm = bit(opcode, 0, 4);
+   const reg_t rs = bit(opcode, 8, 4);
+
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
+   const AG_ALU_OP op = (AG_ALU_OP)bit(opcode, 20, 5);
+
+   const bool is_immediate = bit(opcode, 25);
+   const uint32_t immediate = opcode & 0xFF;
+   const uint32_t rotate = bit(opcode, 8, 4);
+
+   const bool is_shift_reg = bit(opcode, 4);
+   const uint32_t shift_imm = bit(opcode, 7, 5);
+   const AG_ALU_SHIFT shift_type = (AG_ALU_SHIFT)bit(opcode, 5, 2);
+
+   if (rn == 0xF || rd == 0xF || rm == 0xF || rs == 0xF)
+      return 1;
+
+   load_status(block);
+
+   block->b("RUN", false, cond);
+   block->b("SKIP", false);
+
+   block->set_label("RUN");
+
+   read_emu_register(block, 0, rn);
+
+   if (is_immediate)
+   {
+      block->alu_op(op, 0, 0, alu2::imm_ror(immediate, rotate << 1));
+   }
+   else
+   {
+      read_emu_register(block, 1, rm);
+
+      if (is_shift_reg)
+      {
+         read_emu_register(block, 2, rs);
+         block->alu_op(op, 0, 0, alu2::reg_shift_reg(1, shift_type, 2));
+      }
+      else
+      {
+         block->alu_op(op, 0, 0, alu2::reg_shift_imm(1, shift_type, shift_imm));
+      }
+   }
+
+   if (op < 16 || op >= 24)
+   {
+      write_emu_register(block, 0, rd);
+   }
+
+   if (op & 1)
+   {
+      write_status(block);
+   }
+
+   block->set_label("SKIP");
+   block->resolve_label("RUN");
+   block->resolve_label("SKIP");
+
+   return 0;
+}
+
 #define ARM_ALU_OP_DEF(T) \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = 0
+   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = ARM_OP_ALU; \
+   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = ARM_OP_ALU
 
 ARM_ALU_OP_DEF(AND);
 ARM_ALU_OP_DEF(AND_S);
@@ -370,10 +436,8 @@ static void arm_arm_gen_code_for(iblock* block, uint32_t address, uint32_t opcod
    // R7 = Pointer to ARMPROC
 
    ArmOpCompiler compiler = arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
-   if (compiler)
+   if (compiler && (compiler(block, opcode) == 0))
    {
-      compiler(block, opcode);
-
       // HACK: Use real cycles
       block->add(6, alu2::imm(4));
       arm_jit_prefetch<PROCNUM, false>(block);
@@ -678,8 +742,7 @@ static ArmOpCompiled compile_basicblock(iblock* block)
       }
       else
       {
-         block->blx(5);
-         block->add(6, 6, alu2::reg(0));
+         arm_arm_gen_code_for<PROCNUM>(block, pc, opcode);
       }
 
       if (instr_is_branch(thumb, opcode))
