@@ -24,93 +24,57 @@ static void __clear_cache(void *start, void *end) {
 namespace arm_gen
 {
 
-static const uint32_t INSTRUCTION_COUNT = 0x400000;
-static uint32_t _instructions[INSTRUCTION_COUNT] __attribute__((aligned(4096)));
-
-static const uint32_t BLOCK_COUNT = 2048;
-static iblock _blocks[BLOCK_COUNT];
-static void reset_blocks();
-
-bool init()
+code_pool::code_pool(uint32_t icount) :
+   instruction_count(icount),
+   instructions(0),
+   next_instruction(0),
+   flush_start(0)
 {
-   if (mprotect(_instructions, sizeof(_instructions), PROT_READ | PROT_WRITE | PROT_EXEC) != 0)
+   memset(labels, 0, sizeof(labels));
+   memset(branches, 0, sizeof(branches));
+
+   instructions = (uint32_t*)memalign(4096, instruction_count * 4);
+
+#if 0
+   if (posix_memalign(&instructions, 4096, instruction_count * 4))
    {
-      fprintf(stderr, "mprotect() failed\n");
-      return false;
+      fprintf(stderr, "posix_memalign failed\n");
+      abort();
    }
+#endif
 
-   reset_blocks();
-
-   return true;
-}
-
-/////////////////////////////////
-// Instruction Block List
-static void reset_blocks()
-{
-   memset(_blocks, 0, sizeof(_blocks));
-   for (int i = 0; i < BLOCK_COUNT; i ++)
-      _blocks[i].first = 0xFFFFFFFF;
-}
-
-iblock* find_block_for(uint32_t pc, uint32_t tag)
-{
-   for (int i = 0; i < BLOCK_COUNT; i ++)
+   if (mprotect(instructions, instruction_count * 4, PROT_READ | PROT_WRITE | PROT_EXEC))
    {
-      if (_blocks[i].pc == pc && _blocks[i].tag == tag)
-      {
-         return &_blocks[i];
-      }
+      fprintf(stderr, "mprotect failed\n");
+      abort();
    }
-
-   return 0;
 }
 
-iblock* get_empty_block(uint32_t pc, uint32_t tag)
+code_pool::~code_pool()
 {
-   uint32_t last_block_end = 0;
+   // TODO: Disable PROT_EXEC ?
 
-   for (int i = 0; i < BLOCK_COUNT; i ++)
-   {
-      if (_blocks[i].first == 0xFFFFFFFF)
-      {
-         _blocks[i].first = last_block_end;
-         _blocks[i].pc = pc;
-         _blocks[i].tag = tag;
-
-         if (_blocks[i].first > (INSTRUCTION_COUNT - 10000))
-            break;
-
-         return &_blocks[i];
-      }
-      else
-         last_block_end = _blocks[i].first + _blocks[i].count;
-   }
-
-   reset_blocks();
-   return 0;
+   free(instructions);
 }
 
-/////////////////////////////////
-// Instruction Blocks
-void iblock::cache_flush()
+void* code_pool::fn_pointer()
 {
-   __clear_cache(&_instructions[first], &_instructions[first + count]);
+   void* result = &instructions[flush_start];
+
+   __clear_cache(&instructions[flush_start], &instructions[next_instruction]);
+   flush_start = next_instruction;
+
+   return result;
 }
 
-void* iblock::fn_pointer() const
-{
-   return (void*)&_instructions[first];
-}
-
-void iblock::set_label(const char* name)
+void code_pool::set_label(const char* name)
 {
    for (int i = 0; i < TARGET_COUNT; i ++)
    {
       if (labels[i].name == 0)
       {
          labels[i].name = name;
-         labels[i].position = count;
+         labels[i].position = next_instruction;
          return;
       }
    }
@@ -118,7 +82,7 @@ void iblock::set_label(const char* name)
    assert(false);
 }
 
-void iblock::resolve_label(const char* name)
+void code_pool::resolve_label(const char* name)
 {
    for (int i = 0; i < TARGET_COUNT; i ++)
    {
@@ -136,7 +100,7 @@ void iblock::resolve_label(const char* name)
 
          const uint32_t source = branches[j].position;
          const uint32_t target = labels[i].position;
-         _instructions[first + source] |= ((target - source) - 2) & 0xFFFFFF;
+         instructions[source] |= ((target - source) - 2) & 0xFFFFFF;
 
          branches[j].name = 0;
       }
@@ -146,26 +110,33 @@ void iblock::resolve_label(const char* name)
    }
 }
 
-void iblock::insert_instruction(uint32_t op, AG_COND cond)
+// Code Gen: Generic
+void code_pool::insert_instruction(uint32_t op, AG_COND cond)
 {
    assert(cond < CONDINVALID);
-   _instructions[first + count ++] = (op & 0x0FFFFFFF) | (cond << 28);
+   insert_raw_instruction((op & 0x0FFFFFFF) | (cond << 28));
 }
 
-void iblock::insert_raw_instruction(uint32_t op)
+void code_pool::insert_raw_instruction(uint32_t op)
 {
-   _instructions[first + count ++] = op;
+   if (next_instruction >= instruction_count)
+   {
+      fprintf(stderr, "code_pool overflow\n");
+      abort();
+   }
+
+   instructions[next_instruction ++] = op;
 }
 
-void iblock::alu_op(AG_ALU_OP op, reg_t rd, reg_t rn,
-                     const alu2& arg, AG_COND cond)
+void code_pool::alu_op(AG_ALU_OP op, reg_t rd, reg_t rn,
+                       const alu2& arg, AG_COND cond)
 {
    assert(op < OPINVALID);
    insert_instruction( (op << 20) | (rn << 16) | (rd << 12) | arg.encoding, cond );
 }
 
-void iblock::mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg,
-                         AG_MEM_FLAGS flags, AG_COND cond)
+void code_pool::mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg,
+                       AG_MEM_FLAGS flags, AG_COND cond)
 {
    uint32_t instruction = 0x04000000;
    instruction |= (op & 1) ? 1 << 20 : 0;
@@ -180,7 +151,7 @@ void iblock::mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg,
    insert_instruction( instruction, cond );
 }
 
-void iblock::b(const char* target, AG_COND cond)
+void code_pool::b(const char* target, AG_COND cond)
 {
    assert(target);
 
@@ -189,7 +160,7 @@ void iblock::b(const char* target, AG_COND cond)
       if (branches[i].name == 0)
       {
          branches[i].name = target;
-         branches[i].position = count;
+         branches[i].position = next_instruction;
          insert_instruction( 0x0A000000, cond );
          return;
       }
@@ -198,7 +169,7 @@ void iblock::b(const char* target, AG_COND cond)
    assert(false);
 }
 
-void iblock::load_constant(reg_t target_reg, uint32_t constant, AG_COND cond)
+void code_pool::load_constant(reg_t target_reg, uint32_t constant, AG_COND cond)
 {
    // TODO: Support another method for ARM procs that don't have movw|movt
 
@@ -216,12 +187,5 @@ void iblock::load_constant(reg_t target_reg, uint32_t constant, AG_COND cond)
       insert_instruction( instructions[i], cond );
    }
 }
-
-// DEBUG ONLY
-const uint32_t* iblock::get_instruction_stream() const
-{
-   return &_instructions[first];
-}
-
 
 } // namespace arm_gen

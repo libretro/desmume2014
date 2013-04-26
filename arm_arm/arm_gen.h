@@ -89,132 +89,114 @@ struct mem2
       const uint32_t encoding;
 };
 
-struct iblock
+// 80 Columns be damned
+class code_pool
 {
-   uint32_t first;
-   uint32_t count;
-   uint32_t pc;
-   uint32_t tag;
+   public:
+      code_pool(uint32_t instruction_count);
+      ~code_pool();
 
-   struct target
-   {
-      const char* name;
-      uint32_t position;
-   };
+      uint32_t instructions_remaining() const { return instruction_count - next_instruction; }
 
-   static const uint32_t TARGET_COUNT = 16;
+      void* fn_pointer();
 
-   target labels[TARGET_COUNT];
-   target branches[TARGET_COUNT];
+      // Relocs
+      void set_label(const char* name);
+      void resolve_label(const char* name);
 
-   void cache_flush();
-   void* fn_pointer() const;
+      // Code Gen: Generic
+      void insert_instruction(uint32_t op, AG_COND cond = AL);
+      void insert_raw_instruction(uint32_t op);
 
-   // Relocs
-   void set_label(const char* name);
-   void resolve_label(const char* name);
+      // Code Gen: ALU
+      void alu_op(AG_ALU_OP op, reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL);
+      void and_(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(AND , rd, rn, arg, cond); }
+      void and_(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(AND , rd, rd, arg, cond); }
+      void ands(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ANDS, rd, rn, arg, cond); }
+      void ands(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ANDS, rd, rd, arg, cond); }
+      void eor (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(EOR , rd, rn, arg, cond); }
+      void eor (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(EOR , rd, rd, arg, cond); }
+      void eors(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(EORS, rd, rn, arg, cond); }
+      void eors(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(EORS, rd, rd, arg, cond); }
+      void sub (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SUB , rd, rn, arg, cond); }
+      void sub (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SUB , rd, rd, arg, cond); }
+      void subs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SUBS, rd, rn, arg, cond); }
+      void subs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SUBS, rd, rd, arg, cond); }
+      void rsb (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSB , rd, rn, arg, cond); }
+      void rsb (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSB , rd, rd, arg, cond); }
+      void rsbs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSBS, rd, rn, arg, cond); }
+      void rsbs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSBS, rd, rd, arg, cond); }
+      void add (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADD , rd, rn, arg, cond); }
+      void add (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADD , rd, rd, arg, cond); }
+      void adds(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADDS, rd, rn, arg, cond); }
+      void adds(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADDS, rd, rd, arg, cond); }
+      void adc (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADC , rd, rn, arg, cond); }
+      void adc (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADC , rd, rd, arg, cond); }
+      void adcs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADCS, rd, rn, arg, cond); }
+      void adcs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADCS, rd, rd, arg, cond); }
+      void sbc (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SBC , rd, rn, arg, cond); }
+      void sbc (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SBC , rd, rd, arg, cond); }
+      void sbcs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SBCS, rd, rn, arg, cond); }
+      void sbcs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SBCS, rd, rd, arg, cond); }
+      void rsc (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSC , rd, rn, arg, cond); }
+      void rsc (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSC , rd, rd, arg, cond); }
+      void rscs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSCS, rd, rn, arg, cond); }
+      void rscs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSCS, rd, rd, arg, cond); }
+      void tst (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(TST , rn, rn, arg, cond); } // 1
+      void teq (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(TEQ , rn, rn, arg, cond); } // 1
+      void cmp (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(CMP , rn, rn, arg, cond); } // 1
+      void cmn (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(CMN , rn, rn, arg, cond); } // 1
+      void orr (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ORR , rd, rn, arg, cond); }
+      void orr (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ORR , rd, rd, arg, cond); }
+      void orrs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ORRS, rd, rn, arg, cond); }
+      void orrs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ORRS, rd, rd, arg, cond); }
+      void mov (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MOV , rd, rd, arg, cond); } // 2
+      void movs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MOVS, rd, rd, arg, cond); } // 2
+      void bic (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(BIC , rd, rn, arg, cond); }
+      void bic (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(BIC , rd, rd, arg, cond); }
+      void bics(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(BICS, rd, rn, arg, cond); }
+      void bics(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(BICS, rd, rd, arg, cond); }
+      void mvn (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MVN , rd, rd, arg, cond); } // 2
+      void mvns(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MVNS, rd, rd, arg, cond); } // 2
 
-   // Code Gen: Generic
-   void insert_instruction(uint32_t op, AG_COND cond = AL);
-   void insert_raw_instruction(uint32_t op);
+      // Code Gen: Memory
+      void mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg, AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL);
+      void ldr (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(LDR , rd, base, arg, flags, cond); }
+      void str (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(STR , rd, base, arg, flags, cond); }
+      void ldrb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(LDRB, rd, base, arg, flags, cond); }
+      void strb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(STRB, rd, base, arg, flags, cond); }
 
-   // Code Gen: ALU
-   void alu_op(AG_ALU_OP op, reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL);
-   void and_(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(AND , rd, rn, arg, cond); }
-   void and_(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(AND , rd, rd, arg, cond); }
-   void ands(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ANDS, rd, rn, arg, cond); }
-   void ands(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ANDS, rd, rd, arg, cond); }
-   void eor (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(EOR , rd, rn, arg, cond); }
-   void eor (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(EOR , rd, rd, arg, cond); }
-   void eors(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(EORS, rd, rn, arg, cond); }
-   void eors(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(EORS, rd, rd, arg, cond); }
-   void sub (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SUB , rd, rn, arg, cond); }
-   void sub (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SUB , rd, rd, arg, cond); }
-   void subs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SUBS, rd, rn, arg, cond); }
-   void subs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SUBS, rd, rd, arg, cond); }
-   void rsb (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSB , rd, rn, arg, cond); }
-   void rsb (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSB , rd, rd, arg, cond); }
-   void rsbs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSBS, rd, rn, arg, cond); }
-   void rsbs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSBS, rd, rd, arg, cond); }
-   void add (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADD , rd, rn, arg, cond); }
-   void add (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADD , rd, rd, arg, cond); }
-   void adds(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADDS, rd, rn, arg, cond); }
-   void adds(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADDS, rd, rd, arg, cond); }
-   void adc (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADC , rd, rn, arg, cond); }
-   void adc (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADC , rd, rd, arg, cond); }
-   void adcs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ADCS, rd, rn, arg, cond); }
-   void adcs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ADCS, rd, rd, arg, cond); }
-   void sbc (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SBC , rd, rn, arg, cond); }
-   void sbc (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SBC , rd, rd, arg, cond); }
-   void sbcs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(SBCS, rd, rn, arg, cond); }
-   void sbcs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(SBCS, rd, rd, arg, cond); }
-   void rsc (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSC , rd, rn, arg, cond); }
-   void rsc (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSC , rd, rd, arg, cond); }
-   void rscs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(RSCS, rd, rn, arg, cond); }
-   void rscs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(RSCS, rd, rd, arg, cond); }
-   void tst (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(TST , rn, rn, arg, cond); } // 1
-   void teq (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(TEQ , rn, rn, arg, cond); } // 1
-   void cmp (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(CMP , rn, rn, arg, cond); } // 1
-   void cmn (          reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(CMN , rn, rn, arg, cond); } // 1
-   void orr (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ORR , rd, rn, arg, cond); }
-   void orr (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ORR , rd, rd, arg, cond); }
-   void orrs(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(ORRS, rd, rn, arg, cond); }
-   void orrs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(ORRS, rd, rd, arg, cond); }
-   void mov (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MOV , rd, rd, arg, cond); } // 2
-   void movs(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MOVS, rd, rd, arg, cond); } // 2
-   void bic (reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(BIC , rd, rn, arg, cond); }
-   void bic (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(BIC , rd, rd, arg, cond); }
-   void bics(reg_t rd, reg_t rn, const alu2& arg, AG_COND cond = AL) { alu_op(BICS, rd, rn, arg, cond); }
-   void bics(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(BICS, rd, rd, arg, cond); }
-   void mvn (reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MVN , rd, rd, arg, cond); } // 2
-   void mvns(reg_t rd,           const alu2& arg, AG_COND cond = AL) { alu_op(MVNS, rd, rd, arg, cond); } // 2
+      // Code Gen: Other
+      void set_status(reg_t source_reg, AG_COND cond = AL)  { insert_instruction( 0x0128F000 | source_reg, cond ); }
+      void get_status(reg_t dest_reg, AG_COND cond = AL)    { insert_instruction( 0x010F0000 | (dest_reg << 12), cond ); }
+      void bx(reg_t target_reg, AG_COND cond = AL)          { insert_instruction( 0x012FFF10 | target_reg, cond ); }
+      void blx(reg_t target_reg, AG_COND cond = AL)         { insert_instruction( 0x012FFF30 | target_reg, cond ); }
+      void push(uint16_t regs, AG_COND cond = AL)           { insert_instruction( 0x092D0000 | regs, cond ); }
+      void pop(uint16_t regs, AG_COND cond = AL)            { insert_instruction( 0x08BD0000 | regs, cond ); }
 
-   // Code Gen: Memory
-   void mem_op(AG_MEM_OP op, reg_t rd, reg_t rn, const mem2& arg, AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL);
-   void ldr (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
-      { mem_op(LDR , rd, base, arg, flags, cond); }
+      void b(const char* target, AG_COND cond = AL);
 
-   void str (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
-      { mem_op(STR , rd, base, arg, flags, cond); }
+      // Inserts a movw; movt pair to load the constant, omits movt is constant fits in 16 bits.
+      void load_constant(reg_t target_reg, uint32_t constant, AG_COND cond = AL);
 
-   void ldrb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
-      { mem_op(LDRB, rd, base, arg, flags, cond); }
+   private:
+      const uint32_t instruction_count;
+      uint32_t* instructions;
 
-   void strb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL)
-      { mem_op(STRB, rd, base, arg, flags, cond); }
+      uint32_t next_instruction;
+      uint32_t flush_start;
 
+      static const uint32_t TARGET_COUNT = 16;
 
-   // Inserts a movw; movt pair to load the constant, omits movt is constant fits in 16 bits.
-   void load_constant(reg_t target_reg, uint32_t constant, AG_COND cond = AL);
+      struct target
+      {
+         const char* name;
+         uint32_t position;
+      };
 
-   void set_status(reg_t source_reg, AG_COND cond = AL)
-               { insert_instruction( 0x0128F000 | source_reg, cond ); }
-
-   void get_status(reg_t dest_reg, AG_COND cond = AL)
-               { insert_instruction( 0x010F0000 | (dest_reg << 12), cond ); }
-
-   void bx(reg_t target_reg, AG_COND cond = AL)
-               { insert_instruction( 0x012FFF10 | target_reg, cond ); }
-
-   void blx(reg_t target_reg, AG_COND cond = AL)
-               { insert_instruction( 0x012FFF30 | target_reg, cond ); }
-
-   void b(const char* target, AG_COND cond = AL);
-
-   void push(uint16_t regs, AG_COND cond = AL)
-               { insert_instruction( 0x092D0000 | regs, cond ); }
-
-   void pop(uint16_t regs, AG_COND cond = AL)
-               { insert_instruction( 0x08BD0000 | regs, cond ); }
-
-   // DEBUG ONLY
-   const uint32_t* get_instruction_stream() const;
+      target labels[TARGET_COUNT];
+      target branches[TARGET_COUNT];
 };
-
-bool init();
-iblock* find_block_for(uint32_t pc, uint32_t tag);
-iblock* get_empty_block(uint32_t pc, uint32_t tag);
-
 } // namespace arm_gen
 
 #endif

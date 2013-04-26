@@ -38,8 +38,10 @@ using namespace arm_gen;
 #include "bios.h"
 #include "armcpu.h"
 
-typedef int32_t (*ArmOpCompiler)(iblock*, uint32_t);
+typedef int32_t (*ArmOpCompiler)(uint32_t);
 
+static const uint32_t INSTRUCTION_COUNT = 0x400000;
+static code_pool* block;
 static u8 recompile_counts[(1<<26)/16];
 
 DS_ALIGN(4096) uintptr_t compiled_funcs[1<<26] = {0};
@@ -66,23 +68,23 @@ static uint32_t bit_write(uint32_t value, uint32_t first, uint32_t count, uint32
    return result | (insert << first);
 }
 
-static uint32_t read_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
+static uint32_t read_emu_register(reg_t native, reg_t emu, AG_COND cond = AL)
 {
    block->ldr(native, RCPU, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
 }
 
-static void write_emu_register(iblock* block, reg_t native, reg_t emu, AG_COND cond = AL)
+static void write_emu_register(reg_t native, reg_t emu, AG_COND cond = AL)
 {
    block->str(native, RCPU, mem2::imm(offsetof(armcpu_t, R) + 4 * emu), MEM_NONE, cond);
 }
 
-static void load_status(iblock* block)
+static void load_status()
 {
    block->ldr(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
    block->set_status(0);
 }
 
-static void write_status(iblock* block, AG_COND cond = AL)
+static void write_status(AG_COND cond = AL)
 {
    block->get_status(0, cond);
    block->mov(0, alu2::reg_shift_imm(0, LSR, 24), cond);
@@ -90,7 +92,7 @@ static void write_status(iblock* block, AG_COND cond = AL)
 }
 
 template <int PROCNUM>
-static void arm_jit_prefetch(iblock* block, uint32_t pc, uint32_t opcode, bool thumb)
+static void arm_jit_prefetch(uint32_t pc, uint32_t opcode, bool thumb)
 {
    const uint32_t imask = thumb ? 0xFFFFFFFE : 0xFFFFFFFC;
    const uint32_t isize = thumb ? 2 : 4;
@@ -104,7 +106,7 @@ static void arm_jit_prefetch(iblock* block, uint32_t pc, uint32_t opcode, bool t
    block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, next_instruction)));
 
    block->add(0, alu2::imm(isize));
-   write_emu_register(block, 0, 15);
+   write_emu_register(0, 15);
 
    block->load_constant(0, opcode);
    block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruction)));
@@ -113,7 +115,7 @@ static void arm_jit_prefetch(iblock* block, uint32_t pc, uint32_t opcode, bool t
 /////////
 /// ARM
 /////////
-static int32_t ARM_OP_ALU(iblock* block, uint32_t opcode)
+static int32_t ARM_OP_ALU(uint32_t opcode)
 {
    const reg_t rn = bit(opcode, 16, 4);
    const reg_t rd = bit(opcode, 12, 4);
@@ -134,14 +136,14 @@ static int32_t ARM_OP_ALU(iblock* block, uint32_t opcode)
    if (rn == 0xF || rd == 0xF || rm == 0xF || rs == 0xF)
       return 1;
 
-   load_status(block);
+   load_status();
 
    block->b("RUN", cond);
    block->b("SKIP");
 
    block->set_label("RUN");
 
-   read_emu_register(block, 0, rn);
+   read_emu_register(0, rn);
 
    if (is_immediate)
    {
@@ -149,11 +151,11 @@ static int32_t ARM_OP_ALU(iblock* block, uint32_t opcode)
    }
    else
    {
-      read_emu_register(block, 1, rm);
+      read_emu_register(1, rm);
 
       if (is_shift_reg)
       {
-         read_emu_register(block, 2, rs);
+         read_emu_register(2, rs);
          block->alu_op(op, 0, 0, alu2::reg_shift_reg(1, shift_type, 2));
       }
       else
@@ -164,12 +166,12 @@ static int32_t ARM_OP_ALU(iblock* block, uint32_t opcode)
 
    if (op < 16 || op >= 24)
    {
-      write_emu_register(block, 0, rd);
+      write_emu_register(0, rd);
    }
 
    if (op & 1)
    {
-      write_status(block);
+      write_status();
    }
 
    block->set_label("SKIP");
@@ -250,7 +252,7 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF);
 ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_PREIND);
 ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 
-static int32_t ARM_OP_MUL_32(iblock* block, uint32_t opcode)
+static int32_t ARM_OP_MUL_32(uint32_t opcode)
 {
    const reg_t rd = bit(opcode, 16, 4);
    const reg_t rn = bit(opcode, 12, 4);
@@ -263,21 +265,21 @@ static int32_t ARM_OP_MUL_32(iblock* block, uint32_t opcode)
    if (rn == 0xF || rd == 0xF || rm == 0xF || rs == 0xF)
       return 1;
 
-   load_status(block);
+   load_status();
 
    block->b("RUN", cond);
    block->b("SKIP");
    block->set_label("RUN");
 
-   read_emu_register(block, 0, rs);
+   read_emu_register(0, rs);
    opcode = bit_write(opcode, 8, 4, 0);
 
-   read_emu_register(block, 1, rm);
+   read_emu_register(1, rm);
    opcode = bit_write(opcode, 0, 4, 1);
 
    if (accumulate)
    {
-      read_emu_register(block, 2, rn);
+      read_emu_register(2, rn);
       opcode = bit_write(opcode, 12, 4, 2);
    }
 
@@ -285,11 +287,11 @@ static int32_t ARM_OP_MUL_32(iblock* block, uint32_t opcode)
 
    block->insert_instruction(opcode, AL);
 
-   write_emu_register(block, 0, rd);
+   write_emu_register(0, rd);
 
    if (update_status)
    {
-      write_status(block);
+      write_status();
    }
 
    block->set_label("SKIP");
@@ -491,25 +493,25 @@ static const ArmOpCompiler arm_instruction_compilers[4096] = {
 ////////
 // THUMB
 ////////
-static int32_t THUMB_OP_SHIFT(iblock* block, uint32_t opcode)
+static int32_t THUMB_OP_SHIFT(uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rs = bit(opcode, 3, 3);
    const uint32_t imm = bit(opcode, 6, 5);
    const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
 
-   load_status(block);
+   load_status();
 
-   read_emu_register(block, 0, rs);
+   read_emu_register(0, rs);
    block->movs(0, alu2::reg_shift_imm(0, op, imm));
-   write_emu_register(block, 0, rd);
+   write_emu_register(0, rd);
 
-   write_status(block);
+   write_status();
 
    return 0;
 }
 
-static int32_t THUMB_OP_ADDSUB_REGIMM(iblock* block, uint32_t opcode)
+static int32_t THUMB_OP_ADDSUB_REGIMM(uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rs = bit(opcode, 3, 3);
@@ -517,8 +519,8 @@ static int32_t THUMB_OP_ADDSUB_REGIMM(iblock* block, uint32_t opcode)
    const bool arg_type = bit(opcode, 10);
    const uint32_t arg = bit(opcode, 6, 3);
 
-   load_status(block);
-   read_emu_register(block, 0, rs);
+   load_status();
+   read_emu_register(0, rs);
 
    if (arg_type) // Immediate
    {
@@ -526,24 +528,24 @@ static int32_t THUMB_OP_ADDSUB_REGIMM(iblock* block, uint32_t opcode)
    }
    else
    {
-      read_emu_register(block, 1, arg);
+      read_emu_register(1, arg);
       block->alu_op(op, 0, 0, alu2::reg(1));
    }
 
-   write_emu_register(block, 0, rd);
-   write_status(block);
+   write_emu_register(0, rd);
+   write_status();
 
    return 0;
 }
 
-static int32_t THUMB_OP_MCAS_IMM8(iblock* block, uint32_t opcode)
+static int32_t THUMB_OP_MCAS_IMM8(uint32_t opcode)
 {
    const reg_t rd = bit(opcode, 8, 3);
    const uint32_t op = bit(opcode, 11, 2);
    const uint32_t imm = bit(opcode, 0, 8);
 
-   load_status(block);
-   read_emu_register(block, 0, rd);
+   load_status();
+   read_emu_register(0, rd);
    
    switch (op)
    {
@@ -555,15 +557,15 @@ static int32_t THUMB_OP_MCAS_IMM8(iblock* block, uint32_t opcode)
 
    if (op != 1) // Don't keep the result of a CMP instruction
    {
-      write_emu_register(block, 0, rd);
+      write_emu_register(0, rd);
    }
 
-   write_status(block);
+   write_status();
 
    return 0;
 }
 
-static int32_t THUMB_OP_ALU(iblock* block, uint32_t opcode)
+static int32_t THUMB_OP_ALU(uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rs = bit(opcode, 3, 3);
@@ -575,9 +577,9 @@ static int32_t THUMB_OP_ALU(iblock* block, uint32_t opcode)
       return 1;
    }
 
-   load_status(block);
-   read_emu_register(block, 0, rd);
-   read_emu_register(block, 1, rs);
+   load_status();
+   read_emu_register(0, rd);
+   read_emu_register(1, rs);
 
    switch (op)
    {
@@ -605,10 +607,10 @@ static int32_t THUMB_OP_ALU(iblock* block, uint32_t opcode)
    static const bool op_wb[16] = { 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1 };
    if (op_wb[op])
    {
-      write_emu_register(block, 0, rd);
+      write_emu_register(0, rd);
    }
 
-   write_status(block);
+   write_status();
 
    return 0;
 }
@@ -730,7 +732,7 @@ static bool instr_is_branch(bool thumb, u32 opcode)
 }
 
 template<int PROCNUM>
-static ArmOpCompiled compile_basicblock(iblock* block)
+static ArmOpCompiled compile_basicblock()
 {
    const bool thumb = ARMPROC.CPSR.bits.T == 1;
    const u32 base = ARMPROC.instruct_adr;
@@ -756,7 +758,7 @@ static ArmOpCompiled compile_basicblock(iblock* block)
                                      : arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
 
       const bool is_end = instr_is_branch(thumb, opcode) || (i + 1) == CommonSettings.jit_max_block_size;
-      if (compiler && compiler(block, opcode) == 0 && !is_end)
+      if (compiler && compiler(opcode) == 0 && !is_end)
       {
          compiled_op = true;
 
@@ -767,7 +769,7 @@ static ArmOpCompiled compile_basicblock(iblock* block)
       {
          if (compiled_op)
          {
-            arm_jit_prefetch<PROCNUM>(block, pc, opcode, thumb);
+            arm_jit_prefetch<PROCNUM>(pc, opcode, thumb);
             compiled_op = false;
          }
 
@@ -783,10 +785,10 @@ static ArmOpCompiled compile_basicblock(iblock* block)
    block->mov(0, alu2::reg(RCYC));
 
    block->pop(0x80F0);
-   block->cache_flush();
 
-   JIT_COMPILED_FUNC(base, PROCNUM) = (uintptr_t)block->fn_pointer();
-   return (ArmOpCompiled)block->fn_pointer();
+   void* fn_ptr = block->fn_pointer();
+   JIT_COMPILED_FUNC(base, PROCNUM) = (uintptr_t)fn_ptr;
+   return (ArmOpCompiled)fn_ptr;
 }
 
 template<int PROCNUM> u32 arm_jit_compile()
@@ -801,14 +803,12 @@ template<int PROCNUM> u32 arm_jit_compile()
 // }
    recompile_counts[mask_adr >> 1] = 1;
 
-   iblock* block = get_empty_block(adr, PROCNUM);
-   if (!block)
+   if (block->instructions_remaining() < 1000)
    {
       arm_jit_reset(true);
-      block = get_empty_block(adr, PROCNUM);
    }
 
-   return compile_basicblock<PROCNUM>(block)();
+   return compile_basicblock<PROCNUM>()();
 }
 
 template u32 arm_jit_compile<0>();
@@ -824,12 +824,15 @@ void arm_jit_reset(bool enable)
             ((u64*)recompile_counts)[i] = 0;
             memset(compiled_funcs+128*i, 0, 128*sizeof(*compiled_funcs));
          }
-   }
 
-   arm_gen::init();
+      delete block;
+      block = new code_pool(INSTRUCTION_COUNT);
+   }
 }
 
 void arm_jit_close()
 {
+   delete block;
+   block = 0;
 }
 #endif // HAVE_JIT
