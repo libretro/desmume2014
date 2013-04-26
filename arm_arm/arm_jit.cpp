@@ -241,6 +241,8 @@ ARM_ALU_OP_DEF(MVN_S, 2, 0, true);
 #define ARM_OP_QDADD       ARM_OP_PATCH<1, 2, 0, 1, true>
 #define ARM_OP_QDSUB       ARM_OP_PATCH<1, 2, 0, 1, true>
 
+#define ARM_OP_CLZ         ARM_OP_PATCH<0, 2, 0, 1, false>
+
 ////////
 #define ARM_MEM_OP_DEF(T, Q) \
    static const ArmOpCompiler ARM_OP_##T##_LSL_##Q = 0; \
@@ -316,7 +318,6 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 #define ARM_OP_LDRSB_M_IMM_OFF 0
 #define ARM_OP_LDRSH_M_IMM_OFF 0
 #define ARM_OP_MSR_SPSR 0
-#define ARM_OP_CLZ 0
 #define ARM_OP_STRH_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRH_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRSB_PRE_INDE_M_IMM_OFF 0
