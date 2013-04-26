@@ -115,61 +115,43 @@ static void arm_jit_prefetch(uint32_t pc, uint32_t opcode, bool thumb)
 /////////
 /// ARM
 /////////
-static int32_t ARM_OP_ALU(uint32_t opcode)
+template <int AT16, int AT12, int AT8, int AT0, bool S>
+static int32_t ARM_OP_PATCH(uint32_t opcode)
 {
-   const reg_t rn = bit(opcode, 16, 4);
-   const reg_t rd = bit(opcode, 12, 4);
-   const reg_t rm = bit(opcode, 0, 4);
-   const reg_t rs = bit(opcode, 8, 4);
+   const reg_t at16 = bit(opcode, 16, 4);
+   const reg_t at12 = bit(opcode, 12, 4);
+   const reg_t at8  = bit(opcode, 8, 4);
+   const reg_t at0  = bit(opcode, 0, 4);
 
    const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
-   const AG_ALU_OP op = (AG_ALU_OP)bit(opcode, 20, 5);
 
-   const bool is_immediate = bit(opcode, 25);
-   const uint32_t immediate = opcode & 0xFF;
-   const uint32_t rotate = bit(opcode, 8, 4);
-
-   const bool is_shift_reg = bit(opcode, 4);
-   const uint32_t shift_imm = bit(opcode, 7, 5);
-   const AG_ALU_SHIFT shift_type = (AG_ALU_SHIFT)bit(opcode, 5, 2);
-
-   if (rn == 0xF || rd == 0xF || rm == 0xF || rs == 0xF)
+   if (at16 == 0xF || at12 == 0xF || at8 == 0xF || at0 == 0xF)
       return 1;
 
    load_status();
 
    block->b("RUN", cond);
    block->b("SKIP");
-
    block->set_label("RUN");
 
-   read_emu_register(0, rn);
+   if (AT16 & 1) read_emu_register(0, at16);
+   if (AT12 & 1) read_emu_register(1, at12);
+   if (AT8  & 1) read_emu_register(2, at8 );
+   if (AT0  & 1) read_emu_register(3, at0 );
 
-   if (is_immediate)
-   {
-      block->alu_op(op, 0, 0, alu2::imm_ror(immediate, rotate << 1));
-   }
-   else
-   {
-      read_emu_register(1, rm);
+   opcode = bit_write(opcode, 16, 4, (AT16 == 0) ? at16 : (reg_t)0);
+   opcode = bit_write(opcode, 12, 4, (AT12 == 0) ? at12 : (reg_t)1);
+   opcode = bit_write(opcode,  8, 4, (AT8  == 0) ? at8  : (reg_t)2);
+   opcode = bit_write(opcode,  0, 4, (AT0  == 0) ? at0  : (reg_t)3);
 
-      if (is_shift_reg)
-      {
-         read_emu_register(2, rs);
-         block->alu_op(op, 0, 0, alu2::reg_shift_reg(1, shift_type, 2));
-      }
-      else
-      {
-         block->alu_op(op, 0, 0, alu2::reg_shift_imm(1, shift_type, shift_imm));
-      }
-   }
+   block->insert_instruction(opcode, AL);
 
-   if (op < 16 || op >= 24)
-   {
-      write_emu_register(0, rd);
-   }
+   if (AT16 & 2) write_emu_register(0, at16);
+   if (AT12 & 2) write_emu_register(1, at12);
+   if (AT8  & 2) write_emu_register(2, at8 );
+   if (AT0  & 2) write_emu_register(3, at0 );
 
-   if (op & 1)
+   if (S)
    {
       write_status();
    }
@@ -181,46 +163,85 @@ static int32_t ARM_OP_ALU(uint32_t opcode)
    return 0;
 }
 
-#define ARM_ALU_OP_DEF(T) \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = ARM_OP_ALU; \
-   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = ARM_OP_ALU
+#define ARM_ALU_OP_DEF(T, D, N, S) \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
+   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = ARM_OP_PATCH<N, D, 0, 0, S>
 
-ARM_ALU_OP_DEF(AND);
-ARM_ALU_OP_DEF(AND_S);
-ARM_ALU_OP_DEF(EOR);
-ARM_ALU_OP_DEF(EOR_S);
-ARM_ALU_OP_DEF(SUB);
-ARM_ALU_OP_DEF(SUB_S);
-ARM_ALU_OP_DEF(RSB);
-ARM_ALU_OP_DEF(RSB_S);
-ARM_ALU_OP_DEF(ADD);
-ARM_ALU_OP_DEF(ADD_S);
-ARM_ALU_OP_DEF(ADC);
-ARM_ALU_OP_DEF(ADC_S);
-ARM_ALU_OP_DEF(SBC);
-ARM_ALU_OP_DEF(SBC_S);
-ARM_ALU_OP_DEF(RSC);
-ARM_ALU_OP_DEF(RSC_S);
-ARM_ALU_OP_DEF(TST);
-ARM_ALU_OP_DEF(TEQ);
-ARM_ALU_OP_DEF(CMP);
-ARM_ALU_OP_DEF(CMN);
-ARM_ALU_OP_DEF(ORR);
-ARM_ALU_OP_DEF(ORR_S);
-ARM_ALU_OP_DEF(MOV);
-ARM_ALU_OP_DEF(MOV_S);
-ARM_ALU_OP_DEF(BIC);
-ARM_ALU_OP_DEF(BIC_S);
-ARM_ALU_OP_DEF(MVN);
-ARM_ALU_OP_DEF(MVN_S);
+ARM_ALU_OP_DEF(AND  , 2, 1, false);
+ARM_ALU_OP_DEF(AND_S, 2, 1, true);
+ARM_ALU_OP_DEF(EOR  , 2, 1, false);
+ARM_ALU_OP_DEF(EOR_S, 2, 1, true);
+ARM_ALU_OP_DEF(SUB  , 2, 1, false);
+ARM_ALU_OP_DEF(SUB_S, 2, 1, true);
+ARM_ALU_OP_DEF(RSB  , 2, 1, false);
+ARM_ALU_OP_DEF(RSB_S, 2, 1, true);
+ARM_ALU_OP_DEF(ADD  , 2, 1, false);
+ARM_ALU_OP_DEF(ADD_S, 2, 1, true);
+ARM_ALU_OP_DEF(ADC  , 2, 1, false);
+ARM_ALU_OP_DEF(ADC_S, 2, 1, true);
+ARM_ALU_OP_DEF(SBC  , 2, 1, false);
+ARM_ALU_OP_DEF(SBC_S, 2, 1, true);
+ARM_ALU_OP_DEF(RSC  , 2, 1, false);
+ARM_ALU_OP_DEF(RSC_S, 2, 1, true);
+ARM_ALU_OP_DEF(TST  , 0, 1, true);
+ARM_ALU_OP_DEF(TEQ  , 0, 1, true);
+ARM_ALU_OP_DEF(CMP  , 0, 1, true);
+ARM_ALU_OP_DEF(CMN  , 0, 1, true);
+ARM_ALU_OP_DEF(ORR  , 2, 1, false);
+ARM_ALU_OP_DEF(ORR_S, 2, 1, true);
+ARM_ALU_OP_DEF(MOV  , 2, 0, false);
+ARM_ALU_OP_DEF(MOV_S, 2, 0, true);
+ARM_ALU_OP_DEF(BIC  , 2, 1, false);
+ARM_ALU_OP_DEF(BIC_S, 2, 1, true);
+ARM_ALU_OP_DEF(MVN  , 2, 0, false);
+ARM_ALU_OP_DEF(MVN_S, 2, 0, true);
 
+#define ARM_OP_MUL         ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_MUL_S       ARM_OP_PATCH<2, 0, 1, 1, true>
+#define ARM_OP_MLA         ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_MLA_S       ARM_OP_PATCH<2, 1, 1, 1, true>
+#define ARM_OP_UMULL       ARM_OP_PATCH<2, 2, 1, 1, false>
+#define ARM_OP_UMULL_S     ARM_OP_PATCH<2, 2, 1, 1, true>
+#define ARM_OP_UMLAL       ARM_OP_PATCH<3, 3, 1, 1, false>
+#define ARM_OP_UMLAL_S     ARM_OP_PATCH<3, 3, 1, 1, true>
+#define ARM_OP_SMULL       ARM_OP_PATCH<2, 2, 1, 1, false>
+#define ARM_OP_SMULL_S     ARM_OP_PATCH<2, 2, 1, 1, true>
+#define ARM_OP_SMLAL       ARM_OP_PATCH<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_S     ARM_OP_PATCH<3, 3, 1, 1, true>
+
+#define ARM_OP_SMUL_B_B    ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_T_B    ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_B_T    ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_T_T    ARM_OP_PATCH<2, 0, 1, 1, false>
+
+#define ARM_OP_SMLA_B_B    ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_T_B    ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_B_T    ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_T_T    ARM_OP_PATCH<2, 1, 1, 1, false>
+
+#define ARM_OP_SMULW_B     ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_SMULW_T     ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_SMLAW_B     ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_SMLAW_T     ARM_OP_PATCH<2, 1, 1, 1, false>
+
+#define ARM_OP_SMLAL_B_B   ARM_OP_PATCH<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_T_B   ARM_OP_PATCH<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_B_T   ARM_OP_PATCH<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_T_T   ARM_OP_PATCH<3, 3, 1, 1, false>
+
+#define ARM_OP_QADD        ARM_OP_PATCH<1, 2, 0, 1, true>
+#define ARM_OP_QSUB        ARM_OP_PATCH<1, 2, 0, 1, true>
+#define ARM_OP_QDADD       ARM_OP_PATCH<1, 2, 0, 1, true>
+#define ARM_OP_QDSUB       ARM_OP_PATCH<1, 2, 0, 1, true>
+
+////////
 #define ARM_MEM_OP_DEF(T, Q) \
    static const ArmOpCompiler ARM_OP_##T##_LSL_##Q = 0; \
    static const ArmOpCompiler ARM_OP_##T##_LSR_##Q = 0; \
@@ -252,87 +273,6 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF);
 ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_PREIND);
 ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 
-template <int AT16, int AT12, int AT8, int AT0, bool S>
-static int32_t ARM_OP_MULTIPLY(uint32_t opcode)
-{
-   const reg_t at16 = bit(opcode, 16, 4);
-   const reg_t at12 = bit(opcode, 12, 4);
-   const reg_t at8 = bit(opcode, 8, 4);
-   const reg_t at0 = bit(opcode, 0, 4);
-
-   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
-
-   if (at16 == 0xF || at12 == 0xF || at8 == 0xF || at0 == 0xF)
-      return 1;
-
-   load_status();
-
-   block->b("RUN", cond);
-   block->b("SKIP");
-   block->set_label("RUN");
-
-   if (AT16 & 1) read_emu_register(0, at16);
-   if (AT12 & 1) read_emu_register(1, at12);
-   if (AT8  & 1) read_emu_register(2, at8 );
-   if (AT0  & 1) read_emu_register(3, at0 );
-
-   opcode = bit_write(opcode, 16, 4, (AT16 == 0) ? 0 : 0);
-   opcode = bit_write(opcode, 12, 4, (AT12 == 0) ? 0 : 1);
-   opcode = bit_write(opcode,  8, 4, (AT8  == 0) ? 0 : 2);
-   opcode = bit_write(opcode,  0, 4, (AT0  == 0) ? 0 : 3);
-
-   block->insert_instruction(opcode, AL);
-
-   if (AT16 & 2) write_emu_register(0, at16);
-   if (AT12 & 2) write_emu_register(1, at12);
-   if (AT8  & 2) write_emu_register(2, at8 );
-   if (AT0  & 2) write_emu_register(3, at0 );
-
-   if (S)
-   {
-      write_status();
-   }
-
-   block->set_label("SKIP");
-   block->resolve_label("RUN");
-   block->resolve_label("SKIP");
-
-   return 0;
-}
-
-#define ARM_OP_MUL         ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-#define ARM_OP_MUL_S       ARM_OP_MULTIPLY<2, 0, 1, 1, true>
-#define ARM_OP_MLA         ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-#define ARM_OP_MLA_S       ARM_OP_MULTIPLY<2, 1, 1, 1, true>
-#define ARM_OP_UMULL       ARM_OP_MULTIPLY<2, 2, 1, 1, false>
-#define ARM_OP_UMULL_S     ARM_OP_MULTIPLY<2, 2, 1, 1, true>
-#define ARM_OP_UMLAL       ARM_OP_MULTIPLY<3, 3, 1, 1, false>
-#define ARM_OP_UMLAL_S     ARM_OP_MULTIPLY<3, 3, 1, 1, true>
-#define ARM_OP_SMULL       ARM_OP_MULTIPLY<2, 2, 1, 1, false>
-#define ARM_OP_SMULL_S     ARM_OP_MULTIPLY<2, 2, 1, 1, true>
-#define ARM_OP_SMLAL       ARM_OP_MULTIPLY<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_S     ARM_OP_MULTIPLY<3, 3, 1, 1, true>
-
-#define ARM_OP_SMUL_B_B    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-#define ARM_OP_SMUL_T_B    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-#define ARM_OP_SMUL_B_T    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-#define ARM_OP_SMUL_T_T    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-
-#define ARM_OP_SMLA_B_B    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-#define ARM_OP_SMLA_T_B    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-#define ARM_OP_SMLA_B_T    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-#define ARM_OP_SMLA_T_T    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-
-#define ARM_OP_SMULW_B     ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-#define ARM_OP_SMULW_T     ARM_OP_MULTIPLY<2, 0, 1, 1, false>
-#define ARM_OP_SMLAW_B     ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-#define ARM_OP_SMLAW_T     ARM_OP_MULTIPLY<2, 1, 1, 1, false>
-
-#define ARM_OP_SMLAL_B_B   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_T_B   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_B_T   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_T_T   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
-
 #define ARM_OP_STRH_POS_INDE_M_REG_OFF 0
 #define ARM_OP_LDRD_STRD_POST_INDEX 0
 #define ARM_OP_LDRH_POS_INDE_M_REG_OFF 0
@@ -352,7 +292,6 @@ static int32_t ARM_OP_MULTIPLY(uint32_t opcode)
 #define ARM_OP_LDRSB_POS_INDE_P_IMM_OFF 0
 #define ARM_OP_LDRSH_POS_INDE_P_IMM_OFF 0
 #define ARM_OP_MRS_CPSR 0
-#define ARM_OP_QADD 0
 #define ARM_OP_SWP 0
 #define ARM_OP_STRH_M_REG_OFF 0
 
@@ -363,14 +302,13 @@ static int32_t ARM_OP_MULTIPLY(uint32_t opcode)
 #define ARM_OP_MSR_CPSR 0
 #define ARM_OP_BX 0
 #define ARM_OP_BLX_REG 0
-#define ARM_OP_QSUB 0
+
 #define ARM_OP_BKPT 0
 #define ARM_OP_STRH_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_LDRH_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_LDRSB_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_LDRSH_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_MRS_SPSR 0
-#define ARM_OP_QDADD 0
 
 #define ARM_OP_SWPB 0
 #define ARM_OP_STRH_M_IMM_OFF 0
@@ -379,7 +317,6 @@ static int32_t ARM_OP_MULTIPLY(uint32_t opcode)
 #define ARM_OP_LDRSH_M_IMM_OFF 0
 #define ARM_OP_MSR_SPSR 0
 #define ARM_OP_CLZ 0
-#define ARM_OP_QDSUB 0
 #define ARM_OP_STRH_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRH_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_LDRSB_PRE_INDE_M_IMM_OFF 0
