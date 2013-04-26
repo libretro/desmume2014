@@ -33,12 +33,17 @@ code_pool::code_pool(uint32_t icount) :
    memset(labels, 0, sizeof(labels));
    memset(branches, 0, sizeof(branches));
 
-   instructions = (uint32_t*)memalign(4096, instruction_count * 4);
-
-#if 0
-   if (posix_memalign(&instructions, 4096, instruction_count * 4))
+#ifdef USE_POSIX_MEMALIGN
+   if (posix_memalign((void**)&instructions, 4096, instruction_count * 4))
    {
       fprintf(stderr, "posix_memalign failed\n");
+      abort();
+   }
+#else
+   instructions = (uint32_t*)memalign(4096, instruction_count * 4);
+   if (!instructions)
+   {
+      fprintf(stderr, "memalign failed\n");
       abort();
    }
 #endif

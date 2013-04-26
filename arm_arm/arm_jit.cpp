@@ -28,9 +28,6 @@
 #include "reg_manager.h"
 using namespace arm_gen;
 
-#include <android/log.h>
-#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR  , "des", __VA_ARGS__) 
-
 #include "instructions.h"
 #include "instruction_attributes.h"
 #include "MMU.h"
