@@ -47,6 +47,7 @@ DS_ALIGN(4096) uintptr_t compiled_funcs[1<<26] = {0};
 
 const reg_t RCPU = 4;
 const reg_t RCYC = 5;
+static uint32_t block_procnum;
 
 ///////
 // HELPERS
@@ -110,7 +111,7 @@ static int32_t ARM_OP_PATCH(uint32_t opcode)
    const reg_t at8  = bit(opcode, 8, 4);
    const reg_t at0  = bit(opcode, 0, 4);
 
-   if (AT16 && (at16 == 0xF) || AT12 && (at12 == 0xF) || AT8 && (at8 == 0xF) || AT0 && (at0 == 0xF))
+   if ((AT16 && (at16 == 0xF)) || (AT12 && (at12 == 0xF)) || (AT8 && (at8 == 0xF)) || (AT0 && (at0 == 0xF)))
       return 1;
 
    const reg_t nat16 = (AT16) ? regman->get(at16) : at16;
@@ -216,11 +217,124 @@ ARM_ALU_OP_DEF(MVN_S, 2, 0, true);
 #define ARM_OP_CLZ         ARM_OP_PATCH<0, 2, 0, 1, false>
 
 ////////
+// Need versions of these functions with exported symbol
+u8  _MMU_read08_9(u32 addr) { return _MMU_read08(0, MMU_AT_DATA, addr); }
+u8  _MMU_read08_7(u32 addr) { return _MMU_read08(1, MMU_AT_DATA, addr); }
+u16 _MMU_read16_9(u32 addr) { return _MMU_read16(0, MMU_AT_DATA, addr); }
+u16 _MMU_read16_7(u32 addr) { return _MMU_read16(1, MMU_AT_DATA, addr); }
+u32 _MMU_read32_9(u32 addr) { return _MMU_read32(0, MMU_AT_DATA, addr); }
+u32 _MMU_read32_7(u32 addr) { return _MMU_read32(1, MMU_AT_DATA, addr); }
+
+void _MMU_write08_9(u32 addr, u8  val) { _MMU_write08(0, MMU_AT_DATA, addr, val); }
+void _MMU_write08_7(u32 addr, u8  val) { _MMU_write08(1, MMU_AT_DATA, addr, val); }
+void _MMU_write16_9(u32 addr, u16 val) { _MMU_write16(0, MMU_AT_DATA, addr, val); }
+void _MMU_write16_7(u32 addr, u16 val) { _MMU_write16(1, MMU_AT_DATA, addr, val); }
+void _MMU_write32_9(u32 addr, u32 val) { _MMU_write32(0, MMU_AT_DATA, addr, val); }
+void _MMU_write32_7(u32 addr, u32 val) { _MMU_write32(1, MMU_AT_DATA, addr, val); }
+
+static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t nrn, reg_t nrm)
+{
+   // Uses nrm as scratch if loading a constant
+
+   if (bit(opcode, 25))
+   {
+      const AG_ALU_SHIFT st = (AG_ALU_SHIFT)bit(opcode, 5, 2);
+      const uint32_t imm = bit(opcode, 7, 5);
+
+      if (bit(opcode, 23)) block->add(nrn, alu2::reg_shift_imm(nrm, st, imm));
+      else                 block->sub(nrn, alu2::reg_shift_imm(nrm, st, imm));
+   }
+   else
+   {
+      block->load_constant(nrm, opcode & 0xFFF);
+
+      if (bit(opcode, 23)) block->add(nrn, alu2::reg(nrm));
+      else                 block->sub(nrn, alu2::reg(nrm));
+   }
+}
+
+static int32_t ARM_OP_MEM(uint32_t opcode)
+{
+   const bool has_reg_offset = bit(opcode, 25);
+   const bool has_pre_index = bit(opcode, 24);
+   const bool has_up_bit = bit(opcode, 23);
+   const bool has_byte_bit = bit(opcode, 22);
+   const bool has_write_back = bit(opcode, 21);
+   const bool has_load = bit(opcode, 20);
+   const reg_t rn = bit(opcode, 16, 4);
+   const reg_t rd = bit(opcode, 12, 4);
+   const reg_t rm = bit(opcode, 0, 4);
+
+   if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
+      return 1;
+
+   const reg_t dest = regman->get(rd);
+   const reg_t base = regman->get(rn);
+   const reg_t offs = has_reg_offset ? regman->get(rm) : (reg_t)3;
+
+   load_status();
+   block->b("run", (AG_COND)(opcode >> 28));
+   block->b("skip");
+   block->set_label("run");
+
+   // Put the EA in R0
+   block->mov(0, alu2::reg(base));
+
+   if (has_pre_index)
+   {
+      ARM_OP_MEM_DO_INDEX(opcode, 0, offs);
+   }
+
+   if (has_write_back)
+   {
+      if (!has_pre_index)
+      {
+         ARM_OP_MEM_DO_INDEX(opcode, base, offs);
+      }
+      else
+      {
+         block->mov(base, alu2::reg(0));
+      }
+
+      regman->mark_dirty(base);
+   }
+
+   // DO
+   if (!has_load)
+   {
+      block->mov(1, alu2::reg(dest));
+   }
+
+   static const uint32_t mem_funcs[8] =
+   {
+      (uint32_t)_MMU_read08_9 , (uint32_t)_MMU_read08_7,
+      (uint32_t)_MMU_write08_9, (uint32_t)_MMU_write08_7,
+      (uint32_t)_MMU_read32_9,  (uint32_t)_MMU_read32_7,
+      (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7
+   };
+
+   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte_bit ? 0 : 4);
+   block->load_constant(2, mem_funcs[func_idx]);
+   block->blx(2);
+
+   if (has_load)
+   {
+      block->mov(dest, alu2::reg(0));
+      regman->mark_dirty(dest);
+   }
+
+   block->set_label("skip");
+   block->resolve_label("run");
+   block->resolve_label("skip");
+
+   return 0;
+}
+
 #define ARM_MEM_OP_DEF(T, Q) \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_##Q = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_##Q = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_##Q = 0; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_##Q = 0
+   static const ArmOpCompiler ARM_OP_##T##_LSL_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_##Q = ARM_OP_MEM
 
 ARM_MEM_OP_DEF(STR_M,   IMM_OFF_POSTIND);
 ARM_MEM_OP_DEF(LDR_M,   IMM_OFF_POSTIND);
@@ -645,6 +759,8 @@ static bool instr_is_branch(bool thumb, u32 opcode)
 template<int PROCNUM>
 static ArmOpCompiled compile_basicblock()
 {
+   block_procnum = PROCNUM;
+
    const bool thumb = ARMPROC.CPSR.bits.T == 1;
    const u32 base = ARMPROC.instruct_adr;
    const u32 isize = thumb ? 2 : 4;

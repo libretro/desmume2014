@@ -110,7 +110,7 @@ class register_manager
       }
 
    private:
-      uint32_t read_emu(arm_gen::reg_t native, arm_gen::reg_t emu)
+      void read_emu(arm_gen::reg_t native, arm_gen::reg_t emu)
       {
          pool->ldr(native, RCPU, arm_gen::mem2::imm(offsetof(armcpu_t, R) + 4 * emu));
       }
