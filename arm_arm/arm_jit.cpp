@@ -103,7 +103,7 @@ static void arm_jit_prefetch(uint32_t pc, uint32_t opcode, bool thumb)
 /////////
 /// ARM
 /////////
-template <int AT16, int AT12, int AT8, int AT0, bool S>
+template <int AT16, int AT12, int AT8, int AT0, bool S, uint32_t CYC>
 static int32_t ARM_OP_PATCH(uint32_t opcode)
 {
    const reg_t at16 = bit(opcode, 16, 4);
@@ -112,7 +112,7 @@ static int32_t ARM_OP_PATCH(uint32_t opcode)
    const reg_t at0  = bit(opcode, 0, 4);
 
    if ((AT16 && (at16 == 0xF)) || (AT12 && (at12 == 0xF)) || (AT8 && (at8 == 0xF)) || (AT0 && (at0 == 0xF)))
-      return 1;
+      return -1;
 
    const reg_t nat16 = (AT16) ? regman->get(at16) : at16;
    const reg_t nat12 = (AT12) ? regman->get(at12) : at12;
@@ -133,19 +133,19 @@ static int32_t ARM_OP_PATCH(uint32_t opcode)
    if (AT8  & 2) regman->mark_dirty(nat8 );
    if (AT0  & 2) regman->mark_dirty(nat0 );
 
-   return 0;
+   return CYC;
 }
 
 #define ARM_ALU_OP_DEF(T, D, N, S) \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = ARM_OP_PATCH<N, D, 0, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = ARM_OP_PATCH<N, D, 1, 1, S>; \
-   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = ARM_OP_PATCH<N, D, 0, 0, S>
+   static const ArmOpCompiler ARM_OP_##T##_LSL_IMM = ARM_OP_PATCH<N, D, 0, 1, S, 1>; \
+   static const ArmOpCompiler ARM_OP_##T##_LSL_REG = ARM_OP_PATCH<N, D, 1, 1, S, 2>; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_IMM = ARM_OP_PATCH<N, D, 0, 1, S, 1>; \
+   static const ArmOpCompiler ARM_OP_##T##_LSR_REG = ARM_OP_PATCH<N, D, 1, 1, S, 2>; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_IMM = ARM_OP_PATCH<N, D, 0, 1, S, 1>; \
+   static const ArmOpCompiler ARM_OP_##T##_ASR_REG = ARM_OP_PATCH<N, D, 1, 1, S, 2>; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_IMM = ARM_OP_PATCH<N, D, 0, 1, S, 1>; \
+   static const ArmOpCompiler ARM_OP_##T##_ROR_REG = ARM_OP_PATCH<N, D, 1, 1, S, 2>; \
+   static const ArmOpCompiler ARM_OP_##T##_IMM_VAL = ARM_OP_PATCH<N, D, 0, 0, S, 1>
 
 ARM_ALU_OP_DEF(AND  , 2, 1, false);
 ARM_ALU_OP_DEF(AND_S, 2, 1, true);
@@ -176,45 +176,46 @@ ARM_ALU_OP_DEF(BIC_S, 2, 1, true);
 ARM_ALU_OP_DEF(MVN  , 2, 0, false);
 ARM_ALU_OP_DEF(MVN_S, 2, 0, true);
 
-#define ARM_OP_MUL         ARM_OP_PATCH<2, 0, 1, 1, false>
-#define ARM_OP_MUL_S       ARM_OP_PATCH<2, 0, 1, 1, true>
-#define ARM_OP_MLA         ARM_OP_PATCH<2, 1, 1, 1, false>
-#define ARM_OP_MLA_S       ARM_OP_PATCH<2, 1, 1, 1, true>
-#define ARM_OP_UMULL       ARM_OP_PATCH<2, 2, 1, 1, false>
-#define ARM_OP_UMULL_S     ARM_OP_PATCH<2, 2, 1, 1, true>
-#define ARM_OP_UMLAL       ARM_OP_PATCH<3, 3, 1, 1, false>
-#define ARM_OP_UMLAL_S     ARM_OP_PATCH<3, 3, 1, 1, true>
-#define ARM_OP_SMULL       ARM_OP_PATCH<2, 2, 1, 1, false>
-#define ARM_OP_SMULL_S     ARM_OP_PATCH<2, 2, 1, 1, true>
-#define ARM_OP_SMLAL       ARM_OP_PATCH<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_S     ARM_OP_PATCH<3, 3, 1, 1, true>
+// HACK: multiply cycles are wrong
+#define ARM_OP_MUL         ARM_OP_PATCH<2, 0, 1, 1, false, 3>
+#define ARM_OP_MUL_S       ARM_OP_PATCH<2, 0, 1, 1, true, 3>
+#define ARM_OP_MLA         ARM_OP_PATCH<2, 1, 1, 1, false, 4>
+#define ARM_OP_MLA_S       ARM_OP_PATCH<2, 1, 1, 1, true, 4>
+#define ARM_OP_UMULL       ARM_OP_PATCH<2, 2, 1, 1, false, 4>
+#define ARM_OP_UMULL_S     ARM_OP_PATCH<2, 2, 1, 1, true, 4>
+#define ARM_OP_UMLAL       ARM_OP_PATCH<3, 3, 1, 1, false, 5>
+#define ARM_OP_UMLAL_S     ARM_OP_PATCH<3, 3, 1, 1, true, 5>
+#define ARM_OP_SMULL       ARM_OP_PATCH<2, 2, 1, 1, false, 4>
+#define ARM_OP_SMULL_S     ARM_OP_PATCH<2, 2, 1, 1, true, 4>
+#define ARM_OP_SMLAL       ARM_OP_PATCH<3, 3, 1, 1, false, 5>
+#define ARM_OP_SMLAL_S     ARM_OP_PATCH<3, 3, 1, 1, true, 5>
 
-#define ARM_OP_SMUL_B_B    ARM_OP_PATCH<2, 0, 1, 1, false>
-#define ARM_OP_SMUL_T_B    ARM_OP_PATCH<2, 0, 1, 1, false>
-#define ARM_OP_SMUL_B_T    ARM_OP_PATCH<2, 0, 1, 1, false>
-#define ARM_OP_SMUL_T_T    ARM_OP_PATCH<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_B_B    ARM_OP_PATCH<2, 0, 1, 1, true, 2>
+#define ARM_OP_SMUL_T_B    ARM_OP_PATCH<2, 0, 1, 1, true, 2>
+#define ARM_OP_SMUL_B_T    ARM_OP_PATCH<2, 0, 1, 1, true, 2>
+#define ARM_OP_SMUL_T_T    ARM_OP_PATCH<2, 0, 1, 1, true, 2>
 
-#define ARM_OP_SMLA_B_B    ARM_OP_PATCH<2, 1, 1, 1, false>
-#define ARM_OP_SMLA_T_B    ARM_OP_PATCH<2, 1, 1, 1, false>
-#define ARM_OP_SMLA_B_T    ARM_OP_PATCH<2, 1, 1, 1, false>
-#define ARM_OP_SMLA_T_T    ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_B_B    ARM_OP_PATCH<2, 1, 1, 1, true, 2>
+#define ARM_OP_SMLA_T_B    ARM_OP_PATCH<2, 1, 1, 1, true, 2>
+#define ARM_OP_SMLA_B_T    ARM_OP_PATCH<2, 1, 1, 1, true, 2>
+#define ARM_OP_SMLA_T_T    ARM_OP_PATCH<2, 1, 1, 1, true, 2>
 
-#define ARM_OP_SMULW_B     ARM_OP_PATCH<2, 0, 1, 1, false>
-#define ARM_OP_SMULW_T     ARM_OP_PATCH<2, 0, 1, 1, false>
-#define ARM_OP_SMLAW_B     ARM_OP_PATCH<2, 1, 1, 1, false>
-#define ARM_OP_SMLAW_T     ARM_OP_PATCH<2, 1, 1, 1, false>
+#define ARM_OP_SMULW_B     ARM_OP_PATCH<2, 0, 1, 1, true, 2>
+#define ARM_OP_SMULW_T     ARM_OP_PATCH<2, 0, 1, 1, true, 2>
+#define ARM_OP_SMLAW_B     ARM_OP_PATCH<2, 1, 1, 1, true, 2>
+#define ARM_OP_SMLAW_T     ARM_OP_PATCH<2, 1, 1, 1, true, 2>
 
-#define ARM_OP_SMLAL_B_B   ARM_OP_PATCH<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_T_B   ARM_OP_PATCH<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_B_T   ARM_OP_PATCH<3, 3, 1, 1, false>
-#define ARM_OP_SMLAL_T_T   ARM_OP_PATCH<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_B_B   ARM_OP_PATCH<3, 3, 1, 1, true, 2>
+#define ARM_OP_SMLAL_T_B   ARM_OP_PATCH<3, 3, 1, 1, true, 2>
+#define ARM_OP_SMLAL_B_T   ARM_OP_PATCH<3, 3, 1, 1, true, 2>
+#define ARM_OP_SMLAL_T_T   ARM_OP_PATCH<3, 3, 1, 1, true, 2>
 
-#define ARM_OP_QADD        ARM_OP_PATCH<1, 2, 0, 1, true>
-#define ARM_OP_QSUB        ARM_OP_PATCH<1, 2, 0, 1, true>
-#define ARM_OP_QDADD       ARM_OP_PATCH<1, 2, 0, 1, true>
-#define ARM_OP_QDSUB       ARM_OP_PATCH<1, 2, 0, 1, true>
+#define ARM_OP_QADD        ARM_OP_PATCH<1, 2, 0, 1, true, 2>
+#define ARM_OP_QSUB        ARM_OP_PATCH<1, 2, 0, 1, true, 2>
+#define ARM_OP_QDADD       ARM_OP_PATCH<1, 2, 0, 1, true, 2>
+#define ARM_OP_QDSUB       ARM_OP_PATCH<1, 2, 0, 1, true, 2>
 
-#define ARM_OP_CLZ         ARM_OP_PATCH<0, 2, 0, 1, false>
+#define ARM_OP_CLZ         ARM_OP_PATCH<0, 2, 0, 1, false, 2>
 
 ////////
 // Need versions of these functions with exported symbol
@@ -274,7 +275,7 @@ static int32_t ARM_OP_MEM(uint32_t opcode)
    const reg_t rm = bit(opcode, 0, 4);
 
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
-      return 1;
+      return -1;
 
    const reg_t dest = regman->get(rd);
    const reg_t base = regman->get(rn);
@@ -327,7 +328,8 @@ static int32_t ARM_OP_MEM(uint32_t opcode)
    block->resolve_label("run");
    block->resolve_label("skip");
 
-   return 0;
+   // TODO: 
+   return 3;
 }
 
 #define ARM_MEM_OP_DEF(T, Q) \
@@ -530,7 +532,7 @@ static int32_t THUMB_OP_SHIFT(uint32_t opcode)
 
    regman->mark_dirty(nrd);
 
-   return 0;
+   return 1;
 }
 
 static int32_t THUMB_OP_ADDSUB_REGIMM(uint32_t opcode)
@@ -560,7 +562,7 @@ static int32_t THUMB_OP_ADDSUB_REGIMM(uint32_t opcode)
 
    regman->mark_dirty(nrd);
 
-   return 0;
+   return 1;
 }
 
 static int32_t THUMB_OP_MCAS_IMM8(uint32_t opcode)
@@ -588,7 +590,7 @@ static int32_t THUMB_OP_MCAS_IMM8(uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   return 0;
+   return 1;
 }
 
 static int32_t THUMB_OP_ALU(uint32_t opcode)
@@ -600,7 +602,7 @@ static int32_t THUMB_OP_ALU(uint32_t opcode)
 
    if (op == 13) // TODO: The MULS is interpreted for now
    {
-      return 1;
+      return -1;
    }
 
    const reg_t nrd = regman->get(rd);
@@ -637,7 +639,7 @@ static int32_t THUMB_OP_ALU(uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   return 0;
+   return 1;
 }
 
 static int32_t THUMB_OP_SPE(uint32_t opcode)
@@ -648,7 +650,7 @@ static int32_t THUMB_OP_SPE(uint32_t opcode)
 
    if (rd == 0xF || rs == 0xF)
    {
-      return 1;
+      return -1;
    }
 
    const reg_t nrd = regman->get(rd);
@@ -670,7 +672,7 @@ static int32_t THUMB_OP_SPE(uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   return 0;
+   return 1;
 }
 
 static int32_t THUMB_OP_LDRSTR_REG_OFF(uint32_t opcode)
@@ -703,7 +705,8 @@ static int32_t THUMB_OP_LDRSTR_REG_OFF(uint32_t opcode)
       regman->mark_dirty(dest);
    }
 
-   return 0;
+   // TODO:
+   return 3;
 }
 
 static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
@@ -735,7 +738,8 @@ static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
       regman->mark_dirty(dest);
    }
 
-   return 0;
+   // TODO: 
+   return 3;
 }
 
 #define THUMB_OP_INTERPRET       0
@@ -886,12 +890,13 @@ static ArmOpCompiled compile_basicblock()
                                      : arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
 
       const bool is_end = instr_is_branch(thumb, opcode) || (i + 1) == CommonSettings.jit_max_block_size;
-      if (compiler && compiler(opcode) == 0 && !is_end)
+      int32_t opcycles = ((!is_end) && compiler) ? compiler(opcode) : -1;
+      if (opcycles >= 0)
       {
          compiled_op = true;
 
          // HACK: Use real cycles
-         block->add(RCYC, alu2::imm(4));
+         block->add(RCYC, alu2::imm(opcycles));
       }
       else
       {
