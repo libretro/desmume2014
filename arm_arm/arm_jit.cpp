@@ -252,17 +252,17 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF);
 ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_PREIND);
 ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 
-static int32_t ARM_OP_MUL_32(uint32_t opcode)
+template <int AT16, int AT12, int AT8, int AT0, bool S>
+static int32_t ARM_OP_MULTIPLY(uint32_t opcode)
 {
-   const reg_t rd = bit(opcode, 16, 4);
-   const reg_t rn = bit(opcode, 12, 4);
-   const reg_t rs = bit(opcode, 8, 4);
-   const reg_t rm = bit(opcode, 0, 4);
-   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
-   const bool accumulate = bit(opcode, 21);
-   const bool update_status = bit(opcode, 20);
+   const reg_t at16 = bit(opcode, 16, 4);
+   const reg_t at12 = bit(opcode, 12, 4);
+   const reg_t at8 = bit(opcode, 8, 4);
+   const reg_t at0 = bit(opcode, 0, 4);
 
-   if (rn == 0xF || rd == 0xF || rm == 0xF || rs == 0xF)
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
+
+   if (at16 == 0xF || at12 == 0xF || at8 == 0xF || at0 == 0xF)
       return 1;
 
    load_status();
@@ -271,25 +271,24 @@ static int32_t ARM_OP_MUL_32(uint32_t opcode)
    block->b("SKIP");
    block->set_label("RUN");
 
-   read_emu_register(0, rs);
-   opcode = bit_write(opcode, 8, 4, 0);
+   if (AT16 & 1) read_emu_register(0, at16);
+   if (AT12 & 1) read_emu_register(1, at12);
+   if (AT8  & 1) read_emu_register(2, at8 );
+   if (AT0  & 1) read_emu_register(3, at0 );
 
-   read_emu_register(1, rm);
-   opcode = bit_write(opcode, 0, 4, 1);
-
-   if (accumulate)
-   {
-      read_emu_register(2, rn);
-      opcode = bit_write(opcode, 12, 4, 2);
-   }
-
-   opcode = bit_write(opcode, 16, 4, 0);
+   opcode = bit_write(opcode, 16, 4, (AT16 == 0) ? 0 : 0);
+   opcode = bit_write(opcode, 12, 4, (AT12 == 0) ? 0 : 1);
+   opcode = bit_write(opcode,  8, 4, (AT8  == 0) ? 0 : 2);
+   opcode = bit_write(opcode,  0, 4, (AT0  == 0) ? 0 : 3);
 
    block->insert_instruction(opcode, AL);
 
-   write_emu_register(0, rd);
+   if (AT16 & 2) write_emu_register(0, at16);
+   if (AT12 & 2) write_emu_register(1, at12);
+   if (AT8  & 2) write_emu_register(2, at8 );
+   if (AT0  & 2) write_emu_register(3, at0 );
 
-   if (update_status)
+   if (S)
    {
       write_status();
    }
@@ -301,40 +300,38 @@ static int32_t ARM_OP_MUL_32(uint32_t opcode)
    return 0;
 }
 
-#define ARM_OP_MUL   ARM_OP_MUL_32
-#define ARM_OP_MUL_S ARM_OP_MUL_32
-#define ARM_OP_MLA   ARM_OP_MUL_32
-#define ARM_OP_MLA_S ARM_OP_MUL_32
+#define ARM_OP_MUL         ARM_OP_MULTIPLY<2, 0, 1, 1, false>
+#define ARM_OP_MUL_S       ARM_OP_MULTIPLY<2, 0, 1, 1, true>
+#define ARM_OP_MLA         ARM_OP_MULTIPLY<2, 1, 1, 1, false>
+#define ARM_OP_MLA_S       ARM_OP_MULTIPLY<2, 1, 1, 1, true>
+#define ARM_OP_UMULL       ARM_OP_MULTIPLY<2, 2, 1, 1, false>
+#define ARM_OP_UMULL_S     ARM_OP_MULTIPLY<2, 2, 1, 1, true>
+#define ARM_OP_UMLAL       ARM_OP_MULTIPLY<3, 3, 1, 1, false>
+#define ARM_OP_UMLAL_S     ARM_OP_MULTIPLY<3, 3, 1, 1, true>
+#define ARM_OP_SMULL       ARM_OP_MULTIPLY<2, 2, 1, 1, false>
+#define ARM_OP_SMULL_S     ARM_OP_MULTIPLY<2, 2, 1, 1, true>
+#define ARM_OP_SMLAL       ARM_OP_MULTIPLY<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_S     ARM_OP_MULTIPLY<3, 3, 1, 1, true>
 
+#define ARM_OP_SMUL_B_B    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_T_B    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_B_T    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
+#define ARM_OP_SMUL_T_T    ARM_OP_MULTIPLY<2, 0, 1, 1, false>
 
-#define ARM_OP_UMULL 0
-#define ARM_OP_UMULL_S 0
-#define ARM_OP_UMLAL 0
-#define ARM_OP_UMLAL_S 0
-#define ARM_OP_SMLAL 0
-#define ARM_OP_SMLAL_S 0
-#define ARM_OP_SMULL 0
-#define ARM_OP_SMULL_S 0
+#define ARM_OP_SMLA_B_B    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_T_B    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_B_T    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
+#define ARM_OP_SMLA_T_T    ARM_OP_MULTIPLY<2, 1, 1, 1, false>
 
-#define ARM_OP_SMUL_B_B 0
-#define ARM_OP_SMUL_T_B 0
-#define ARM_OP_SMUL_B_T 0
-#define ARM_OP_SMUL_T_T 0
+#define ARM_OP_SMULW_B     ARM_OP_MULTIPLY<2, 0, 1, 1, false>
+#define ARM_OP_SMULW_T     ARM_OP_MULTIPLY<2, 0, 1, 1, false>
+#define ARM_OP_SMLAW_B     ARM_OP_MULTIPLY<2, 1, 1, 1, false>
+#define ARM_OP_SMLAW_T     ARM_OP_MULTIPLY<2, 1, 1, 1, false>
 
-#define ARM_OP_SMLA_B_B 0
-#define ARM_OP_SMLA_T_B 0
-#define ARM_OP_SMLA_B_T 0
-#define ARM_OP_SMLA_T_T 0
-
-#define ARM_OP_SMLAW_B 0
-#define ARM_OP_SMULW_B 0
-#define ARM_OP_SMLAW_T 0
-#define ARM_OP_SMULW_T 0
-
-#define ARM_OP_SMLAL_B_B 0
-#define ARM_OP_SMLAL_T_B 0
-#define ARM_OP_SMLAL_B_T 0
-#define ARM_OP_SMLAL_T_T 0
+#define ARM_OP_SMLAL_B_B   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_T_B   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_B_T   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
+#define ARM_OP_SMLAL_T_T   ARM_OP_MULTIPLY<3, 3, 1, 1, false>
 
 #define ARM_OP_STRH_POS_INDE_M_REG_OFF 0
 #define ARM_OP_LDRD_STRD_POST_INDEX 0
