@@ -125,7 +125,7 @@ static int32_t ARM_OP_PATCH(uint32_t opcode)
 
    const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
 
-   if (at16 == 0xF || at12 == 0xF || at8 == 0xF || at0 == 0xF)
+   if (AT16 && (at16 == 0xF) || AT12 && (at12 == 0xF) || AT8 && (at8 == 0xF) || AT0 && (at0 == 0xF))
       return 1;
 
    load_status();
