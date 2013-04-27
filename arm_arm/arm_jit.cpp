@@ -36,7 +36,8 @@ using namespace arm_gen;
 #include "bios.h"
 #include "armcpu.h"
 
-typedef int32_t (*ArmOpCompiler)(uint32_t);
+enum OP_RESULT { OPR_CONTINUE, OPR_INTERPRET, OPR_BRANCHED };
+typedef OP_RESULT (*ArmOpCompiler)(uint32_t pc, uint32_t opcode);
 
 static const uint32_t INSTRUCTION_COUNT = 0x400000;
 static code_pool* block;
@@ -104,7 +105,7 @@ static void arm_jit_prefetch(uint32_t pc, uint32_t opcode, bool thumb)
 /// ARM
 /////////
 template <int AT16, int AT12, int AT8, int AT0, bool S, uint32_t CYC>
-static int32_t ARM_OP_PATCH(uint32_t opcode)
+static OP_RESULT ARM_OP_PATCH(uint32_t pc, uint32_t opcode)
 {
    const reg_t at16 = bit(opcode, 16, 4);
    const reg_t at12 = bit(opcode, 12, 4);
@@ -112,7 +113,7 @@ static int32_t ARM_OP_PATCH(uint32_t opcode)
    const reg_t at0  = bit(opcode, 0, 4);
 
    if ((AT16 && (at16 == 0xF)) || (AT12 && (at12 == 0xF)) || (AT8 && (at8 == 0xF)) || (AT0 && (at0 == 0xF)))
-      return -1;
+      return OPR_INTERPRET;
 
    const reg_t nat16 = (AT16) ? regman->get(at16) : at16;
    const reg_t nat12 = (AT12) ? regman->get(at12) : at12;
@@ -133,7 +134,9 @@ static int32_t ARM_OP_PATCH(uint32_t opcode)
    if (AT8  & 2) regman->mark_dirty(nat8 );
    if (AT0  & 2) regman->mark_dirty(nat0 );
 
-   return CYC;
+   block->add(RCYC, alu2::imm(CYC));
+
+   return OPR_CONTINUE;
 }
 
 #define ARM_ALU_OP_DEF(T, D, N, S) \
@@ -264,7 +267,7 @@ static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t nrn, reg_t nrm)
    }
 }
 
-static int32_t ARM_OP_MEM(uint32_t opcode)
+static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
 {
    const bool has_reg_offset = bit(opcode, 25);
    const bool has_pre_index = bit(opcode, 24);
@@ -277,7 +280,7 @@ static int32_t ARM_OP_MEM(uint32_t opcode)
    const reg_t rm = bit(opcode, 0, 4);
 
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
-      return -1;
+      return OPR_INTERPRET;
 
    const reg_t dest = regman->get(rd);
    const reg_t base = regman->get(rn);
@@ -331,7 +334,9 @@ static int32_t ARM_OP_MEM(uint32_t opcode)
    block->resolve_label("skip");
 
    // TODO: 
-   return 3;
+   block->add(RCYC, alu2::imm(3));
+
+   return OPR_CONTINUE;
 }
 
 #define ARM_MEM_OP_DEF(T, Q) \
@@ -518,7 +523,7 @@ static const ArmOpCompiler arm_instruction_compilers[4096] = {
 ////////
 // THUMB
 ////////
-static int32_t THUMB_OP_SHIFT(uint32_t opcode)
+static OP_RESULT THUMB_OP_SHIFT(uint32_t pc, uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rs = bit(opcode, 3, 3);
@@ -534,10 +539,11 @@ static int32_t THUMB_OP_SHIFT(uint32_t opcode)
 
    regman->mark_dirty(nrd);
 
-   return 1;
+   block->add(RCYC, alu2::imm(1));
+   return OPR_CONTINUE;
 }
 
-static int32_t THUMB_OP_ADDSUB_REGIMM(uint32_t opcode)
+static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rs = bit(opcode, 3, 3);
@@ -564,10 +570,12 @@ static int32_t THUMB_OP_ADDSUB_REGIMM(uint32_t opcode)
 
    regman->mark_dirty(nrd);
 
-   return 1;
+   block->add(RCYC, alu2::imm(1));
+
+   return OPR_CONTINUE;
 }
 
-static int32_t THUMB_OP_MCAS_IMM8(uint32_t opcode)
+static OP_RESULT THUMB_OP_MCAS_IMM8(uint32_t pc, uint32_t opcode)
 {
    const reg_t rd = bit(opcode, 8, 3);
    const uint32_t op = bit(opcode, 11, 2);
@@ -592,10 +600,11 @@ static int32_t THUMB_OP_MCAS_IMM8(uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   return 1;
+   block->add(RCYC, alu2::imm(1));
+   return OPR_CONTINUE;
 }
 
-static int32_t THUMB_OP_ALU(uint32_t opcode)
+static OP_RESULT THUMB_OP_ALU(uint32_t pc, uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rs = bit(opcode, 3, 3);
@@ -604,7 +613,7 @@ static int32_t THUMB_OP_ALU(uint32_t opcode)
 
    if (op == 13) // TODO: The MULS is interpreted for now
    {
-      return -1;
+      return OPR_INTERPRET;
    }
 
    const reg_t nrd = regman->get(rd);
@@ -641,10 +650,11 @@ static int32_t THUMB_OP_ALU(uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   return 1;
+   block->add(RCYC, alu2::imm(1));
+   return OPR_CONTINUE;
 }
 
-static int32_t THUMB_OP_SPE(uint32_t opcode)
+static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3) + (bit(opcode, 7) ? 8 : 0);
    const uint32_t rs = bit(opcode, 3, 4);
@@ -652,7 +662,7 @@ static int32_t THUMB_OP_SPE(uint32_t opcode)
 
    if (rd == 0xF || rs == 0xF)
    {
-      return -1;
+      return OPR_INTERPRET;
    }
 
    const reg_t nrd = regman->get(rd);
@@ -674,10 +684,12 @@ static int32_t THUMB_OP_SPE(uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   return 1;
+   block->add(RCYC, alu2::imm(1));
+
+   return OPR_CONTINUE;
 }
 
-static int32_t THUMB_OP_LDRSTR_REG_OFF(uint32_t opcode)
+static OP_RESULT THUMB_OP_LDRSTR_REG_OFF(uint32_t pc, uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rb = bit(opcode, 3, 3);
@@ -708,11 +720,12 @@ static int32_t THUMB_OP_LDRSTR_REG_OFF(uint32_t opcode)
    }
 
    // TODO:
-   return 3;
+   block->add(RCYC, alu2::imm(3));
+   return OPR_CONTINUE;
 }
 
 
-static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
+static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rb = bit(opcode, 3, 3);
@@ -746,7 +759,9 @@ static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
    }
 
    // TODO: 
-   return 3;
+   block->add(RCYC, alu2::imm(3));
+
+   return OPR_CONTINUE;
 }
 
 #define THUMB_OP_INTERPRET       0
@@ -879,6 +894,7 @@ static ArmOpCompiled compile_basicblock()
 
    uint32_t pc = base;
    bool compiled_op = false;
+   bool has_ended = false;
 
    // NOTE: Expected register usage
    // R5 = Pointer to ARMPROC
@@ -890,40 +906,48 @@ static ArmOpCompiled compile_basicblock()
    block->load_constant(RCPU, (uint32_t)&ARMPROC);
    block->load_constant(RCYC, 0);
 
-   for (uint32_t i = 0; i < CommonSettings.jit_max_block_size; i ++, pc += isize)
+   for (uint32_t i = 0; i < CommonSettings.jit_max_block_size && !has_ended; i ++, pc += isize)
    {
       uint32_t opcode = thumb ? _MMU_read16<PROCNUM, MMU_AT_CODE>(pc) : _MMU_read32<PROCNUM, MMU_AT_CODE>(pc);
 
       ArmOpCompiler compiler = thumb ? thumb_instruction_compilers[opcode >> 6]
                                      : arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
 
-      const bool is_end = instr_is_branch(thumb, opcode) || (i + 1) == CommonSettings.jit_max_block_size;
-      int32_t opcycles = ((!is_end) && compiler) ? compiler(opcode) : -1;
-      if (opcycles >= 0)
+      OP_RESULT action = compiler ? compiler(pc, opcode) : OPR_INTERPRET;
+      switch (action)
       {
-         compiled_op = true;
-
-         // HACK: Use real cycles
-         block->add(RCYC, alu2::imm(opcycles));
-      }
-      else
-      {
-         if (compiled_op)
+         case OPR_INTERPRET:
          {
-            arm_jit_prefetch<PROCNUM>(pc, opcode, thumb);
-            compiled_op = false;
+            if (compiled_op)
+            {
+               arm_jit_prefetch<PROCNUM>(pc, opcode, thumb);
+               compiled_op = false;
+            }
+
+            regman->flush_all();
+            regman->reset();
+
+            block->load_constant(0, (uint32_t)&armcpu_exec<PROCNUM>);
+            block->blx(0);
+            block->add(RCYC, alu2::reg(0));
+
+            has_ended = has_ended || instr_is_branch(thumb, opcode);
+
+            break;
          }
 
-         regman->flush_all();
-         regman->reset();
+         case OPR_BRANCHED:
+         {
+            // TODO
+            break;
+         }
 
-         block->load_constant(0, (uint32_t)&armcpu_exec<PROCNUM>);
-         block->blx(0);
-         block->add(RCYC, alu2::reg(0));
+         case OPR_CONTINUE:
+         {
+            compiled_op = true;
+            break;
+         }
       }
-
-      if (is_end)
-         break;
    }
 
    regman->flush_all();
