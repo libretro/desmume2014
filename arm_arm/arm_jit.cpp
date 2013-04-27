@@ -233,12 +233,14 @@ void _MMU_write16_7(u32 addr, u16 val) { _MMU_write16(1, MMU_AT_DATA, addr, val)
 void _MMU_write32_9(u32 addr, u32 val) { _MMU_write32(0, MMU_AT_DATA, addr, val); }
 void _MMU_write32_7(u32 addr, u32 val) { _MMU_write32(1, MMU_AT_DATA, addr, val); }
 
-static const uint32_t mem_funcs[8] =
+static const uint32_t mem_funcs[12] =
 {
    (uint32_t)_MMU_read08_9 , (uint32_t)_MMU_read08_7,
    (uint32_t)_MMU_write08_9, (uint32_t)_MMU_write08_7,
    (uint32_t)_MMU_read32_9,  (uint32_t)_MMU_read32_7,
-   (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7
+   (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7,
+   (uint32_t)_MMU_read16_9,  (uint32_t)_MMU_read16_7,
+   (uint32_t)_MMU_write16_9, (uint32_t)_MMU_write16_7
 };
 
 static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t nrn, reg_t nrm)
@@ -709,26 +711,31 @@ static int32_t THUMB_OP_LDRSTR_REG_OFF(uint32_t opcode)
    return 3;
 }
 
+
 static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rb = bit(opcode, 3, 3);
    const uint32_t off = bit(opcode, 6, 5);
-   const bool has_byte = bit(opcode, 12);
+   const uint32_t op = bit(opcode, 13, 3);
    const bool has_load = bit(opcode, 11);
+   const bool has_word = (op == 3) && !bit(opcode, 12);
+   const bool has_half = (op == 4);
 
    const reg_t dest = regman->get(rd);
    const reg_t base = regman->get(rb);
 
    block->mov(0, alu2::reg(base));
-   block->add(0, alu2::imm(off << (has_byte ? 0 : 2)));
+   block->add(0, alu2::imm(off << ((has_word ? 2 : 0) + (has_half ? 1 : 0))));
 
    if (!has_load)
    {
       block->mov(1, alu2::reg(dest));
    }
 
-   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte ? 0 : 4);
+   uint32_t func_idx = block_procnum | (has_load ? 0 : 2);
+   func_idx |= has_word ? 4 : 0;
+   func_idx |= has_half ? 8 : 0;
    block->load_constant(2, mem_funcs[func_idx]);
    block->blx(2);
 
@@ -793,6 +800,9 @@ static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
 #define THUMB_OP_STRB_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
 #define THUMB_OP_LDRB_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
 
+#define THUMB_OP_STRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
+#define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
+
 // UNDEFINED OPS
 #define THUMB_OP_STRH_REG_OFF    THUMB_OP_INTERPRET
 #define THUMB_OP_LDRH_REG_OFF    THUMB_OP_INTERPRET
@@ -802,8 +812,6 @@ static int32_t THUMB_OP_LDRSTR_IMM_OFF(uint32_t opcode)
 #define THUMB_OP_BX_THUMB        THUMB_OP_INTERPRET
 #define THUMB_OP_BLX_THUMB       THUMB_OP_INTERPRET
 #define THUMB_OP_LDR_PCREL       THUMB_OP_INTERPRET
-#define THUMB_OP_STRH_IMM_OFF    THUMB_OP_INTERPRET
-#define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_INTERPRET
 #define THUMB_OP_STR_SPREL       THUMB_OP_INTERPRET
 #define THUMB_OP_LDR_SPREL       THUMB_OP_INTERPRET
 #define THUMB_OP_ADD_2PC         THUMB_OP_INTERPRET
