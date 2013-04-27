@@ -57,8 +57,7 @@ code_pool::code_pool(uint32_t icount) :
 
 code_pool::~code_pool()
 {
-   // TODO: Disable PROT_EXEC ?
-
+   mprotect(instructions, instruction_count * 4, PROT_READ | PROT_WRITE);
    free(instructions);
 }
 
@@ -76,6 +75,15 @@ void code_pool::set_label(const char* name)
 {
    for (int i = 0; i < TARGET_COUNT; i ++)
    {
+      if (labels[i].name == name)
+      {
+         fprintf(stderr, "Duplicate label\n");
+         abort();
+      }
+   }
+
+   for (int i = 0; i < TARGET_COUNT; i ++)
+   {
       if (labels[i].name == 0)
       {
          labels[i].name = name;
@@ -84,7 +92,8 @@ void code_pool::set_label(const char* name)
       }
    }
 
-   assert(false);
+   fprintf(stderr, "Label overflow\n");
+   abort();
 }
 
 void code_pool::resolve_label(const char* name)

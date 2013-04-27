@@ -81,10 +81,9 @@ struct mem2
 
    public:
       static mem2 reg_shift_imm(reg_t rm, AG_ALU_SHIFT type, uint32_t imm) { return mem2((1 << 25) | rm | (type << 5) | (imm << 7)); }
-      static mem2 imm_ror(uint32_t val, uint32_t ror)                      { return mem2(((ror / 2) << 8) | val); }
 
       static mem2 reg(reg_t rm)                                            { return reg_shift_imm(rm, LSL, 0); }
-      static mem2 imm(uint32_t val)                                        { return imm_ror(val, 0); }
+      static mem2 imm(uint32_t val)                                        { return mem2(val); }
 
       const uint32_t encoding;
 };
