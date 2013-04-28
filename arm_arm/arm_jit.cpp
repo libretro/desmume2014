@@ -282,7 +282,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
-   const reg_t dest = regman->get(rd);
+   const reg_t dest = regman->get(rd, has_load);
    const reg_t base = regman->get(rn);
    const reg_t offs = has_reg_offset ? regman->get(rm) : (reg_t)3;
 
@@ -530,7 +530,7 @@ static OP_RESULT THUMB_OP_SHIFT(uint32_t pc, uint32_t opcode)
    const uint32_t imm = bit(opcode, 6, 5);
    const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
 
-   const reg_t nrd = regman->get(rd);
+   const reg_t nrd = regman->get(rd, true);
    const reg_t nrs = regman->get(rs);
 
    load_status();
@@ -551,7 +551,7 @@ static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
    const bool arg_type = bit(opcode, 10);
    const uint32_t arg = bit(opcode, 6, 3);
 
-   const reg_t nrd = regman->get(rd);
+   const reg_t nrd = regman->get(rd, true);
    const reg_t nrs = regman->get(rs);
 
    if (arg_type) // Immediate
@@ -697,7 +697,7 @@ static OP_RESULT THUMB_OP_LDRSTR_REG_OFF(uint32_t pc, uint32_t opcode)
    const bool has_byte = bit(opcode, 10);
    const bool has_load = bit(opcode, 11);
 
-   const reg_t dest = regman->get(rd);
+   const reg_t dest = regman->get(rd, has_load);
    const reg_t base = regman->get(rb);
    const reg_t offs = regman->get(ro);
 
@@ -735,7 +735,7 @@ static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
    const bool has_word = (op == 3) && !bit(opcode, 12);
    const bool has_half = (op == 4);
 
-   const reg_t dest = regman->get(rd);
+   const reg_t dest = regman->get(rd, has_load);
    const reg_t base = regman->get(rb);
 
    block->mov(0, alu2::reg(base));

@@ -63,12 +63,19 @@ class register_manager
       }
 
    public:
-      arm_gen::reg_t get(uint32_t emu_reg_id)
+      arm_gen::reg_t get(uint32_t emu_reg_id, bool no_read = false)
       {
          int32_t current = find(emu_reg_id);
          if (current >= 0)
          {
             assert(is_usable(current));
+
+            if (weak[current] && !no_read)
+            {
+               read_emu(current, emu_reg_id);
+               weak[current] = false;
+            }
+
             return current;
          }
 
@@ -77,7 +84,12 @@ class register_manager
 
          mapping[result] = emu_reg_id;
          usage_tag[result] = next_usage_tag ++;
-         read_emu(result, emu_reg_id);
+         weak[result] = no_read;
+
+         if (!no_read)
+         {
+            read_emu(result, emu_reg_id);
+         }
 
          return result;
       }
@@ -86,12 +98,13 @@ class register_manager
       {
          assert(is_usable(native_reg));
          dirty[native_reg] = true;
+         weak[native_reg] = false;
       }
 
       void flush(uint32_t native_reg)
       {
          assert(is_usable(native_reg));
-         if (dirty[native_reg])
+         if (dirty[native_reg] && !weak[native_reg])
          {
             write_emu(native_reg, mapping[native_reg]);
             dirty[native_reg] = false;
@@ -126,6 +139,7 @@ class register_manager
       uint32_t mapping[16]; // Mapping[native] = emu
       uint32_t usage_tag[16];
       bool dirty[16];
+      bool weak[16];
 
       uint32_t next_usage_tag;
 };
