@@ -274,6 +274,7 @@ static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t nrn, reg_t nrm)
 
 static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
 {
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
    const bool has_reg_offset = bit(opcode, 25);
    const bool has_pre_index = bit(opcode, 24);
    const bool has_up_bit = bit(opcode, 23);
@@ -291,10 +292,13 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    const reg_t base = regman->get(rn);
    const reg_t offs = has_reg_offset ? regman->get(rm) : (reg_t)3;
 
-   load_status();
-   block->b("run", (AG_COND)(opcode >> 28));
-   block->b("skip");
-   block->set_label("run");
+   if (cond != AL)
+   {
+      load_status();
+      block->b("run", (AG_COND)(opcode >> 28));
+      block->b("skip");
+      block->set_label("run");
+   }
 
    // Put the EA in R0
    block->mov(0, alu2::reg(base));
@@ -334,9 +338,12 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
       regman->mark_dirty(dest);
    }
 
-   block->set_label("skip");
-   block->resolve_label("run");
-   block->resolve_label("skip");
+   if (cond != AL)
+   {
+      block->set_label("skip");
+      block->resolve_label("run");
+      block->resolve_label("skip");
+   }
 
    // TODO: 
    block->add(RCYC, alu2::imm(3));
