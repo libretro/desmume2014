@@ -811,6 +811,37 @@ static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
    return OPR_CONTINUE;
 }
 
+static OP_RESULT THUMB_OP_ADD_2PC(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t offset = bit(opcode, 0, 8);
+   const reg_t rd = bit(opcode, 8, 3);
+
+   reg_t dest = regman->get(rd, true);
+   block->load_constant(dest, ((pc + 4) & 0xFFFFFFFC) + (offset << 2));
+   regman->mark_dirty(dest);
+
+   block->add(RCYC, alu2::imm(1));
+
+   return OPR_CONTINUE;
+}
+
+static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t offset = bit(opcode, 0, 8);
+   const reg_t rd = bit(opcode, 8, 3);
+
+   reg_t sp = regman->get(13);
+
+   reg_t dest = regman->get(rd, true);
+   block->add(dest, sp, alu2::imm_rol(offset, 2));
+   regman->mark_dirty(dest);
+
+   block->add(RCYC, alu2::imm(1));
+
+   return OPR_CONTINUE;
+}
+
+
 #define THUMB_OP_INTERPRET       0
 #define THUMB_OP_UND_THUMB       THUMB_OP_INTERPRET
 
@@ -880,8 +911,6 @@ static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_LDR_PCREL       THUMB_OP_INTERPRET
 #define THUMB_OP_STR_SPREL       THUMB_OP_INTERPRET
 #define THUMB_OP_LDR_SPREL       THUMB_OP_INTERPRET
-#define THUMB_OP_ADD_2PC         THUMB_OP_INTERPRET
-#define THUMB_OP_ADD_2SP         THUMB_OP_INTERPRET
 #define THUMB_OP_PUSH            THUMB_OP_INTERPRET
 #define THUMB_OP_PUSH_LR         THUMB_OP_INTERPRET
 #define THUMB_OP_POP             THUMB_OP_INTERPRET
