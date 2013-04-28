@@ -764,7 +764,56 @@ static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
    return OPR_CONTINUE;
 }
 
-static OP_RESULT THUMB_OP_BRANCH_C(uint32_t pc, uint32_t opcode)
+static OP_RESULT THUMB_OP_LDRSTR_SIGN(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t rd = bit(opcode, 0, 3);
+   const uint32_t rb = bit(opcode, 3, 3);
+   const uint32_t ro = bit(opcode, 6, 3);
+   const uint32_t op = bit(opcode, 10, 2);
+
+   const reg_t dest = regman->get(rd);
+   const reg_t base = regman->get(rb);
+   const reg_t offs = regman->get(ro);
+
+   block->mov(0, alu2::reg(base));
+   block->add(0, alu2::reg(offs));
+
+   switch (op)
+   {
+      case 0: // STRH
+         block->mov(1, alu2::reg(dest));
+         block->load_constant(2, (uint32_t)mem_funcs[10 + block_procnum]);
+         block->blx(2);
+         break;
+
+      case 1: // LDSB
+         block->load_constant(2, (uint32_t)mem_funcs[0 + block_procnum]);
+         block->blx(2);
+         block->sxtb(dest, 0);
+         regman->mark_dirty(dest);
+         break;
+
+      case 2: // LDRH
+         block->load_constant(2, (uint32_t)mem_funcs[8 + block_procnum]);
+         block->blx(2);
+         block->uxth(dest, 0);
+         regman->mark_dirty(dest);
+         break;
+
+      case 3: // LDSH
+         block->load_constant(2, (uint32_t)mem_funcs[8 + block_procnum]);
+         block->blx(2);
+         block->sxth(dest, 0);
+         regman->mark_dirty(dest);
+         break;
+   }
+
+   // TODO:
+   block->add(RCYC, alu2::imm(3));
+   return OPR_CONTINUE;
+}
+
+static OP_RESULT THUMB_OP_B_COND(uint32_t pc, uint32_t opcode)
 {
    const AG_COND cond = (AG_COND)bit(opcode, 8, 4);
 
@@ -779,7 +828,7 @@ static OP_RESULT THUMB_OP_BRANCH_C(uint32_t pc, uint32_t opcode)
    return OPR_BRANCHED;
 }
 
-static OP_RESULT THUMB_OP_BRANCH_U(uint32_t pc, uint32_t opcode)
+static OP_RESULT THUMB_OP_B_UNCOND(uint32_t pc, uint32_t opcode)
 {
    int32_t offs = (opcode & 0x7FF) | (bit(opcode, 10) ? 0xFFFFF800 : 0);
    block->load_constant(0, pc + 4 + (offs << 1));
@@ -791,6 +840,21 @@ static OP_RESULT THUMB_OP_BRANCH_U(uint32_t pc, uint32_t opcode)
    return OPR_BRANCHED;
 }
 
+static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t offs = bit(opcode, 0, 7);
+
+   const reg_t sp = regman->get(13);
+
+   if (bit(opcode, 7)) block->sub(sp, alu2::imm_rol(offs, 2));
+   else                block->add(sp, alu2::imm_rol(offs, 2));
+
+   regman->mark_dirty(sp);
+
+   block->add(RCYC, alu2::imm(1));
+
+   return OPR_CONTINUE;
+}
 
 #define THUMB_OP_INTERPRET       0
 #define THUMB_OP_UND_THUMB       THUMB_OP_INTERPRET
@@ -846,15 +910,16 @@ static OP_RESULT THUMB_OP_BRANCH_U(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_STRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
 #define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
 
-#define THUMB_OP_B_COND          THUMB_OP_BRANCH_C
-#define THUMB_OP_B_UNCOND        THUMB_OP_BRANCH_U
+#define THUMB_OP_STRH_REG_OFF    THUMB_OP_LDRSTR_SIGN
+#define THUMB_OP_LDRH_REG_OFF    THUMB_OP_LDRSTR_SIGN
+#define THUMB_OP_LDRSH_REG_OFF   THUMB_OP_LDRSTR_SIGN
+#define THUMB_OP_LDRSB_REG_OFF   THUMB_OP_LDRSTR_SIGN
+
+#define THUMB_OP_ADJUST_P_SP     THUMB_OP_ADJUST_SP
+#define THUMB_OP_ADJUST_M_SP     THUMB_OP_ADJUST_SP
+
 
 // UNDEFINED OPS
-#define THUMB_OP_STRH_REG_OFF    THUMB_OP_INTERPRET
-#define THUMB_OP_LDRH_REG_OFF    THUMB_OP_INTERPRET
-#define THUMB_OP_LDRSH_REG_OFF   THUMB_OP_INTERPRET
-#define THUMB_OP_LDRSB_REG_OFF   THUMB_OP_INTERPRET
-
 #define THUMB_OP_BX_THUMB        THUMB_OP_INTERPRET
 #define THUMB_OP_BLX_THUMB       THUMB_OP_INTERPRET
 #define THUMB_OP_LDR_PCREL       THUMB_OP_INTERPRET
@@ -862,8 +927,6 @@ static OP_RESULT THUMB_OP_BRANCH_U(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_LDR_SPREL       THUMB_OP_INTERPRET
 #define THUMB_OP_ADD_2PC         THUMB_OP_INTERPRET
 #define THUMB_OP_ADD_2SP         THUMB_OP_INTERPRET
-#define THUMB_OP_ADJUST_P_SP     THUMB_OP_INTERPRET
-#define THUMB_OP_ADJUST_M_SP     THUMB_OP_INTERPRET
 #define THUMB_OP_PUSH            THUMB_OP_INTERPRET
 #define THUMB_OP_PUSH_LR         THUMB_OP_INTERPRET
 #define THUMB_OP_POP             THUMB_OP_INTERPRET

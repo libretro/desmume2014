@@ -67,6 +67,8 @@ struct alu2
       static alu2 reg_shift_reg(reg_t rm, AG_ALU_SHIFT type, reg_t rs)     { return alu2(rm | (type << 5) | 0x10 | (rs << 8)); }
       static alu2 reg_shift_imm(reg_t rm, AG_ALU_SHIFT type, uint32_t imm) { return alu2(rm | (type << 5) | (imm << 7)); }
       static alu2 imm_ror(uint32_t val, uint32_t ror)                      { return alu2((1 << 25) | ((ror / 2) << 8) | val); }
+      static alu2 imm_rol(uint32_t val, uint32_t rol)                      { return imm_ror(val, (32 - rol) & 0x1F); }
+
 
       static alu2 reg(reg_t rm)                                            { return reg_shift_imm(rm, LSL, 0); }
       static alu2 imm(uint8_t val)                                         { return imm_ror(val, 0); }
@@ -164,6 +166,12 @@ class code_pool
       void str (reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(STR , rd, base, arg, flags, cond); }
       void ldrb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(LDRB, rd, base, arg, flags, cond); }
       void strb(reg_t rd, reg_t base, const mem2& arg = mem2::imm(0), AG_MEM_FLAGS flags = MEM_NONE, AG_COND cond = AL) { mem_op(STRB, rd, base, arg, flags, cond); }
+
+      // Code Gen: Sign Extend
+      void sxtb(reg_t rd, reg_t rm, AG_COND cond = AL)           { insert_instruction( 0x06AF0070 | (rd << 12) | rm, cond ); }
+      void sxth(reg_t rd, reg_t rm, AG_COND cond = AL)           { insert_instruction( 0x06BF0070 | (rd << 12) | rm, cond ); }
+      void uxtb(reg_t rd, reg_t rm, AG_COND cond = AL)           { insert_instruction( 0x06EF0070 | (rd << 12) | rm, cond ); }
+      void uxth(reg_t rd, reg_t rm, AG_COND cond = AL)           { insert_instruction( 0x06FF0070 | (rd << 12) | rm, cond ); }
 
       // Code Gen: Other
       void set_status(reg_t source_reg, AG_COND cond = AL)  { insert_instruction( 0x0128F000 | source_reg, cond ); }
