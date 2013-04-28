@@ -104,8 +104,7 @@ static void arm_jit_prefetch(uint32_t pc, uint32_t opcode, bool thumb)
 /////////
 /// ARM
 /////////
-template <int AT16, int AT12, int AT8, int AT0, bool S, uint32_t CYC>
-static OP_RESULT ARM_OP_PATCH(uint32_t pc, uint32_t opcode)
+static OP_RESULT ARM_OP_PATCH_DELEGATE(uint32_t pc, uint32_t opcode, int AT16, int AT12, int AT8, int AT0, bool S, uint32_t CYC) 
 {
    const reg_t at16 = bit(opcode, 16, 4);
    const reg_t at12 = bit(opcode, 12, 4);
@@ -137,6 +136,12 @@ static OP_RESULT ARM_OP_PATCH(uint32_t pc, uint32_t opcode)
    block->add(RCYC, alu2::imm(CYC));
 
    return OPR_CONTINUE;
+}
+
+template <int AT16, int AT12, int AT8, int AT0, bool S, uint32_t CYC>
+static OP_RESULT ARM_OP_PATCH(uint32_t pc, uint32_t opcode)
+{
+   return ARM_OP_PATCH_DELEGATE(pc, opcode, AT16, AT12, AT8, AT0, S, CYC);
 }
 
 #define ARM_ALU_OP_DEF(T, D, N, S) \
@@ -240,10 +245,10 @@ static const uint32_t mem_funcs[12] =
 {
    (uint32_t)_MMU_read08_9 , (uint32_t)_MMU_read08_7,
    (uint32_t)_MMU_write08_9, (uint32_t)_MMU_write08_7,
-   (uint32_t)_MMU_read32_9,  (uint32_t)_MMU_read32_7,
-   (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7,
    (uint32_t)_MMU_read16_9,  (uint32_t)_MMU_read16_7,
-   (uint32_t)_MMU_write16_9, (uint32_t)_MMU_write16_7
+   (uint32_t)_MMU_write16_9, (uint32_t)_MMU_write16_7,
+   (uint32_t)_MMU_read32_9,  (uint32_t)_MMU_read32_7,
+   (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7
 };
 
 static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t nrn, reg_t nrm)
@@ -319,7 +324,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
       block->mov(1, alu2::reg(dest));
    }
 
-   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte_bit ? 0 : 4);
+   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte_bit ? 0 : 8);
    block->load_constant(2, mem_funcs[func_idx]);
    block->blx(2);
 
@@ -689,128 +694,71 @@ static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
    return OPR_CONTINUE;
 }
 
-static OP_RESULT THUMB_OP_LDRSTR_REG_OFF(uint32_t pc, uint32_t opcode)
+static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOAD, uint32_t SIZE, uint32_t EXTEND, bool REG_OFFSET)
 {
    const uint32_t rd = bit(opcode, 0, 3);
    const uint32_t rb = bit(opcode, 3, 3);
    const uint32_t ro = bit(opcode, 6, 3);
-   const bool has_byte = bit(opcode, 10);
-   const bool has_load = bit(opcode, 11);
-
-   const reg_t dest = regman->get(rd, has_load);
-   const reg_t base = regman->get(rb);
-   const reg_t offs = regman->get(ro);
-
-   block->mov(0, alu2::reg(base));
-   block->add(0, alu2::reg(offs));
-
-   if (!has_load)
-   {
-      block->mov(1, alu2::reg(dest));
-   }
-
-   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte ? 0 : 4);
-   block->load_constant(2, mem_funcs[func_idx]);
-   block->blx(2);
-
-   if (has_load)
-   {
-      block->mov(dest, alu2::reg(0));
-      regman->mark_dirty(dest);
-   }
-
-   // TODO:
-   block->add(RCYC, alu2::imm(3));
-   return OPR_CONTINUE;
-}
-
-
-static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
-{
-   const uint32_t rd = bit(opcode, 0, 3);
-   const uint32_t rb = bit(opcode, 3, 3);
    const uint32_t off = bit(opcode, 6, 5);
-   const uint32_t op = bit(opcode, 13, 3);
-   const bool has_load = bit(opcode, 11);
-   const bool has_word = (op == 3) && !bit(opcode, 12);
-   const bool has_half = (op == 4);
 
-   const reg_t dest = regman->get(rd, has_load);
+   const reg_t dest = regman->get(rd, LOAD);
    const reg_t base = regman->get(rb);
 
-   block->mov(0, alu2::reg(base));
-   block->add(0, alu2::imm(off << ((has_word ? 2 : 0) + (has_half ? 1 : 0))));
+   // Calc EA
 
-   if (!has_load)
+   if (REG_OFFSET)
+   {
+      const reg_t offset = regman->get(ro);
+      block->mov(0, alu2::reg(base));
+      block->add(0, alu2::reg(offset));
+   }
+   else
+   {
+      block->add(0, base, alu2::imm(off << SIZE));
+   }
+
+   // Load access function
+   block->load_constant(2, mem_funcs[(SIZE << 2) + (LOAD ? 0 : 2) + block_procnum]);
+
+   if (!LOAD)
    {
       block->mov(1, alu2::reg(dest));
    }
 
-   uint32_t func_idx = block_procnum | (has_load ? 0 : 2);
-   func_idx |= has_word ? 4 : 0;
-   func_idx |= has_half ? 8 : 0;
-   block->load_constant(2, mem_funcs[func_idx]);
    block->blx(2);
 
-   if (has_load)
+   if (LOAD)
    {
-      block->mov(dest, alu2::reg(0));
+      if (EXTEND)
+      {
+         if (SIZE == 0)
+         {
+            block->sxtb(dest, 0);
+         }
+         else
+         {
+            block->sxth(dest, 0);
+         }
+      }
+      else
+      {
+         block->mov(dest, alu2::reg(0));
+      }
+
       regman->mark_dirty(dest);
    }
 
-   // TODO: 
+   // TODO
    block->add(RCYC, alu2::imm(3));
 
    return OPR_CONTINUE;
 }
 
-static OP_RESULT THUMB_OP_LDRSTR_SIGN(uint32_t pc, uint32_t opcode)
+// SIZE: 0=8, 1=16, 2=32
+template <bool LOAD, uint32_t SIZE, uint32_t EXTEND, bool REG_OFFSET>
+static OP_RESULT THUMB_OP_MEMORY(uint32_t pc, uint32_t opcode)
 {
-   const uint32_t rd = bit(opcode, 0, 3);
-   const uint32_t rb = bit(opcode, 3, 3);
-   const uint32_t ro = bit(opcode, 6, 3);
-   const uint32_t op = bit(opcode, 10, 2);
-
-   const reg_t dest = regman->get(rd);
-   const reg_t base = regman->get(rb);
-   const reg_t offs = regman->get(ro);
-
-   block->mov(0, alu2::reg(base));
-   block->add(0, alu2::reg(offs));
-
-   switch (op)
-   {
-      case 0: // STRH
-         block->mov(1, alu2::reg(dest));
-         block->load_constant(2, (uint32_t)mem_funcs[10 + block_procnum]);
-         block->blx(2);
-         break;
-
-      case 1: // LDSB
-         block->load_constant(2, (uint32_t)mem_funcs[0 + block_procnum]);
-         block->blx(2);
-         block->sxtb(dest, 0);
-         regman->mark_dirty(dest);
-         break;
-
-      case 2: // LDRH
-         block->load_constant(2, (uint32_t)mem_funcs[8 + block_procnum]);
-         block->blx(2);
-         block->uxth(dest, 0);
-         regman->mark_dirty(dest);
-         break;
-
-      case 3: // LDSH
-         block->load_constant(2, (uint32_t)mem_funcs[8 + block_procnum]);
-         block->blx(2);
-         block->sxth(dest, 0);
-         regman->mark_dirty(dest);
-         break;
-   }
-
-   // TODO:
-   block->add(RCYC, alu2::imm(3));
-   return OPR_CONTINUE;
+   return THUMB_OP_MEMORY_DELEGATE(pc, opcode, LOAD, SIZE, EXTEND, REG_OFFSET);
 }
 
 static OP_RESULT THUMB_OP_B_COND(uint32_t pc, uint32_t opcode)
@@ -897,27 +845,27 @@ static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_CMP_SPE         THUMB_OP_SPE
 #define THUMB_OP_MOV_SPE         THUMB_OP_SPE
 
-#define THUMB_OP_STR_REG_OFF     THUMB_OP_LDRSTR_REG_OFF
-#define THUMB_OP_STRB_REG_OFF    THUMB_OP_LDRSTR_REG_OFF
-#define THUMB_OP_LDR_REG_OFF     THUMB_OP_LDRSTR_REG_OFF
-#define THUMB_OP_LDRB_REG_OFF    THUMB_OP_LDRSTR_REG_OFF
-
-#define THUMB_OP_STR_IMM_OFF     THUMB_OP_LDRSTR_IMM_OFF
-#define THUMB_OP_LDR_IMM_OFF     THUMB_OP_LDRSTR_IMM_OFF
-#define THUMB_OP_STRB_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
-#define THUMB_OP_LDRB_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
-
-#define THUMB_OP_STRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
-#define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
-
-#define THUMB_OP_STRH_REG_OFF    THUMB_OP_LDRSTR_SIGN
-#define THUMB_OP_LDRH_REG_OFF    THUMB_OP_LDRSTR_SIGN
-#define THUMB_OP_LDRSH_REG_OFF   THUMB_OP_LDRSTR_SIGN
-#define THUMB_OP_LDRSB_REG_OFF   THUMB_OP_LDRSTR_SIGN
-
 #define THUMB_OP_ADJUST_P_SP     THUMB_OP_ADJUST_SP
 #define THUMB_OP_ADJUST_M_SP     THUMB_OP_ADJUST_SP
 
+#define THUMB_OP_LDRB_REG_OFF    THUMB_OP_MEMORY<true , 0, 0, true>
+#define THUMB_OP_LDRH_REG_OFF    THUMB_OP_MEMORY<true , 1, 0, true>
+#define THUMB_OP_LDR_REG_OFF     THUMB_OP_MEMORY<true , 2, 0, true>
+
+#define THUMB_OP_STRB_REG_OFF    THUMB_OP_MEMORY<false, 0, 0, true>
+#define THUMB_OP_STRH_REG_OFF    THUMB_OP_MEMORY<false, 1, 0, true>
+#define THUMB_OP_STR_REG_OFF     THUMB_OP_MEMORY<false, 2, 0, true>
+
+#define THUMB_OP_LDRB_IMM_OFF    THUMB_OP_MEMORY<true , 0, 0, false>
+#define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_MEMORY<true , 1, 0, false>
+#define THUMB_OP_LDR_IMM_OFF     THUMB_OP_MEMORY<true , 2, 0, false>
+
+#define THUMB_OP_STRB_IMM_OFF    THUMB_OP_MEMORY<false, 0, 0, false>
+#define THUMB_OP_STRH_IMM_OFF    THUMB_OP_MEMORY<false, 1, 0, false>
+#define THUMB_OP_STR_IMM_OFF     THUMB_OP_MEMORY<false, 2, 0, false>
+
+#define THUMB_OP_LDRSB_REG_OFF   THUMB_OP_MEMORY<true , 0, 1, true>
+#define THUMB_OP_LDRSH_REG_OFF   THUMB_OP_MEMORY<true , 1, 1, true>
 
 // UNDEFINED OPS
 #define THUMB_OP_BX_THUMB        THUMB_OP_INTERPRET
