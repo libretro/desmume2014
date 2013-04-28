@@ -764,6 +764,34 @@ static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
    return OPR_CONTINUE;
 }
 
+static OP_RESULT THUMB_OP_BRANCH_C(uint32_t pc, uint32_t opcode)
+{
+   const AG_COND cond = (AG_COND)bit(opcode, 8, 4);
+
+   load_status();
+   block->load_constant(0, pc + 2);
+   block->load_constant(0, (pc + 4) + ((u32)((s8)(opcode&0xFF))<<1), cond);
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+
+   block->add(RCYC, alu2::imm(2), cond);
+   block->add(RCYC, alu2::imm(1));
+
+   return OPR_BRANCHED;
+}
+
+static OP_RESULT THUMB_OP_BRANCH_U(uint32_t pc, uint32_t opcode)
+{
+   int32_t offs = (opcode & 0x7FF) | (bit(opcode, 10) ? 0xFFFFF800 : 0);
+   block->load_constant(0, pc + 4 + (offs << 1));
+
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+
+   block->add(RCYC, alu2::imm(3));
+
+   return OPR_BRANCHED;
+}
+
+
 #define THUMB_OP_INTERPRET       0
 #define THUMB_OP_UND_THUMB       THUMB_OP_INTERPRET
 
@@ -818,6 +846,9 @@ static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_STRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
 #define THUMB_OP_LDRH_IMM_OFF    THUMB_OP_LDRSTR_IMM_OFF
 
+#define THUMB_OP_B_COND          THUMB_OP_BRANCH_C
+#define THUMB_OP_B_UNCOND        THUMB_OP_BRANCH_U
+
 // UNDEFINED OPS
 #define THUMB_OP_STRH_REG_OFF    THUMB_OP_INTERPRET
 #define THUMB_OP_LDRH_REG_OFF    THUMB_OP_INTERPRET
@@ -840,9 +871,7 @@ static OP_RESULT THUMB_OP_LDRSTR_IMM_OFF(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_BKPT_THUMB      THUMB_OP_INTERPRET
 #define THUMB_OP_STMIA_THUMB     THUMB_OP_INTERPRET
 #define THUMB_OP_LDMIA_THUMB     THUMB_OP_INTERPRET
-#define THUMB_OP_B_COND          THUMB_OP_INTERPRET
 #define THUMB_OP_SWI_THUMB       THUMB_OP_INTERPRET
-#define THUMB_OP_B_UNCOND        THUMB_OP_INTERPRET
 #define THUMB_OP_BLX             THUMB_OP_INTERPRET
 #define THUMB_OP_BL_10           THUMB_OP_INTERPRET
 #define THUMB_OP_BL_11           THUMB_OP_INTERPRET
@@ -893,7 +922,7 @@ static ArmOpCompiled compile_basicblock()
    const u32 isize = thumb ? 2 : 4;
 
    uint32_t pc = base;
-   bool compiled_op = false;
+   bool compiled_op = true;
    bool has_ended = false;
 
    // NOTE: Expected register usage
@@ -938,7 +967,8 @@ static ArmOpCompiled compile_basicblock()
 
          case OPR_BRANCHED:
          {
-            // TODO
+            has_ended = true;
+            compiled_op = false;
             break;
          }
 
@@ -950,7 +980,13 @@ static ArmOpCompiled compile_basicblock()
       }
    }
 
+   if (compiled_op)
+   {
+      arm_jit_prefetch<PROCNUM>(pc, 0, thumb);
+   }
+
    regman->flush_all();
+   regman->reset();
 
    block->mov(0, alu2::reg(RCYC));
    block->pop(0x8DF0);
