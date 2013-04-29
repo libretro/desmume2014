@@ -37,6 +37,10 @@ using namespace arm_gen;
 #include "armcpu.h"
 
 enum OP_RESULT { OPR_CONTINUE, OPR_INTERPRET, OPR_BRANCHED };
+#define OPR_RESULT(result, cycles) (OP_RESULT)((result) | ((cycles) << 16));
+#define OPR_RESULT_CYCLES(result) ((result >> 16))
+#define OPR_RESULT_ACTION(result) ((result & 0xFF))
+
 typedef OP_RESULT (*ArmOpCompiler)(uint32_t pc, uint32_t opcode);
 
 static const uint32_t INSTRUCTION_COUNT = 0x400000;
@@ -133,9 +137,7 @@ static OP_RESULT ARM_OP_PATCH_DELEGATE(uint32_t pc, uint32_t opcode, int AT16, i
    if (AT8  & 2) regman->mark_dirty(nat8 );
    if (AT0  & 2) regman->mark_dirty(nat0 );
 
-   block->add(RCYC, alu2::imm(CYC));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, CYC);
 }
 
 template <int AT16, int AT12, int AT8, int AT0, bool S, uint32_t CYC>
@@ -346,9 +348,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    }
 
    // TODO: 
-   block->add(RCYC, alu2::imm(3));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 3);
 }
 
 #define ARM_MEM_OP_DEF(T, Q) \
@@ -551,8 +551,7 @@ static OP_RESULT THUMB_OP_SHIFT(uint32_t pc, uint32_t opcode)
 
    regman->mark_dirty(nrd);
 
-   block->add(RCYC, alu2::imm(1));
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
@@ -582,9 +581,7 @@ static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
 
    regman->mark_dirty(nrd);
 
-   block->add(RCYC, alu2::imm(1));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_MCAS_IMM8(uint32_t pc, uint32_t opcode)
@@ -612,8 +609,7 @@ static OP_RESULT THUMB_OP_MCAS_IMM8(uint32_t pc, uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   block->add(RCYC, alu2::imm(1));
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_ALU(uint32_t pc, uint32_t opcode)
@@ -662,8 +658,7 @@ static OP_RESULT THUMB_OP_ALU(uint32_t pc, uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   block->add(RCYC, alu2::imm(1));
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
@@ -696,9 +691,7 @@ static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
       regman->mark_dirty(nrd);
    }
 
-   block->add(RCYC, alu2::imm(1));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOAD, uint32_t SIZE, uint32_t EXTEND, bool REG_OFFSET)
@@ -756,9 +749,7 @@ static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOA
    }
 
    // TODO
-   block->add(RCYC, alu2::imm(3));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 3);
 }
 
 // SIZE: 0=8, 1=16, 2=32
@@ -778,9 +769,8 @@ static OP_RESULT THUMB_OP_B_COND(uint32_t pc, uint32_t opcode)
    block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
 
    block->add(RCYC, alu2::imm(2), cond);
-   block->add(RCYC, alu2::imm(1));
 
-   return OPR_BRANCHED;
+   return OPR_RESULT(OPR_BRANCHED, 1);
 }
 
 static OP_RESULT THUMB_OP_B_UNCOND(uint32_t pc, uint32_t opcode)
@@ -790,9 +780,7 @@ static OP_RESULT THUMB_OP_B_UNCOND(uint32_t pc, uint32_t opcode)
 
    block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
 
-   block->add(RCYC, alu2::imm(3));
-
-   return OPR_BRANCHED;
+   return OPR_RESULT(OPR_BRANCHED, 3);
 }
 
 static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
@@ -806,9 +794,7 @@ static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
 
    regman->mark_dirty(sp);
 
-   block->add(RCYC, alu2::imm(1));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_ADD_2PC(uint32_t pc, uint32_t opcode)
@@ -820,9 +806,7 @@ static OP_RESULT THUMB_OP_ADD_2PC(uint32_t pc, uint32_t opcode)
    block->load_constant(dest, ((pc + 4) & 0xFFFFFFFC) + (offset << 2));
    regman->mark_dirty(dest);
 
-   block->add(RCYC, alu2::imm(1));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
@@ -836,9 +820,7 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
    block->add(dest, sp, alu2::imm_rol(offset, 2));
    regman->mark_dirty(dest);
 
-   block->add(RCYC, alu2::imm(1));
-
-   return OPR_CONTINUE;
+   return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
 
@@ -971,6 +953,7 @@ static ArmOpCompiled compile_basicblock()
    uint32_t pc = base;
    bool compiled_op = true;
    bool has_ended = false;
+   uint32_t constant_cycles = 0;
 
    // NOTE: Expected register usage
    // R5 = Pointer to ARMPROC
@@ -989,8 +972,9 @@ static ArmOpCompiled compile_basicblock()
       ArmOpCompiler compiler = thumb ? thumb_instruction_compilers[opcode >> 6]
                                      : arm_instruction_compilers[INSTRUCTION_INDEX(opcode)];
 
-      OP_RESULT action = compiler ? compiler(pc, opcode) : OPR_INTERPRET;
-      switch (action)
+      OP_RESULT result = compiler ? compiler(pc, opcode) : OPR_INTERPRET;
+      constant_cycles += OPR_RESULT_CYCLES(result);
+      switch (OPR_RESULT_ACTION(result))
       {
          case OPR_INTERPRET:
          {
@@ -1035,7 +1019,8 @@ static ArmOpCompiled compile_basicblock()
    regman->flush_all();
    regman->reset();
 
-   block->mov(0, alu2::reg(RCYC));
+   block->load_constant(1, constant_cycles);
+   block->add(0, 1, alu2::reg(RCYC));
    block->pop(0x8DF0);
 
    void* fn_ptr = block->fn_pointer();
