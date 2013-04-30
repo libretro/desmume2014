@@ -86,6 +86,31 @@ static void write_status(AG_COND cond = AL)
    block->strb(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR) + 3), MEM_NONE, cond);
 }
 
+static void change_mode(bool thumb)
+{
+   block->ldr(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+
+   if (!thumb)
+   {
+      block->bic(0, alu2::imm(1 << 5));
+   }
+   else
+   {
+      block->orr(0, alu2::imm(1 << 5));
+   }
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+}
+
+static void change_mode_reg(reg_t reg)
+{
+   block->and_(1, reg, alu2::imm(1));
+
+   block->ldr(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+   block->bic(0, alu2::imm(1 << 5));
+   block->orr(0, alu2::reg_shift_imm(1, LSL, 5));
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+}
+
 template <int PROCNUM>
 static void arm_jit_prefetch(uint32_t pc, uint32_t opcode, bool thumb)
 {
@@ -759,6 +784,93 @@ static OP_RESULT THUMB_OP_MEMORY(uint32_t pc, uint32_t opcode)
    return THUMB_OP_MEMORY_DELEGATE(pc, opcode, LOAD, SIZE, EXTEND, REG_OFFSET);
 }
 
+static OP_RESULT THUMB_OP_LDR_PCREL(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t offset = bit(opcode, 0, 8);
+
+   const reg_t rd = bit(opcode, 8, 3);
+   const reg_t dest = regman->get(rd, true);
+
+   block->load_constant(0, ((pc + 4) & ~2) + (offset << 2));
+   block->load_constant(2, mem_funcs[8 + block_procnum]);
+   block->blx(2);
+   block->mov(dest, alu2::reg(0));
+
+   regman->mark_dirty(dest);
+   return OPR_RESULT(OPR_CONTINUE, 3);
+}
+
+static OP_RESULT THUMB_OP_STR_SPREL(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t offset = bit(opcode, 0, 8);
+   const reg_t rd = bit(opcode, 8, 3);
+
+   const reg_t src = regman->get(rd);
+   const reg_t base = regman->get(13);
+
+   block->add(0, base, alu2::imm_rol(offset, 2));
+   block->mov(1, alu2::reg(src));
+   block->load_constant(2, mem_funcs[10 + block_procnum]);
+   block->blx(2);
+
+   return OPR_RESULT(OPR_CONTINUE, 3);
+}
+
+static OP_RESULT THUMB_OP_LDR_SPREL(uint32_t pc, uint32_t opcode)
+{
+   const uint32_t offset = bit(opcode, 0, 8);
+   const reg_t rd = bit(opcode, 8, 3);
+
+   const reg_t dest = regman->get(rd, true);
+   const reg_t base = regman->get(13);
+
+   block->add(0, base, alu2::imm_rol(offset, 2));
+   block->load_constant(2, mem_funcs[8 + block_procnum]);
+   block->blx(2);
+   block->mov(dest, alu2::reg(0));
+
+   regman->mark_dirty(dest);
+   return OPR_RESULT(OPR_CONTINUE, 3);
+}
+
+
+static OP_RESULT THUMB_OP_LDRSTR_REL(uint32_t pc, uint32_t opcode)
+{
+   const bool use_pc = bit(opcode, 11, 5) == 0x09;
+   const uint32_t offset = bit(opcode, 0, 8);
+   const bool load = use_pc ? true : bit(opcode, 11);
+   const reg_t rd = bit(opcode, 8, 3);
+
+   const reg_t base = use_pc ? (reg_t)0 : regman->get(13);
+   const reg_t dest = regman->get(rd, load);
+
+   block->load_constant(2, mem_funcs[8 + (load ? 0 : 2) + block_procnum]);
+
+   if (!load)
+   {
+      block->mov(1, alu2::reg(dest));
+   }
+
+   if (!use_pc)
+   {
+      block->add(0, base, alu2::imm_rol(offset, 2));
+   }
+   else
+   {
+      block->load_constant(0, ((pc + 4) & ~2) + (offset << 2));
+   }
+
+   block->blx(2);
+
+   if (load)
+   {
+      block->mov(dest, alu2::reg(0));
+      regman->mark_dirty(dest);
+   }
+
+   return OPR_RESULT(OPR_CONTINUE, 3);
+}
+
 static OP_RESULT THUMB_OP_B_COND(uint32_t pc, uint32_t opcode)
 {
    const AG_COND cond = (AG_COND)bit(opcode, 8, 4);
@@ -823,6 +935,79 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
    return OPR_RESULT(OPR_CONTINUE, 1);
 }
 
+static OP_RESULT THUMB_OP_BX_BLX_THUMB(uint32_t pc, uint32_t opcode)
+{
+   const reg_t rm = bit(opcode, 3, 4);
+   const bool link = bit(opcode, 7);
+
+   block->load_constant(0, pc + 4);
+
+   if (link)
+   {   
+      reg_t lr = regman->get(14, true);
+      block->sub(lr, 0, alu2::imm(1));
+      regman->mark_dirty(lr);
+   }
+
+   if (rm == 15)
+   {
+      change_mode(false);
+      block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+   }
+   else
+   {
+      reg_t target = regman->get(rm);
+
+      change_mode_reg(target);
+      block->bic(0, target, alu2::imm(1));
+      block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+   }
+
+   return OPR_RESULT(OPR_BRANCHED, 3);
+}
+
+#if 1
+#define THUMB_OP_BL_LONG 0
+#else
+static OP_RESULT THUMB_OP_BL_LONG(uint32_t pc, uint32_t opcode)
+{
+   static const uint32_t op = bit(opcode, 11, 5);
+   int32_t offset = bit(opcode, 0, 11);
+
+   reg_t lr = regman->get(14, op == 0x1E);
+
+   if (op == 0x1E)
+   {
+      offset |= (offset & 0x400) ? 0xFFFFF800 : 0;
+      block->load_constant(lr, (pc + 4) + (offset << 12));
+   }
+   else
+   {
+      block->load_constant(0, offset << 1);
+
+      block->add(0, lr, alu2::reg(0));
+      block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+
+      block->load_constant(lr, pc + 3);
+
+      if (op != 0x1F)
+      {
+         change_mode(false);
+      }
+   }
+
+   regman->mark_dirty(lr);
+
+   if (op == 0x1E)
+   {
+      return OPR_RESULT(OPR_CONTINUE, 1);
+   }
+   else
+   {
+      return OPR_RESULT(OPR_BRANCHED, (op == 0x1F) ? 3 : 4);
+   }
+}
+#endif
 
 #define THUMB_OP_INTERPRET       0
 #define THUMB_OP_UND_THUMB       THUMB_OP_INTERPRET
@@ -887,12 +1072,14 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_LDRSB_REG_OFF   THUMB_OP_MEMORY<true , 0, 1, true>
 #define THUMB_OP_LDRSH_REG_OFF   THUMB_OP_MEMORY<true , 1, 1, true>
 
+#define THUMB_OP_BX_THUMB        THUMB_OP_BX_BLX_THUMB
+#define THUMB_OP_BLX_THUMB       THUMB_OP_BX_BLX_THUMB
+#define THUMB_OP_BL_10           THUMB_OP_BL_LONG
+#define THUMB_OP_BL_11           THUMB_OP_BL_LONG
+#define THUMB_OP_BLX             THUMB_OP_BL_LONG
+
+
 // UNDEFINED OPS
-#define THUMB_OP_BX_THUMB        THUMB_OP_INTERPRET
-#define THUMB_OP_BLX_THUMB       THUMB_OP_INTERPRET
-#define THUMB_OP_LDR_PCREL       THUMB_OP_INTERPRET
-#define THUMB_OP_STR_SPREL       THUMB_OP_INTERPRET
-#define THUMB_OP_LDR_SPREL       THUMB_OP_INTERPRET
 #define THUMB_OP_PUSH            THUMB_OP_INTERPRET
 #define THUMB_OP_PUSH_LR         THUMB_OP_INTERPRET
 #define THUMB_OP_POP             THUMB_OP_INTERPRET
@@ -901,9 +1088,6 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
 #define THUMB_OP_STMIA_THUMB     THUMB_OP_INTERPRET
 #define THUMB_OP_LDMIA_THUMB     THUMB_OP_INTERPRET
 #define THUMB_OP_SWI_THUMB       THUMB_OP_INTERPRET
-#define THUMB_OP_BLX             THUMB_OP_INTERPRET
-#define THUMB_OP_BL_10           THUMB_OP_INTERPRET
-#define THUMB_OP_BL_11           THUMB_OP_INTERPRET
 
 static const ArmOpCompiler thumb_instruction_compilers[1024] = {
 #define TABDECL(x) THUMB_##x
