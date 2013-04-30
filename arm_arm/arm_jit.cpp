@@ -330,6 +330,8 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    const reg_t rd = bit(opcode, 12, 4);
    const reg_t rm = bit(opcode, 0, 4);
 
+   return OPR_INTERPRET;
+
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
