@@ -278,24 +278,24 @@ static const uint32_t mem_funcs[12] =
    (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7
 };
 
-static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t nrn, reg_t nrm)
+static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t base, reg_t offset)
 {
-   // Uses nrm as scratch if loading a constant
+   // Uses offset as scratch if loading a constant
 
    if (bit(opcode, 25))
    {
       const AG_ALU_SHIFT st = (AG_ALU_SHIFT)bit(opcode, 5, 2);
       const uint32_t imm = bit(opcode, 7, 5);
 
-      if (bit(opcode, 23)) block->add(nrn, alu2::reg_shift_imm(nrm, st, imm));
-      else                 block->sub(nrn, alu2::reg_shift_imm(nrm, st, imm));
+      if (bit(opcode, 23)) block->add(base, alu2::reg_shift_imm(offset, st, imm));
+      else                 block->sub(base, alu2::reg_shift_imm(offset, st, imm));
    }
    else
    {
-      block->load_constant(nrm, opcode & 0xFFF);
+      block->load_constant(offset, opcode & 0xFFF);
 
-      if (bit(opcode, 23)) block->add(nrn, alu2::reg(nrm));
-      else                 block->sub(nrn, alu2::reg(nrm));
+      if (bit(opcode, 23)) block->add(base, alu2::reg(offset));
+      else                 block->sub(base, alu2::reg(offset));
    }
 }
 
@@ -322,7 +322,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    if (cond != AL)
    {
       load_status();
-      block->b("run", (AG_COND)(opcode >> 28));
+      block->b("run", cond);
       block->b("skip");
       block->set_label("run");
    }
@@ -335,7 +335,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
       ARM_OP_MEM_DO_INDEX(opcode, 0, offs);
    }
 
-   if (has_write_back)
+   if (!has_pre_index || has_write_back)
    {
       if (!has_pre_index)
       {
@@ -376,128 +376,111 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    return OPR_RESULT(OPR_CONTINUE, 3);
 }
 
-#define ARM_MEM_OP_DEF(T, Q) \
-   static const ArmOpCompiler ARM_OP_##T##_LSL_##Q = ARM_OP_MEM; \
-   static const ArmOpCompiler ARM_OP_##T##_LSR_##Q = ARM_OP_MEM; \
-   static const ArmOpCompiler ARM_OP_##T##_ASR_##Q = ARM_OP_MEM; \
-   static const ArmOpCompiler ARM_OP_##T##_ROR_##Q = ARM_OP_MEM
+#define ARM_MEM_OP_DEF2(T, Q) \
+   static const ArmOpCompiler ARM_OP_##T##_M_LSL_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_P_LSL_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_M_LSR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_P_LSR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_M_ASR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_P_ASR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_M_ROR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_P_ROR_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_M_##Q = ARM_OP_MEM; \
+   static const ArmOpCompiler ARM_OP_##T##_P_##Q = ARM_OP_MEM
 
-ARM_MEM_OP_DEF(STR_M,   IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(LDR_M,   IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(STRB_M,  IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(LDRB_M,  IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(STR_P,   IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(LDR_P,   IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_POSTIND);
-ARM_MEM_OP_DEF(STR_M,   IMM_OFF);
-ARM_MEM_OP_DEF(LDR_M,   IMM_OFF);
-ARM_MEM_OP_DEF(STR_M,   IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(LDR_M,   IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(STRB_M,  IMM_OFF);
-ARM_MEM_OP_DEF(LDRB_M,  IMM_OFF);
-ARM_MEM_OP_DEF(STRB_M,  IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(LDRB_M,  IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(STR_P,   IMM_OFF);
-ARM_MEM_OP_DEF(LDR_P,   IMM_OFF);
-ARM_MEM_OP_DEF(STR_P,   IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(LDR_P,   IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(STRB_P,  IMM_OFF);
-ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF);
-ARM_MEM_OP_DEF(STRB_P,  IMM_OFF_PREIND);
-ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
+#define ARM_MEM_OP_DEF(T) \
+   ARM_MEM_OP_DEF2(T, IMM_OFF_PREIND); \
+   ARM_MEM_OP_DEF2(T, IMM_OFF); \
+   ARM_MEM_OP_DEF2(T, IMM_OFF_POSTIND)
+
+ARM_MEM_OP_DEF(STR);
+ARM_MEM_OP_DEF(LDR);
+ARM_MEM_OP_DEF(STRB);
+ARM_MEM_OP_DEF(LDRB);
+
+// 
+
+#define ARM_OP_LDRD_STRD_POST_INDEX 0
+#define ARM_OP_LDRD_STRD_OFFSET_PRE_INDEX 0
 
 #define ARM_OP_STRH_POS_INDE_M_REG_OFF 0
-#define ARM_OP_LDRD_STRD_POST_INDEX 0
-#define ARM_OP_LDRH_POS_INDE_M_REG_OFF 0
-#define ARM_OP_LDRSB_POS_INDE_M_REG_OFF 0
-#define ARM_OP_LDRSH_POS_INDE_M_REG_OFF 0
-#define ARM_OP_UND 0
 #define ARM_OP_STRH_POS_INDE_M_IMM_OFF 0
-#define ARM_OP_LDRH_POS_INDE_M_IMM_OFF 0
-#define ARM_OP_LDRSB_POS_INDE_M_IMM_OFF 0
-#define ARM_OP_LDRSH_POS_INDE_M_IMM_OFF 0
 #define ARM_OP_STRH_POS_INDE_P_REG_OFF 0
-#define ARM_OP_LDRH_POS_INDE_P_REG_OFF 0
-#define ARM_OP_LDRSB_POS_INDE_P_REG_OFF 0
-#define ARM_OP_LDRSH_POS_INDE_P_REG_OFF 0
 #define ARM_OP_STRH_POS_INDE_P_IMM_OFF 0
+
+#define ARM_OP_STRH_M_REG_OFF 0
+#define ARM_OP_STRH_M_IMM_OFF 0
+#define ARM_OP_STRH_P_REG_OFF 0
+#define ARM_OP_STRH_P_IMM_OFF 0
+
+#define ARM_OP_STRH_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_STRH_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_STRH_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_STRH_PRE_INDE_P_IMM_OFF 0
+
+
+#define ARM_OP_LDRH_POS_INDE_M_REG_OFF 0
+#define ARM_OP_LDRH_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRH_POS_INDE_P_REG_OFF 0
 #define ARM_OP_LDRH_POS_INDE_P_IMM_OFF 0
+
+#define ARM_OP_LDRH_M_REG_OFF 0
+#define ARM_OP_LDRH_M_IMM_OFF 0
+#define ARM_OP_LDRH_P_REG_OFF 0
+#define ARM_OP_LDRH_P_IMM_OFF 0
+
+
+#define ARM_OP_LDRH_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_LDRH_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRH_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_LDRH_PRE_INDE_P_IMM_OFF 0 
+
+#define ARM_OP_LDRSB_POS_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSB_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSB_POS_INDE_P_REG_OFF 0
 #define ARM_OP_LDRSB_POS_INDE_P_IMM_OFF 0
+
+#define ARM_OP_LDRSB_M_REG_OFF 0
+#define ARM_OP_LDRSB_M_IMM_OFF 0
+#define ARM_OP_LDRSB_P_REG_OFF 0
+#define ARM_OP_LDRSB_P_IMM_OFF 0
+
+#define ARM_OP_LDRSB_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSB_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSB_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_LDRSB_PRE_INDE_P_IMM_OFF 0
+
+
+#define ARM_OP_LDRSH_POS_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSH_POS_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSH_POS_INDE_P_REG_OFF 0
 #define ARM_OP_LDRSH_POS_INDE_P_IMM_OFF 0
+
+#define ARM_OP_LDRSH_M_REG_OFF 0
+#define ARM_OP_LDRSH_M_IMM_OFF 0
+#define ARM_OP_LDRSH_P_REG_OFF 0
+#define ARM_OP_LDRSH_P_IMM_OFF 0
+
+#define ARM_OP_LDRSH_PRE_INDE_M_REG_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_M_IMM_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_P_REG_OFF 0
+#define ARM_OP_LDRSH_PRE_INDE_P_IMM_OFF 0
+
+
+//
 #define ARM_OP_MRS_CPSR 0
 #define ARM_OP_SWP 0
-#define ARM_OP_STRH_M_REG_OFF 0
-
-#define ARM_OP_LDRD_STRD_OFFSET_PRE_INDEX 0
-#define ARM_OP_LDRH_M_REG_OFF 0
-#define ARM_OP_LDRSB_M_REG_OFF 0
-#define ARM_OP_LDRSH_M_REG_OFF 0
 #define ARM_OP_MSR_CPSR 0
 #define ARM_OP_BX 0
 #define ARM_OP_BLX_REG 0
-
 #define ARM_OP_BKPT 0
-#define ARM_OP_STRH_PRE_INDE_M_REG_OFF 0
-#define ARM_OP_LDRH_PRE_INDE_M_REG_OFF 0
-#define ARM_OP_LDRSB_PRE_INDE_M_REG_OFF 0
-#define ARM_OP_LDRSH_PRE_INDE_M_REG_OFF 0
 #define ARM_OP_MRS_SPSR 0
-
 #define ARM_OP_SWPB 0
-#define ARM_OP_STRH_M_IMM_OFF 0
-#define ARM_OP_LDRH_M_IMM_OFF 0
-#define ARM_OP_LDRSB_M_IMM_OFF 0
-#define ARM_OP_LDRSH_M_IMM_OFF 0
 #define ARM_OP_MSR_SPSR 0
-#define ARM_OP_STRH_PRE_INDE_M_IMM_OFF 0
-#define ARM_OP_LDRH_PRE_INDE_M_IMM_OFF 0
-#define ARM_OP_LDRSB_PRE_INDE_M_IMM_OFF 0
-#define ARM_OP_LDRSH_PRE_INDE_M_IMM_OFF 0
 #define ARM_OP_STREX 0
-#define ARM_OP_STRH_P_REG_OFF 0
 #define ARM_OP_LDREX 0
-#define ARM_OP_LDRH_P_REG_OFF 0
-#define ARM_OP_LDRSB_P_REG_OFF 0
-#define ARM_OP_LDRSH_P_REG_OFF 0
-#define ARM_OP_STRH_PRE_INDE_P_REG_OFF 0
-#define ARM_OP_LDRH_PRE_INDE_P_REG_OFF 0
-#define ARM_OP_LDRSB_PRE_INDE_P_REG_OFF 0
-#define ARM_OP_LDRSH_PRE_INDE_P_REG_OFF 0
-#define ARM_OP_STRH_P_IMM_OFF 0
-#define ARM_OP_LDRH_P_IMM_OFF 0
-#define ARM_OP_LDRSB_P_IMM_OFF 0
-#define ARM_OP_LDRSH_P_IMM_OFF 0
-#define ARM_OP_STRH_PRE_INDE_P_IMM_OFF 0
-#define ARM_OP_LDRH_PRE_INDE_P_IMM_OFF 0 
-#define ARM_OP_LDRSB_PRE_INDE_P_IMM_OFF 0
-#define ARM_OP_LDRSH_PRE_INDE_P_IMM_OFF 0
 #define ARM_OP_MSR_CPSR_IMM_VAL 0
 #define ARM_OP_MSR_SPSR_IMM_VAL 0
-#define ARM_OP_STR_M_IMM_OFF_POSTIND 0
-#define ARM_OP_LDR_M_IMM_OFF_POSTIND 0
-#define ARM_OP_STRB_M_IMM_OFF_POSTIND 0
-#define ARM_OP_LDRB_M_IMM_OFF_POSTIND 0
-#define ARM_OP_STR_P_IMM_OFF_POSTIND 0
-#define ARM_OP_LDR_P_IMM_OFF_POSTIND 0
-#define ARM_OP_STRB_P_IMM_OFF_POSTIND 0
-#define ARM_OP_LDRB_P_IMM_OFF_POSTIND 0
-#define ARM_OP_STR_M_IMM_OFF 0
-#define ARM_OP_LDR_M_IMM_OFF 0
-#define ARM_OP_STR_M_IMM_OFF_PREIND 0
-#define ARM_OP_LDR_M_IMM_OFF_PREIND 0
-#define ARM_OP_STRB_M_IMM_OFF 0
-#define ARM_OP_LDRB_M_IMM_OFF 0
-#define ARM_OP_STRB_M_IMM_OFF_PREIND 0
-#define ARM_OP_LDRB_M_IMM_OFF_PREIND 0
-#define ARM_OP_STR_P_IMM_OFF 0
-#define ARM_OP_LDR_P_IMM_OFF 0
-#define ARM_OP_STR_P_IMM_OFF_PREIND 0
-#define ARM_OP_LDR_P_IMM_OFF_PREIND 0
-#define ARM_OP_STRB_P_IMM_OFF 0
-#define ARM_OP_LDRB_P_IMM_OFF 0
-#define ARM_OP_STRB_P_IMM_OFF_PREIND 0
-#define ARM_OP_LDRB_P_IMM_OFF_PREIND 0
 #define ARM_OP_STMDA 0
 #define ARM_OP_LDMDA 0
 #define ARM_OP_STMDA_W 0
@@ -550,7 +533,7 @@ ARM_MEM_OP_DEF(LDRB_P,  IMM_OFF_PREIND);
 #define ARM_OP_MCR 0
 #define ARM_OP_MRC 0
 #define ARM_OP_SWI 0
-
+#define ARM_OP_UND 0
 static const ArmOpCompiler arm_instruction_compilers[4096] = {
 #define TABDECL(x) ARM_##x
 #include "instruction_tabdef.inc"
