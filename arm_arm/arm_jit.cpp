@@ -1139,11 +1139,6 @@ static ArmOpCompiled compile_basicblock()
       }
    }
 
-   if (compiled_op)
-   {
-      arm_jit_prefetch<PROCNUM>(pc, 0, thumb);
-   }
-
    regman->flush_all();
    regman->reset();
 
