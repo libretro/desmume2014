@@ -423,14 +423,101 @@ ARM_MEM_OP_DEF(STRB);
 ARM_MEM_OP_DEF(LDRB);
 
 // 
-#if 0
 static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
 {
-   return OPR_INTERPRET;
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
+   const bool has_pre_index = bit(opcode, 24);
+   const bool has_up_bit = bit(opcode, 23);
+   const bool has_imm_offset = bit(opcode, 22);
+   const bool has_write_back = bit(opcode, 21);
+   const bool has_load = bit(opcode, 20);
+   const uint32_t op = bit(opcode, 5, 2);
+   const reg_t rn = bit(opcode, 16, 4);
+   const reg_t rd = bit(opcode, 12, 4);
+   const reg_t rm = bit(opcode, 0, 4);
+
+   if (rn == 0xF || rd == 0xF || (!has_imm_offset && (rm == 0xF)))
+      return OPR_INTERPRET;
+
+   const reg_t dest = regman->get(rd);
+   const reg_t base = regman->get(rn);
+   const reg_t offs = !has_imm_offset ? regman->get(rm) : (reg_t)0;
+
+
+   // HACK: This needs to done manually here as we can't branch over the generated code
+   mark_status_dirty();
+   write_status(3);
+
+   if (cond != AL)
+   {
+      block->b("run", cond);
+      block->b("skip");
+      block->set_label("run");
+   }
+
+   // Put the indexed address in R3
+   if (!has_imm_offset)
+   {
+      if (has_up_bit) block->add(3, base, alu2::reg(offs));
+      else            block->sub(3, base, alu2::reg(offs));
+   }
+   else
+   {
+      block->load_constant(3, (opcode & 0xF) | ((opcode >> 4) & 0xF0));
+
+      if (has_up_bit) block->add(3, base, alu2::reg(3));
+      else            block->sub(3, base, alu2::reg(3));
+   }
+
+   // Load EA
+   block->mov(0, alu2::reg((has_pre_index ? (reg_t)3 : base)));
+
+   // Do Writeback
+   if ((!has_pre_index) || has_write_back)
+   {
+      block->mov(base, alu2::reg(3));
+      regman->mark_dirty(base);
+   }
+
+   // DO
+   if (!has_load)
+   {
+      switch (op)
+      {
+         case 1: block->uxth(1, dest); break;
+         case 2: block->sxtb(1, dest); break;
+         case 3: block->sxth(1, dest); break;
+      }
+   }
+
+   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | ((op == 2) ? 0 : 4);
+   block->load_constant(2, mem_funcs[func_idx]);
+   block->blx(2);
+
+   if (has_load)
+   {
+      switch (op)
+      {
+         case 1: block->uxth(dest, 0); break;
+         case 2: block->sxtb(dest, 0); break;
+         case 3: block->sxth(dest, 0); break;
+      }
+
+      regman->mark_dirty(dest);
+   }
+
+   if (cond != AL)
+   {
+      block->set_label("skip");
+      block->resolve_label("run");
+      block->resolve_label("skip");
+   }
+
+   load_status(3);
+
+   // TODO: 
+   return OPR_RESULT(OPR_CONTINUE, 3);
 }
-#else
-#define ARM_OP_MEM_HALF 0
-#endif
 
 #define ARM_MEM_HALF_OP_DEF2(T, P) \
    static const ArmOpCompiler ARM_OP_##T##_##P##M_REG_OFF = ARM_OP_MEM_HALF; \
