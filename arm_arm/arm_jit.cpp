@@ -162,23 +162,25 @@ static OP_RESULT ARM_OP_PATCH_DELEGATE(uint32_t pc, uint32_t opcode, int AT16, i
    if ((AT16 && (at16 == 0xF)) || (AT12 && (at12 == 0xF)) || (AT8 && (at8 == 0xF)) || (AT0 && (at0 == 0xF)))
       return OPR_INTERPRET;
 
-   const reg_t nat16 = (AT16) ? regman->get(at16) : at16;
-   const reg_t nat12 = (AT12) ? regman->get(at12) : at12;
-   const reg_t nat8  = (AT8 ) ? regman->get(at8 ) : at8 ;
-   const reg_t nat0  = (AT0 ) ? regman->get(at0 ) : at0 ;
+   int32_t reg_list[4];
+   reg_list[0] = (AT16) ? (int32_t)at16 : -1;
+   reg_list[1] = (AT12) ? (int32_t)at12 : -1;
+   reg_list[2] = (AT8 ) ? (int32_t)at8  : -1;
+   reg_list[3] = (AT0 ) ? (int32_t)at0  : -1;
+   regman->get(4, reg_list);
 
-   opcode = bit_write(opcode, 16, 4, nat16);
-   opcode = bit_write(opcode, 12, 4, nat12);
-   opcode = bit_write(opcode,  8, 4, nat8 );
-   opcode = bit_write(opcode,  0, 4, nat0 );
+   opcode = AT16 ? bit_write(opcode, 16, 4, reg_list[0]) : opcode;
+   opcode = AT12 ? bit_write(opcode, 12, 4, reg_list[1]) : opcode;
+   opcode = AT8  ? bit_write(opcode,  8, 4, reg_list[2]) : opcode;
+   opcode = AT0  ? bit_write(opcode,  0, 4, reg_list[3]) : opcode;
 
    block->insert_raw_instruction(opcode);
    if (S) mark_status_dirty();
 
-   if (AT16 & 2) regman->mark_dirty(nat16);
-   if (AT12 & 2) regman->mark_dirty(nat12);
-   if (AT8  & 2) regman->mark_dirty(nat8 );
-   if (AT0  & 2) regman->mark_dirty(nat0 );
+   if (AT16 & 2) regman->mark_dirty(reg_list[0]);
+   if (AT12 & 2) regman->mark_dirty(reg_list[1]);
+   if (AT8  & 2) regman->mark_dirty(reg_list[2]);
+   if (AT0  & 2) regman->mark_dirty(reg_list[3]);
 
    return OPR_RESULT(OPR_CONTINUE, CYC);
 }
@@ -313,10 +315,12 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, const uint32_t opcode)
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
-   const reg_t dest = regman->get(rd);
-   const reg_t base = regman->get(rn);
-   const reg_t offs = has_reg_offset ? regman->get(rm) : (reg_t)0;
+   int32_t regs[3] = { rd, rn, has_reg_offset ? (int32_t)rm : -1 };
+   regman->get(3, regs);
 
+   const reg_t dest = regs[0];
+   const reg_t base = regs[1];
+   const reg_t offs = has_reg_offset ? regs[2] : 3;
 
    // HACK: This needs to done manually here as we can't branch over the generated code
    mark_status_dirty();
@@ -439,10 +443,12 @@ static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
    if (rn == 0xF || rd == 0xF || (!has_imm_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
-   const reg_t dest = regman->get(rd);
-   const reg_t base = regman->get(rn);
-   const reg_t offs = !has_imm_offset ? regman->get(rm) : (reg_t)0;
+   int32_t regs[3] = { rd, rn, (!has_imm_offset) ? (int32_t)rm : -1 };
+   regman->get(3, regs);
 
+   const reg_t dest = regs[0];
+   const reg_t base = regs[1];
+   const reg_t offs = (!has_imm_offset) ? regs[2] : 0;
 
    // HACK: This needs to done manually here as we can't branch over the generated code
    mark_status_dirty();
@@ -622,8 +628,11 @@ static OP_RESULT THUMB_OP_SHIFT(uint32_t pc, uint32_t opcode)
    const uint32_t imm = bit(opcode, 6, 5);
    const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
 
-   const reg_t nrd = regman->get(rd, true);
-   const reg_t nrs = regman->get(rs);
+   int32_t regs[2] = { rd, rs };
+   regman->get(2, regs);
+
+   const reg_t nrd = regs[0];
+   const reg_t nrs = regs[1];
 
    block->movs(nrd, alu2::reg_shift_imm(nrs, op, imm));
    mark_status_dirty();
@@ -641,8 +650,11 @@ static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
    const bool arg_type = bit(opcode, 10);
    const uint32_t arg = bit(opcode, 6, 3);
 
-   const reg_t nrd = regman->get(rd, true);
-   const reg_t nrs = regman->get(rs);
+   int32_t regs[3] = { rd, rs, (!arg_type) ? arg : -1 };
+   regman->get(3, regs);
+
+   const reg_t nrd = regs[0];
+   const reg_t nrs = regs[1];
 
    if (arg_type) // Immediate
    {
@@ -651,8 +663,7 @@ static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
    }
    else
    {
-      const reg_t narg = regman->get(arg);
-      block->alu_op(op, nrd, nrs, alu2::reg(narg));
+      block->alu_op(op, nrd, nrs, alu2::reg(regs[2]));
       mark_status_dirty();
    }
 
@@ -667,7 +678,9 @@ static OP_RESULT THUMB_OP_MCAS_IMM8(uint32_t pc, uint32_t opcode)
    const uint32_t op = bit(opcode, 11, 2);
    const uint32_t imm = bit(opcode, 0, 8);
 
-   const reg_t nrd = regman->get(rd);
+   int32_t regs[1] = { rd };
+   regman->get(1, regs);
+   const reg_t nrd = regs[0];
    
    switch (op)
    {
@@ -699,8 +712,11 @@ static OP_RESULT THUMB_OP_ALU(uint32_t pc, uint32_t opcode)
       return OPR_INTERPRET;
    }
 
-   const reg_t nrd = regman->get(rd);
-   const reg_t nrs = regman->get(rs);
+   int32_t regs[2] = { rd, rs };
+   regman->get(2, regs);
+
+   const reg_t nrd = regs[0];
+   const reg_t nrs = regs[1];
 
    switch (op)
    {
@@ -745,8 +761,11 @@ static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
       return OPR_INTERPRET;
    }
 
-   const reg_t nrd = regman->get(rd);
-   const reg_t nrs = regman->get(rs);
+   int32_t regs[2] = { rd, rs };
+   regman->get(2, regs);
+
+   const reg_t nrd = regs[0];
+   const reg_t nrs = regs[1];
 
    switch (op)
    {
@@ -774,14 +793,17 @@ static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOA
    const uint32_t ro = bit(opcode, 6, 3);
    const uint32_t off = bit(opcode, 6, 5);
 
-   const reg_t dest = regman->get(rd, LOAD);
-   const reg_t base = regman->get(rb);
+   int32_t regs[3] = { rd, rb, REG_OFFSET ? ro : -1};
+   regman->get(3, regs);
+
+   const reg_t dest = regs[0];
+   const reg_t base = regs[1];
 
    // Calc EA
 
    if (REG_OFFSET)
    {
-      const reg_t offset = regman->get(ro);
+      const reg_t offset = regs[2];
       block->mov(0, alu2::reg(base));
       block->add(0, alu2::reg(offset));
    }
@@ -835,9 +857,12 @@ static OP_RESULT THUMB_OP_MEMORY(uint32_t pc, uint32_t opcode)
 static OP_RESULT THUMB_OP_LDR_PCREL(uint32_t pc, uint32_t opcode)
 {
    const uint32_t offset = bit(opcode, 0, 8);
-
    const reg_t rd = bit(opcode, 8, 3);
-   const reg_t dest = regman->get(rd, true);
+
+   int32_t regs[1] = { rd };
+   regman->get(1, regs);
+
+   const reg_t dest = regs[0];
 
    block->load_constant(0, ((pc + 4) & ~2) + (offset << 2));
    block->load_constant(2, mem_funcs[8 + block_procnum]);
@@ -853,8 +878,11 @@ static OP_RESULT THUMB_OP_STR_SPREL(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   const reg_t src = regman->get(rd);
-   const reg_t base = regman->get(13);
+   int32_t regs[2] = { rd, 13 };
+   regman->get(2, regs);
+
+   const reg_t src = regs[0];
+   const reg_t base = regs[1];
 
    block->add(0, base, alu2::imm_rol(offset, 2));
    block->mov(1, alu2::reg(src));
@@ -869,8 +897,11 @@ static OP_RESULT THUMB_OP_LDR_SPREL(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   const reg_t dest = regman->get(rd, true);
-   const reg_t base = regman->get(13);
+   int32_t regs[2] = { rd, 13 };
+   regman->get(2, regs);
+
+   const reg_t dest = regs[0];
+   const reg_t base = regs[1];
 
    block->add(0, base, alu2::imm_rol(offset, 2));
    block->load_constant(2, mem_funcs[8 + block_procnum]);
@@ -908,7 +939,10 @@ static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
 {
    const uint32_t offs = bit(opcode, 0, 7);
 
-   const reg_t sp = regman->get(13);
+   int32_t regs[1] = { 13 };
+   regman->get(1, regs);
+
+   const reg_t sp = regs[0];
 
    if (bit(opcode, 7)) block->sub(sp, alu2::imm_rol(offs, 2));
    else                block->add(sp, alu2::imm_rol(offs, 2));
@@ -923,7 +957,11 @@ static OP_RESULT THUMB_OP_ADD_2PC(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   reg_t dest = regman->get(rd, true);
+   int32_t regs[1] = { rd };
+   regman->get(1, regs);
+
+   const reg_t dest = regs[0];
+
    block->load_constant(dest, ((pc + 4) & 0xFFFFFFFC) + (offset << 2));
    regman->mark_dirty(dest);
 
@@ -935,9 +973,12 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   reg_t sp = regman->get(13);
+   int32_t regs[2] = { 13, rd };
+   regman->get(2, regs);
 
-   reg_t dest = regman->get(rd, true);
+   const reg_t sp = regs[0];
+   const reg_t dest = regs[1];
+
    block->add(dest, sp, alu2::imm_rol(offset, 2));
    regman->mark_dirty(dest);
 
@@ -954,14 +995,17 @@ static OP_RESULT THUMB_OP_BX_BLX_THUMB(uint32_t pc, uint32_t opcode)
 
    block->load_constant(0, pc + 4);
 
+   int32_t regs[2] = { link ? 14 : -1, (rm != 15) ? (int32_t)rm : -1 };
+   regman->get(2, regs);
+
    if (link)
-   {   
-      reg_t lr = regman->get(14, true);
+   {
+      const reg_t lr = regs[0];
       block->sub(lr, 0, alu2::imm(1));
       regman->mark_dirty(lr);
    }
 
-   reg_t target = regman->get(rm);
+   reg_t target = regs[1];
 
    change_mode_reg(target, 2, 3);
    block->bic(0, target, alu2::imm(1));
