@@ -63,48 +63,68 @@ class register_manager
       }
 
    public:
-      arm_gen::reg_t get(uint32_t emu_reg_id, bool no_read = false)
+      void get(uint32_t reg_count, int32_t* emu_reg_ids)
       {
-         int32_t current = find(emu_reg_id);
-         if (current >= 0)
-         {
-            assert(is_usable(current));
+         assert(reg_count < 5);
+         bool found[5] = { false, false, false, false, false };
 
-            if (weak[current] && !no_read)
+         // Find existing registers
+         for (uint32_t i = 0; i < reg_count; i ++)
+         {
+            if (emu_reg_ids[i] < 0)
             {
-               read_emu(current, emu_reg_id);
-               weak[current] = false;
+               found[i] = true;
             }
-
-            return current;
+            else
+            {
+               int32_t current = find(emu_reg_ids[i]);
+               if (current >= 0)
+               {
+                  found[i] = true;
+                  emu_reg_ids[i] = current;
+               }
+            }
          }
 
-         arm_gen::reg_t result = get_oldest();
-         flush(result);
-
-         mapping[result] = emu_reg_id;
-         usage_tag[result] = next_usage_tag ++;
-         weak[result] = no_read;
-
-         if (!no_read)
+         // Load new registers
+         for (uint32_t i = 0; i != reg_count; i ++)
          {
-            read_emu(result, emu_reg_id);
-         }
+            if (!found[i])
+            {
+               // Search register list again, in case the same register is used twice
+               int32_t current = find(emu_reg_ids[i]);
+               if (current >= 0)
+               {
+                  emu_reg_ids[i] = current;
+                  found[i] = true;
+               }
+               else
+               {
+                  // Read the new register
+                  arm_gen::reg_t result = get_oldest();
+                  flush(result);
 
-         return result;
+                  read_emu(result, emu_reg_ids[i]);
+                  mapping[result] = emu_reg_ids[i];
+                  usage_tag[result] = next_usage_tag ++;
+
+                  emu_reg_ids[i] = result;
+                  found[i] = true;
+               }
+            }
+         }
       }
 
       void mark_dirty(uint32_t native_reg)
       {
          assert(is_usable(native_reg));
          dirty[native_reg] = true;
-         weak[native_reg] = false;
       }
 
       void flush(uint32_t native_reg)
       {
          assert(is_usable(native_reg));
-         if (dirty[native_reg] && !weak[native_reg])
+         if (dirty[native_reg])
          {
             write_emu(native_reg, mapping[native_reg]);
             dirty[native_reg] = false;
@@ -139,7 +159,6 @@ class register_manager
       uint32_t mapping[16]; // Mapping[native] = emu
       uint32_t usage_tag[16];
       bool dirty[16];
-      bool weak[16];
 
       uint32_t next_usage_tag;
 };
