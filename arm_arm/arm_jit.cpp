@@ -57,6 +57,8 @@ static uint32_t block_procnum;
 ///////
 // HELPERS
 ///////
+static bool emu_status_dirty;
+
 static bool bit(uint32_t value, uint32_t bit)
 {
    return value & (1 << bit);
@@ -73,17 +75,34 @@ static uint32_t bit_write(uint32_t value, uint32_t first, uint32_t count, uint32
    return result | (insert << first);
 }
 
-static void load_status()
+static void load_status(reg_t scratch)
 {
-   block->ldr(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
-   block->set_status(0);
+   block->ldr(scratch, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+   block->set_status(scratch);
 }
 
-static void write_status(AG_COND cond = AL)
+static void write_status(reg_t scratch)
 {
-   block->get_status(0, cond);
-   block->mov(0, alu2::reg_shift_imm(0, LSR, 24), cond);
-   block->strb(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR) + 3), MEM_NONE, cond);
+   if (emu_status_dirty)
+   {
+      block->get_status(scratch);
+      block->mov(scratch, alu2::reg_shift_imm(scratch, LSR, 24));
+      block->strb(scratch, RCPU, mem2::imm(offsetof(armcpu_t, CPSR) + 3));
+
+      emu_status_dirty = false;
+   }
+}
+
+static void mark_status_dirty()
+{
+   emu_status_dirty = true;
+}
+
+static void call(reg_t reg)
+{
+   write_status(3);
+   block->blx(reg);
+   load_status(3);
 }
 
 static void change_mode(bool thumb)
@@ -101,14 +120,14 @@ static void change_mode(bool thumb)
    block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
 }
 
-static void change_mode_reg(reg_t reg)
+static void change_mode_reg(reg_t reg, reg_t scratch, reg_t scratch2)
 {
-   block->and_(1, reg, alu2::imm(1));
+   block->and_(scratch2, reg, alu2::imm(1));
 
-   block->ldr(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
-   block->bic(0, alu2::imm(1 << 5));
-   block->orr(0, alu2::reg_shift_imm(1, LSL, 5));
-   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+   block->ldr(scratch, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
+   block->bic(scratch, alu2::imm(scratch2 << 5));
+   block->orr(scratch, alu2::reg_shift_imm(scratch2, LSL, 5));
+   block->str(scratch, RCPU, mem2::imm(offsetof(armcpu_t, CPSR)));
 }
 
 template <int PROCNUM>
@@ -143,27 +162,23 @@ static OP_RESULT ARM_OP_PATCH_DELEGATE(uint32_t pc, uint32_t opcode, int AT16, i
    if ((AT16 && (at16 == 0xF)) || (AT12 && (at12 == 0xF)) || (AT8 && (at8 == 0xF)) || (AT0 && (at0 == 0xF)))
       return OPR_INTERPRET;
 
-   int32_t reg_list[4];
-   reg_list[0] = (AT16) ? (int32_t)at16 : -1;
-   reg_list[1] = (AT12) ? (int32_t)at12 : -1;
-   reg_list[2] = (AT8 ) ? (int32_t)at8  : -1;
-   reg_list[3] = (AT0 ) ? (int32_t)at0  : -1;
-   regman->get(4, reg_list);
+   const reg_t nat16 = (AT16) ? regman->get(at16) : at16;
+   const reg_t nat12 = (AT12) ? regman->get(at12) : at12;
+   const reg_t nat8  = (AT8 ) ? regman->get(at8 ) : at8 ;
+   const reg_t nat0  = (AT0 ) ? regman->get(at0 ) : at0 ;
 
+   opcode = bit_write(opcode, 16, 4, nat16);
+   opcode = bit_write(opcode, 12, 4, nat12);
+   opcode = bit_write(opcode,  8, 4, nat8 );
+   opcode = bit_write(opcode,  0, 4, nat0 );
 
-   opcode = AT16 ? bit_write(opcode, 16, 4, reg_list[0]) : opcode;
-   opcode = AT12 ? bit_write(opcode, 12, 4, reg_list[1]) : opcode;
-   opcode = AT8  ? bit_write(opcode,  8, 4, reg_list[2]) : opcode;
-   opcode = AT0  ? bit_write(opcode,  0, 4, reg_list[3]) : opcode;
-
-   load_status();
    block->insert_raw_instruction(opcode);
-   if (S) write_status();
+   if (S) mark_status_dirty();
 
-   if (AT16 & 2) regman->mark_dirty(reg_list[0]);
-   if (AT12 & 2) regman->mark_dirty(reg_list[1]);
-   if (AT8  & 2) regman->mark_dirty(reg_list[2]);
-   if (AT0  & 2) regman->mark_dirty(reg_list[3]);
+   if (AT16 & 2) regman->mark_dirty(nat16);
+   if (AT12 & 2) regman->mark_dirty(nat12);
+   if (AT8  & 2) regman->mark_dirty(nat8 );
+   if (AT0  & 2) regman->mark_dirty(nat0 );
 
    return OPR_RESULT(OPR_CONTINUE, CYC);
 }
@@ -257,19 +272,19 @@ ARM_ALU_OP_DEF(MVN_S, 2, 0, true);
 
 ////////
 // Need versions of these functions with exported symbol
-u8  _MMU_read08_9(u32 addr) { return _MMU_read08(0, MMU_AT_DATA, addr); }
-u8  _MMU_read08_7(u32 addr) { return _MMU_read08(1, MMU_AT_DATA, addr); }
-u16 _MMU_read16_9(u32 addr) { return _MMU_read16(0, MMU_AT_DATA, addr); }
-u16 _MMU_read16_7(u32 addr) { return _MMU_read16(1, MMU_AT_DATA, addr); }
-u32 _MMU_read32_9(u32 addr) { return _MMU_read32(0, MMU_AT_DATA, addr); }
-u32 _MMU_read32_7(u32 addr) { return _MMU_read32(1, MMU_AT_DATA, addr); }
+u8  _MMU_read08_9(u32 addr) { return _MMU_read08<0>(addr); }
+u8  _MMU_read08_7(u32 addr) { return _MMU_read08<1>(addr); }
+u16 _MMU_read16_9(u32 addr) { return _MMU_read16<0>(addr & 0xFFFFFFFE); }
+u16 _MMU_read16_7(u32 addr) { return _MMU_read16<1>(addr & 0xFFFFFFFE); }
+u32 _MMU_read32_9(u32 addr) { if (addr & 3) abort; return ::ROR(_MMU_read32<0>(addr & 0xFFFFFFFC), 8 * (addr & 3)); }
+u32 _MMU_read32_7(u32 addr) { if (addr & 3) abort; return ::ROR(_MMU_read32<1>(addr & 0xFFFFFFFC), 8 * (addr & 3)); }
 
-void _MMU_write08_9(u32 addr, u8  val) { _MMU_write08(0, MMU_AT_DATA, addr, val); }
-void _MMU_write08_7(u32 addr, u8  val) { _MMU_write08(1, MMU_AT_DATA, addr, val); }
-void _MMU_write16_9(u32 addr, u16 val) { _MMU_write16(0, MMU_AT_DATA, addr, val); }
-void _MMU_write16_7(u32 addr, u16 val) { _MMU_write16(1, MMU_AT_DATA, addr, val); }
-void _MMU_write32_9(u32 addr, u32 val) { _MMU_write32(0, MMU_AT_DATA, addr, val); }
-void _MMU_write32_7(u32 addr, u32 val) { _MMU_write32(1, MMU_AT_DATA, addr, val); }
+void _MMU_write08_9(u32 addr, u8  val) { _MMU_write08<0>(addr, val); }
+void _MMU_write08_7(u32 addr, u8  val) { _MMU_write08<1>(addr, val); }
+void _MMU_write16_9(u32 addr, u16 val) { _MMU_write16<0>(addr & 0xFFFFFFFE, val); }
+void _MMU_write16_7(u32 addr, u16 val) { _MMU_write16<1>(addr & 0xFFFFFFFE, val); }
+void _MMU_write32_9(u32 addr, u32 val) { if (addr & 3) abort; _MMU_write32<0>(addr & 0xFFFFFFFC, val); }
+void _MMU_write32_7(u32 addr, u32 val) { if (addr & 3) abort; _MMU_write32<1>(addr & 0xFFFFFFFC, val); }
 
 static const uint32_t mem_funcs[12] =
 {
@@ -281,28 +296,8 @@ static const uint32_t mem_funcs[12] =
    (uint32_t)_MMU_write32_9, (uint32_t)_MMU_write32_7
 };
 
-static void ARM_OP_MEM_DO_INDEX(uint32_t opcode, reg_t base, reg_t offset)
-{
-   // Uses offset as scratch if loading a constant
 
-   if (bit(opcode, 25))
-   {
-      const AG_ALU_SHIFT st = (AG_ALU_SHIFT)bit(opcode, 5, 2);
-      const uint32_t imm = bit(opcode, 7, 5);
-
-      if (bit(opcode, 23)) block->add(base, alu2::reg_shift_imm(offset, st, imm));
-      else                 block->sub(base, alu2::reg_shift_imm(offset, st, imm));
-   }
-   else
-   {
-      block->load_constant(offset, opcode & 0xFFF);
-
-      if (bit(opcode, 23)) block->add(base, alu2::reg(offset));
-      else                 block->sub(base, alu2::reg(offset));
-   }
-}
-
-static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
+static OP_RESULT ARM_OP_MEM(uint32_t pc, const uint32_t opcode)
 {
    const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
    const bool has_reg_offset = bit(opcode, 25);
@@ -318,47 +313,60 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
-   int32_t regs[3] = { rd, rn, has_reg_offset ? (int32_t)rm : -1 };
-   regman->get(3, regs);
+   const reg_t dest = regman->get(rd);
+   const reg_t base = regman->get(rn);
+   const reg_t offs = has_reg_offset ? regman->get(rm) : (reg_t)0;
 
-   const reg_t dest = regs[0];
-   const reg_t base = regs[1];
-   const reg_t offs = has_reg_offset ? regs[2] : 3;
+
+   // HACK: This needs to done manually here as we can't branch over the generated code
+   mark_status_dirty();
+   write_status(3);
 
    if (cond != AL)
    {
-      load_status();
       block->b("run", cond);
       block->b("skip");
       block->set_label("run");
    }
 
-   // Put the EA in R0
-   block->mov(0, alu2::reg(base));
-
-   if (has_pre_index)
+   // Put the indexed address in R3
+   if (has_reg_offset)
    {
-      ARM_OP_MEM_DO_INDEX(opcode, 0, offs);
+      const AG_ALU_SHIFT st = (AG_ALU_SHIFT)bit(opcode, 5, 2);
+      const uint32_t imm = bit(opcode, 7, 5);
+
+      if (has_up_bit) block->add(3, base, alu2::reg_shift_imm(offs, st, imm));
+      else            block->sub(3, base, alu2::reg_shift_imm(offs, st, imm));
+   }
+   else
+   {
+      block->load_constant(3, opcode & 0xFFF);
+
+      if (has_up_bit) block->add(3, base, alu2::reg(3));
+      else            block->sub(3, base, alu2::reg(3));
    }
 
-   if (!has_pre_index || has_write_back)
-   {
-      if (!has_pre_index)
-      {
-         ARM_OP_MEM_DO_INDEX(opcode, base, offs);
-      }
-      else
-      {
-         block->mov(base, alu2::reg(0));
-      }
+   // Load EA
+   block->mov(0, alu2::reg((has_pre_index ? (reg_t)3 : base)));
 
+   // Do Writeback
+   if ((!has_pre_index) || has_write_back)
+   {
+      block->mov(base, alu2::reg(3));
       regman->mark_dirty(base);
    }
 
    // DO
    if (!has_load)
    {
-      block->mov(1, alu2::reg(dest));
+      if (has_byte_bit)
+      {
+         block->uxtb(1, dest);
+      }
+      else
+      {
+         block->mov(1, alu2::reg(dest));
+      }
    }
 
    uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte_bit ? 0 : 8);
@@ -367,7 +375,15 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
 
    if (has_load)
    {
-      block->mov(dest, alu2::reg(0));
+      if (has_byte_bit)
+      {
+         block->uxtb(dest, 0);
+      }
+      else
+      {
+         block->mov(dest, alu2::reg(0));
+      }
+
       regman->mark_dirty(dest);
    }
 
@@ -377,6 +393,8 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, uint32_t opcode)
       block->resolve_label("run");
       block->resolve_label("skip");
    }
+
+   load_status(3);
 
    // TODO: 
    return OPR_RESULT(OPR_CONTINUE, 3);
@@ -405,14 +423,101 @@ ARM_MEM_OP_DEF(STRB);
 ARM_MEM_OP_DEF(LDRB);
 
 // 
-#if 0
 static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
 {
-   return OPR_INTERPRET;
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
+   const bool has_pre_index = bit(opcode, 24);
+   const bool has_up_bit = bit(opcode, 23);
+   const bool has_imm_offset = bit(opcode, 22);
+   const bool has_write_back = bit(opcode, 21);
+   const bool has_load = bit(opcode, 20);
+   const uint32_t op = bit(opcode, 5, 2);
+   const reg_t rn = bit(opcode, 16, 4);
+   const reg_t rd = bit(opcode, 12, 4);
+   const reg_t rm = bit(opcode, 0, 4);
+
+   if (rn == 0xF || rd == 0xF || (!has_imm_offset && (rm == 0xF)))
+      return OPR_INTERPRET;
+
+   const reg_t dest = regman->get(rd);
+   const reg_t base = regman->get(rn);
+   const reg_t offs = !has_imm_offset ? regman->get(rm) : (reg_t)0;
+
+
+   // HACK: This needs to done manually here as we can't branch over the generated code
+   mark_status_dirty();
+   write_status(3);
+
+   if (cond != AL)
+   {
+      block->b("run", cond);
+      block->b("skip");
+      block->set_label("run");
+   }
+
+   // Put the indexed address in R3
+   if (!has_imm_offset)
+   {
+      if (has_up_bit) block->add(3, base, alu2::reg(offs));
+      else            block->sub(3, base, alu2::reg(offs));
+   }
+   else
+   {
+      block->load_constant(3, (opcode & 0xF) | ((opcode >> 4) & 0xF0));
+
+      if (has_up_bit) block->add(3, base, alu2::reg(3));
+      else            block->sub(3, base, alu2::reg(3));
+   }
+
+   // Load EA
+   block->mov(0, alu2::reg((has_pre_index ? (reg_t)3 : base)));
+
+   // Do Writeback
+   if ((!has_pre_index) || has_write_back)
+   {
+      block->mov(base, alu2::reg(3));
+      regman->mark_dirty(base);
+   }
+
+   // DO
+   if (!has_load)
+   {
+      switch (op)
+      {
+         case 1: block->uxth(1, dest); break;
+         case 2: block->sxtb(1, dest); break;
+         case 3: block->sxth(1, dest); break;
+      }
+   }
+
+   uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | ((op == 2) ? 0 : 4);
+   block->load_constant(2, mem_funcs[func_idx]);
+   block->blx(2);
+
+   if (has_load)
+   {
+      switch (op)
+      {
+         case 1: block->uxth(dest, 0); break;
+         case 2: block->sxtb(dest, 0); break;
+         case 3: block->sxth(dest, 0); break;
+      }
+
+      regman->mark_dirty(dest);
+   }
+
+   if (cond != AL)
+   {
+      block->set_label("skip");
+      block->resolve_label("run");
+      block->resolve_label("skip");
+   }
+
+   load_status(3);
+
+   // TODO: 
+   return OPR_RESULT(OPR_CONTINUE, 3);
 }
-#else
-#define ARM_OP_MEM_HALF 0
-#endif
 
 #define ARM_MEM_HALF_OP_DEF2(T, P) \
    static const ArmOpCompiler ARM_OP_##T##_##P##M_REG_OFF = ARM_OP_MEM_HALF; \
@@ -517,15 +622,11 @@ static OP_RESULT THUMB_OP_SHIFT(uint32_t pc, uint32_t opcode)
    const uint32_t imm = bit(opcode, 6, 5);
    const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
 
-   int32_t regs[2] = { rd, rs };
-   regman->get(2, regs);
+   const reg_t nrd = regman->get(rd, true);
+   const reg_t nrs = regman->get(rs);
 
-   const reg_t nrd = regs[0];
-   const reg_t nrs = regs[1];
-
-   load_status();
    block->movs(nrd, alu2::reg_shift_imm(nrs, op, imm));
-   write_status();
+   mark_status_dirty();
 
    regman->mark_dirty(nrd);
 
@@ -540,23 +641,19 @@ static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
    const bool arg_type = bit(opcode, 10);
    const uint32_t arg = bit(opcode, 6, 3);
 
-   int32_t regs[3] = { rd, rs, (!arg_type) ? arg : -1 };
-   regman->get(3, regs);
-
-   const reg_t nrd = regs[0];
-   const reg_t nrs = regs[1];
+   const reg_t nrd = regman->get(rd, true);
+   const reg_t nrs = regman->get(rs);
 
    if (arg_type) // Immediate
    {
-      load_status();
       block->alu_op(op, nrd, nrs, alu2::imm(arg));
-      write_status();
+      mark_status_dirty();
    }
    else
    {
-      load_status();
-      block->alu_op(op, nrd, nrs, alu2::reg(regs[2]));
-      write_status();
+      const reg_t narg = regman->get(arg);
+      block->alu_op(op, nrd, nrs, alu2::reg(narg));
+      mark_status_dirty();
    }
 
    regman->mark_dirty(nrd);
@@ -570,24 +667,21 @@ static OP_RESULT THUMB_OP_MCAS_IMM8(uint32_t pc, uint32_t opcode)
    const uint32_t op = bit(opcode, 11, 2);
    const uint32_t imm = bit(opcode, 0, 8);
 
-   int32_t regs[1] = { rd };
-   regman->get(1, regs);
-
-   load_status();
+   const reg_t nrd = regman->get(rd);
    
    switch (op)
    {
-      case 0: block->alu_op(MOVS, regs[0], regs[0], alu2::imm(imm)); break;
-      case 1: block->alu_op(CMP , regs[0], regs[0], alu2::imm(imm)); break;
-      case 2: block->alu_op(ADDS, regs[0], regs[0], alu2::imm(imm)); break;
-      case 3: block->alu_op(SUBS, regs[0], regs[0], alu2::imm(imm)); break;
+      case 0: block->alu_op(MOVS, nrd, nrd, alu2::imm(imm)); break;
+      case 1: block->alu_op(CMP , nrd, nrd, alu2::imm(imm)); break;
+      case 2: block->alu_op(ADDS, nrd, nrd, alu2::imm(imm)); break;
+      case 3: block->alu_op(SUBS, nrd, nrd, alu2::imm(imm)); break;
    }
 
-   write_status();
+   mark_status_dirty();
 
    if (op != 1) // Don't keep the result of a CMP instruction
    {
-      regman->mark_dirty(regs[0]);
+      regman->mark_dirty(nrd);
    }
 
    return OPR_RESULT(OPR_CONTINUE, 1);
@@ -605,13 +699,8 @@ static OP_RESULT THUMB_OP_ALU(uint32_t pc, uint32_t opcode)
       return OPR_INTERPRET;
    }
 
-   int32_t regs[2] = { rd, rs };
-   regman->get(2, regs);
-
-   const reg_t nrd = regs[0];
-   const reg_t nrs = regs[1];
-
-   load_status();
+   const reg_t nrd = regman->get(rd);
+   const reg_t nrs = regman->get(rs);
 
    switch (op)
    {
@@ -634,7 +723,7 @@ static OP_RESULT THUMB_OP_ALU(uint32_t pc, uint32_t opcode)
       case  9: block->rsbs(nrd, nrs, alu2::imm(0)); break;
    }
 
-   write_status();
+   mark_status_dirty();
 
    static const bool op_wb[16] = { 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1 };
    if (op_wb[op])
@@ -656,13 +745,8 @@ static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
       return OPR_INTERPRET;
    }
 
-   int32_t regs[2] = { rd, rs };
-   regman->get(2, regs);
-
-   const reg_t nrd = regs[0];
-   const reg_t nrs = regs[1];
-
-   load_status();
+   const reg_t nrd = regman->get(rd);
+   const reg_t nrs = regman->get(rs);
 
    switch (op)
    {
@@ -671,11 +755,13 @@ static OP_RESULT THUMB_OP_SPE(uint32_t pc, uint32_t opcode)
       case 2: block->mov(nrd, alu2::reg(nrs)); break;
    }
 
-   write_status();
-
    if (op != 1)
    {
       regman->mark_dirty(nrd);
+   }
+   else
+   {
+      mark_status_dirty();
    }
 
    return OPR_RESULT(OPR_CONTINUE, 1);
@@ -688,17 +774,14 @@ static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOA
    const uint32_t ro = bit(opcode, 6, 3);
    const uint32_t off = bit(opcode, 6, 5);
 
-   int32_t regs[3] = { rd, rb, REG_OFFSET ? ro : -1};
-   regman->get(3, regs);
-
-   const reg_t dest = regs[0];
-   const reg_t base = regs[1];
+   const reg_t dest = regman->get(rd, LOAD);
+   const reg_t base = regman->get(rb);
 
    // Calc EA
 
    if (REG_OFFSET)
    {
-      const reg_t offset = regs[2];
+      const reg_t offset = regman->get(ro);
       block->mov(0, alu2::reg(base));
       block->add(0, alu2::reg(offset));
    }
@@ -715,7 +798,7 @@ static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOA
       block->mov(1, alu2::reg(dest));
    }
 
-   block->blx(2);
+   call(2);
 
    if (LOAD)
    {
@@ -752,16 +835,13 @@ static OP_RESULT THUMB_OP_MEMORY(uint32_t pc, uint32_t opcode)
 static OP_RESULT THUMB_OP_LDR_PCREL(uint32_t pc, uint32_t opcode)
 {
    const uint32_t offset = bit(opcode, 0, 8);
+
    const reg_t rd = bit(opcode, 8, 3);
-
-   int32_t regs[1] = { rd };
-   regman->get(1, regs);
-
-   const reg_t dest = regs[0];
+   const reg_t dest = regman->get(rd, true);
 
    block->load_constant(0, ((pc + 4) & ~2) + (offset << 2));
    block->load_constant(2, mem_funcs[8 + block_procnum]);
-   block->blx(2);
+   call(2);
    block->mov(dest, alu2::reg(0));
 
    regman->mark_dirty(dest);
@@ -773,16 +853,13 @@ static OP_RESULT THUMB_OP_STR_SPREL(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[2] = { rd, 13 };
-   regman->get(2, regs);
-
-   const reg_t src = regs[0];
-   const reg_t base = regs[1];
+   const reg_t src = regman->get(rd);
+   const reg_t base = regman->get(13);
 
    block->add(0, base, alu2::imm_rol(offset, 2));
    block->mov(1, alu2::reg(src));
    block->load_constant(2, mem_funcs[10 + block_procnum]);
-   block->blx(2);
+   call(2);
 
    return OPR_RESULT(OPR_CONTINUE, 3);
 }
@@ -792,15 +869,12 @@ static OP_RESULT THUMB_OP_LDR_SPREL(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[2] = { rd, 13 };
-   regman->get(2, regs);
-
-   const reg_t dest = regs[0];
-   const reg_t base = regs[1];
+   const reg_t dest = regman->get(rd, true);
+   const reg_t base = regman->get(13);
 
    block->add(0, base, alu2::imm_rol(offset, 2));
    block->load_constant(2, mem_funcs[8 + block_procnum]);
-   block->blx(2);
+   call(2);
    block->mov(dest, alu2::reg(0));
 
    regman->mark_dirty(dest);
@@ -811,7 +885,6 @@ static OP_RESULT THUMB_OP_B_COND(uint32_t pc, uint32_t opcode)
 {
    const AG_COND cond = (AG_COND)bit(opcode, 8, 4);
 
-   load_status();
    block->load_constant(0, pc + 2);
    block->load_constant(0, (pc + 4) + ((u32)((s8)(opcode&0xFF))<<1), cond);
    block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
@@ -835,10 +908,7 @@ static OP_RESULT THUMB_OP_ADJUST_SP(uint32_t pc, uint32_t opcode)
 {
    const uint32_t offs = bit(opcode, 0, 7);
 
-   int32_t regs[1] = { 13 };
-   regman->get(1, regs);
-
-   const reg_t sp = regs[0];
+   const reg_t sp = regman->get(13);
 
    if (bit(opcode, 7)) block->sub(sp, alu2::imm_rol(offs, 2));
    else                block->add(sp, alu2::imm_rol(offs, 2));
@@ -853,10 +923,7 @@ static OP_RESULT THUMB_OP_ADD_2PC(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[1] = { rd };
-   regman->get(1, regs);
-
-   const reg_t dest = regs[0];
+   reg_t dest = regman->get(rd, true);
    block->load_constant(dest, ((pc + 4) & 0xFFFFFFFC) + (offset << 2));
    regman->mark_dirty(dest);
 
@@ -868,12 +935,9 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[2] = { 13, rd };
-   regman->get(2, regs);
+   reg_t sp = regman->get(13);
 
-   const reg_t sp = regs[0];
-   const reg_t dest = regs[1];
-
+   reg_t dest = regman->get(rd, true);
    block->add(dest, sp, alu2::imm_rol(offset, 2));
    regman->mark_dirty(dest);
 
@@ -885,31 +949,23 @@ static OP_RESULT THUMB_OP_BX_BLX_THUMB(uint32_t pc, uint32_t opcode)
    const reg_t rm = bit(opcode, 3, 4);
    const bool link = bit(opcode, 7);
 
+   if (rm == 15)
+      return OPR_INTERPRET;
+
    block->load_constant(0, pc + 4);
 
-   int32_t regs[2] = { link ? 14 : -1, (rm != 15) ? (int32_t)rm : -1 };
-   regman->get(2, regs);
-
    if (link)
-   {
-      const reg_t lr = regs[0];
+   {   
+      reg_t lr = regman->get(14, true);
       block->sub(lr, 0, alu2::imm(1));
       regman->mark_dirty(lr);
    }
 
-   if (rm == 15)
-   {
-      change_mode(false);
-      block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
-   }
-   else
-   {
-      const reg_t target = regs[1];
+   reg_t target = regman->get(rm);
 
-      change_mode_reg(target);
-      block->bic(0, target, alu2::imm(1));
-      block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
-   }
+   change_mode_reg(target, 2, 3);
+   block->bic(0, target, alu2::imm(1));
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
 
    return OPR_RESULT(OPR_BRANCHED, 3);
 }
@@ -1097,6 +1153,8 @@ static ArmOpCompiled compile_basicblock()
    block->load_constant(RCPU, (uint32_t)&ARMPROC);
    block->load_constant(RCYC, 0);
 
+   load_status(3);
+
    for (uint32_t i = 0; i < CommonSettings.jit_max_block_size && !has_ended; i ++, pc += isize)
    {
       uint32_t opcode = thumb ? _MMU_read16<PROCNUM, MMU_AT_CODE>(pc) : _MMU_read32<PROCNUM, MMU_AT_CODE>(pc);
@@ -1120,7 +1178,7 @@ static ArmOpCompiled compile_basicblock()
             regman->reset();
 
             block->load_constant(0, (uint32_t)&armcpu_exec<PROCNUM>);
-            block->blx(0);
+            call(0);
             block->add(RCYC, alu2::reg(0));
 
             has_ended = has_ended || instr_is_branch(thumb, opcode);
@@ -1145,8 +1203,11 @@ static ArmOpCompiled compile_basicblock()
 
    if (compiled_op)
    {
-      arm_jit_prefetch<PROCNUM>(pc, 0, thumb);
+      block->load_constant(0, pc);
+      block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
    }
+
+   write_status(3);
 
    regman->flush_all();
    regman->reset();
