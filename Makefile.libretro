@@ -91,6 +91,11 @@ else ifeq ($(platform), android)
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=libretro/link.T
    DESMUME_JIT_ARM = 1
+else ifeq ($(platform), arm)
+   TARGET := $(TARGET_NAME)_libretro.so
+   fpic := -fPIC
+   SHARED := -shared -Wl,--version-script=libretro/link.T
+   DESMUME_JIT_ARM = 1
 else
    TARGET := retro.dll
    CC = gcc
