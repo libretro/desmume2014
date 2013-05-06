@@ -162,11 +162,13 @@ static OP_RESULT ARM_OP_PATCH_DELEGATE(uint32_t pc, uint32_t opcode, int AT16, i
    if ((AT16 && (at16 == 0xF)) || (AT12 && (at12 == 0xF)) || (AT8 && (at8 == 0xF)) || (AT0 && (at0 == 0xF)))
       return OPR_INTERPRET;
 
+   const uint32_t weak_tag = (bit(opcode, 28, 4) == AL) ? 0x10 : 0;
+
    int32_t reg_list[4];
-   reg_list[0] = (AT16) ? (int32_t)at16 : -1;
-   reg_list[1] = (AT12) ? (int32_t)at12 : -1;
-   reg_list[2] = (AT8 ) ? (int32_t)at8  : -1;
-   reg_list[3] = (AT0 ) ? (int32_t)at0  : -1;
+   reg_list[0] = (AT16) ? (int32_t)(at16 | ((AT16 == 2) ? weak_tag : 0)) : -1;
+   reg_list[1] = (AT12) ? (int32_t)(at12 | ((AT12 == 2) ? weak_tag : 0)) : -1;
+   reg_list[2] = (AT8 ) ? (int32_t)(at8  | ((AT8  == 2) ? weak_tag : 0)) : -1;
+   reg_list[3] = (AT0 ) ? (int32_t)(at0  | ((AT0  == 2) ? weak_tag : 0)) : -1;
    regman->get(4, reg_list);
 
    opcode = AT16 ? bit_write(opcode, 16, 4, reg_list[0]) : opcode;
@@ -315,7 +317,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, const uint32_t opcode)
    if (rn == 0xF || rd == 0xF || (has_reg_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
-   int32_t regs[3] = { rd, rn, has_reg_offset ? (int32_t)rm : -1 };
+   int32_t regs[3] = { rd | (((cond == AL) && has_load) ? 0x10 : 0), rn, has_reg_offset ? (int32_t)rm : -1 };
    regman->get(3, regs);
 
    const reg_t dest = regs[0];
@@ -443,7 +445,7 @@ static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
    if (rn == 0xF || rd == 0xF || (!has_imm_offset && (rm == 0xF)))
       return OPR_INTERPRET;
 
-   int32_t regs[3] = { rd, rn, (!has_imm_offset) ? (int32_t)rm : -1 };
+   int32_t regs[3] = { rd | (((cond == AL) && has_load) ? 0x10 : 0), rn, (!has_imm_offset) ? (int32_t)rm : -1 };
    regman->get(3, regs);
 
    const reg_t dest = regs[0];
@@ -628,7 +630,7 @@ static OP_RESULT THUMB_OP_SHIFT(uint32_t pc, uint32_t opcode)
    const uint32_t imm = bit(opcode, 6, 5);
    const AG_ALU_SHIFT op = (AG_ALU_SHIFT)bit(opcode, 11, 2);
 
-   int32_t regs[2] = { rd, rs };
+   int32_t regs[2] = { rd | 0x10, rs };
    regman->get(2, regs);
 
    const reg_t nrd = regs[0];
@@ -650,7 +652,7 @@ static OP_RESULT THUMB_OP_ADDSUB_REGIMM(uint32_t pc, uint32_t opcode)
    const bool arg_type = bit(opcode, 10);
    const uint32_t arg = bit(opcode, 6, 3);
 
-   int32_t regs[3] = { rd, rs, (!arg_type) ? arg : -1 };
+   int32_t regs[3] = { rd | 0x10, rs, (!arg_type) ? arg : -1 };
    regman->get(3, regs);
 
    const reg_t nrd = regs[0];
@@ -793,7 +795,7 @@ static OP_RESULT THUMB_OP_MEMORY_DELEGATE(uint32_t pc, uint32_t opcode, bool LOA
    const uint32_t ro = bit(opcode, 6, 3);
    const uint32_t off = bit(opcode, 6, 5);
 
-   int32_t regs[3] = { rd, rb, REG_OFFSET ? ro : -1};
+   int32_t regs[3] = { rd | (LOAD ? 0x10 : 0), rb, REG_OFFSET ? ro : -1};
    regman->get(3, regs);
 
    const reg_t dest = regs[0];
@@ -859,7 +861,7 @@ static OP_RESULT THUMB_OP_LDR_PCREL(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[1] = { rd };
+   int32_t regs[1] = { rd | 0x10 };
    regman->get(1, regs);
 
    const reg_t dest = regs[0];
@@ -897,7 +899,7 @@ static OP_RESULT THUMB_OP_LDR_SPREL(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[2] = { rd, 13 };
+   int32_t regs[2] = { rd | 0x10, 13 };
    regman->get(2, regs);
 
    const reg_t dest = regs[0];
@@ -957,7 +959,7 @@ static OP_RESULT THUMB_OP_ADD_2PC(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[1] = { rd };
+   int32_t regs[1] = { rd | 0x10 };
    regman->get(1, regs);
 
    const reg_t dest = regs[0];
@@ -973,7 +975,7 @@ static OP_RESULT THUMB_OP_ADD_2SP(uint32_t pc, uint32_t opcode)
    const uint32_t offset = bit(opcode, 0, 8);
    const reg_t rd = bit(opcode, 8, 3);
 
-   int32_t regs[2] = { 13, rd };
+   int32_t regs[2] = { 13, rd | 0x10 };
    regman->get(2, regs);
 
    const reg_t sp = regs[0];
