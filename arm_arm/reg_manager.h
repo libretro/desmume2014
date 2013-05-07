@@ -25,7 +25,7 @@ class register_manager
 
       bool is_usable(arm_gen::reg_t reg) const
       {
-         static const uint32_t USE_MAP = 0xDC0;
+         static const uint32_t USE_MAP = 0xDE0;
          return (USE_MAP & (1 << reg)) ? true : false;
       }
 

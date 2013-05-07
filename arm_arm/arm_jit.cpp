@@ -50,8 +50,8 @@ static u8 recompile_counts[(1<<26)/16];
 
 DS_ALIGN(4096) uintptr_t compiled_funcs[1<<26] = {0};
 
-const reg_t RCPU = 4;
-const reg_t RCYC = 5;
+const reg_t RCPU = 12;
+const reg_t RCYC = 4;
 static uint32_t block_procnum;
 
 ///////
@@ -102,6 +102,10 @@ static void call(reg_t reg)
 {
    write_status(3);
    block->blx(reg);
+
+   const unsigned PROCNUM = block_procnum;
+   block->load_constant(RCPU, (uint32_t)&ARMPROC);
+
    load_status(3);
 }
 
@@ -325,7 +329,6 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, const uint32_t opcode)
    const reg_t offs = has_reg_offset ? regs[2] : 3;
 
    // HACK: This needs to done manually here as we can't branch over the generated code
-   mark_status_dirty();
    write_status(3);
 
    if (cond != AL)
@@ -377,7 +380,7 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, const uint32_t opcode)
 
    uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | (has_byte_bit ? 0 : 8);
    block->load_constant(2, mem_funcs[func_idx]);
-   block->blx(2);
+   call(2);
 
    if (has_load)
    {
@@ -399,8 +402,6 @@ static OP_RESULT ARM_OP_MEM(uint32_t pc, const uint32_t opcode)
       block->resolve_label("run");
       block->resolve_label("skip");
    }
-
-   load_status(3);
 
    // TODO: 
    return OPR_RESULT(OPR_CONTINUE, 3);
@@ -453,7 +454,6 @@ static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
    const reg_t offs = (!has_imm_offset) ? regs[2] : 0;
 
    // HACK: This needs to done manually here as we can't branch over the generated code
-   mark_status_dirty();
    write_status(3);
 
    if (cond != AL)
@@ -500,7 +500,7 @@ static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
 
    uint32_t func_idx = block_procnum | (has_load ? 0 : 2) | ((op == 2) ? 0 : 4);
    block->load_constant(2, mem_funcs[func_idx]);
-   block->blx(2);
+   call(2);
 
    if (has_load)
    {
@@ -520,8 +520,6 @@ static OP_RESULT ARM_OP_MEM_HALF(uint32_t pc, uint32_t opcode)
       block->resolve_label("run");
       block->resolve_label("skip");
    }
-
-   load_status(3);
 
    // TODO: 
    return OPR_RESULT(OPR_CONTINUE, 3);
