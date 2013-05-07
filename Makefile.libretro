@@ -11,17 +11,6 @@ else ifneq ($(findstring win,$(shell uname -a)),)
 endif
 endif
 
-# system platform
-system_platform = unix
-ifeq ($(shell uname -a),)
-EXE_EXT = .exe
-   system_platform = win
-else ifneq ($(findstring Darwin,$(shell uname -a)),)
-   system_platform = osx
-else ifneq ($(findstring MINGW,$(shell uname -a)),)
-   system_platform = win
-endif
-
 TARGET_NAME := desmume
 
 ifeq ($(platform), unix)
