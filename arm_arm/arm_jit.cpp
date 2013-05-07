@@ -544,6 +544,64 @@ ARM_MEM_HALF_OP_DEF(STRSH);
 ARM_MEM_HALF_OP_DEF(LDRSH);
 
 //
+#define SIGNEXTEND_24(i) (((s32)i<<8)>>8)
+static OP_RESULT ARM_OP_B_BL(uint32_t pc, uint32_t opcode)
+{
+   const AG_COND cond = (AG_COND)bit(opcode, 28, 4);
+   const bool has_link = bit(opcode, 24);
+
+   const bool unconditional = (cond == AL || cond == EGG);
+   int32_t regs[1] = { (has_link || cond == EGG) ? 14 : -1 };
+   regman->get(1, regs);
+
+   uint32_t dest = (pc + 8 + (SIGNEXTEND_24(bit(opcode, 0, 24)) << 2));
+
+   if (!unconditional)
+   {
+      block->load_constant(0, pc + 4);
+
+      block->b("run", cond);
+      block->b("skip");
+      block->set_label("run");
+   }
+   
+   if (cond == EGG)
+   {
+      change_mode(true);
+
+      if (has_link)
+      {
+         dest += 2;
+      }
+   }
+
+   if (has_link || cond == EGG)
+   {
+      block->load_constant(regs[0], pc + 4);
+      regman->mark_dirty(regs[0]);
+   }
+
+   block->load_constant(0, dest);
+
+   if (!unconditional)
+   {
+      block->set_label("skip");
+      block->resolve_label("run");
+      block->resolve_label("skip");
+   }
+
+   block->str(0, RCPU, mem2::imm(offsetof(armcpu_t, instruct_adr)));
+
+
+   // TODO: Timing
+   return OPR_RESULT(OPR_BRANCHED, 3);
+}
+
+#define ARM_OP_B  ARM_OP_B_BL
+#define ARM_OP_BL ARM_OP_B_BL
+
+////
+
 #define ARM_OP_LDRD_STRD_POST_INDEX 0
 #define ARM_OP_LDRD_STRD_OFFSET_PRE_INDEX 0
 #define ARM_OP_MRS_CPSR 0
@@ -591,8 +649,6 @@ ARM_MEM_HALF_OP_DEF(LDRSH);
 #define ARM_OP_LDMIB2 0
 #define ARM_OP_STMIB2_W 0
 #define ARM_OP_LDMIB2_W 0
-#define ARM_OP_B 0
-#define ARM_OP_BL 0
 #define ARM_OP_STC_OPTION 0
 #define ARM_OP_LDC_OPTION 0
 #define ARM_OP_STC_M_POSTIND 0
