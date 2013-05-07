@@ -107,7 +107,7 @@ endif
 ifeq ($(DEBUG), 1)
 CPPFLAGS += -O0 -g
 else
-CPPFLAGS += -O3
+CPPFLAGS += -O3 -DNDEBUG
 endif
 
 
