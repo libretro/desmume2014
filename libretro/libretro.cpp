@@ -11,6 +11,8 @@
 #include "GPU_osd.h"
 #include "addons.h"
 
+#include "performance.h"
+
 //
 
 static retro_video_refresh_t video_cb = NULL;
@@ -241,6 +243,10 @@ void retro_init (void)
 void retro_deinit(void)
 {
     NDS_DeInit();
+
+#ifdef PERF_TEST
+   rarch_perf_log();
+#endif
 }
 
 void retro_reset (void)

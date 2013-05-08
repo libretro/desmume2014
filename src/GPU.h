@@ -32,6 +32,10 @@
 //#undef FORCEINLINE
 //#define FORCEINLINE
 
+#if defined(__LIBRETRO__) && defined(__RETRO_ARM__)
+#define ARMSPRITE
+#endif
+
 void gpu_savestate(EMUFILE* os);
 bool gpu_loadstate(EMUFILE* is, int size);
 
@@ -510,6 +514,7 @@ enum GPU_OBJ_MODE
 	GPU_OBJ_MODE_Bitmap = 3
 };
 
+#ifndef ARMSPRITE // __LIBRETRO__
 struct _OAM_
 {
 	//attr0
@@ -531,8 +536,40 @@ struct _OAM_
 	//attr3
 	u16 attr3;
 };
-
 void SlurpOAM(_OAM_* oam_output, void* oam_buffer, int oam_index);
+#else
+union _OAM_tag
+{
+   u16 attr[4];
+
+   struct
+   {
+      //attr0
+      unsigned Y:8;
+      unsigned RotScale:2;
+      unsigned Mode:2;
+      unsigned Mosaic:1;
+      unsigned Depth:1;
+      unsigned Shape:2;
+      //att1
+      signed X:9;
+      unsigned RotScalIndex:3;
+      unsigned HFlip:1;
+      unsigned VFlip:1;
+      unsigned Size:2;
+      //attr2
+      unsigned TileIndex:10;
+      unsigned Priority:2;
+      unsigned PaletteIndex:4;
+      //attr3
+   	unsigned attr3:16;
+   };
+};
+typedef const _OAM_tag _OAM_;
+
+_OAM_* SlurpOAM(void* oam_buffer, int oam_index);
+#endif
+
 u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index);
 
 typedef struct

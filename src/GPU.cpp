@@ -816,6 +816,7 @@ finish:
 
 //unpacks an _OAM_ structure from the provided oam buffer (should point at OAM 0) and provided OAM index.
 //is endian-safe
+#ifndef ARMSPRITE //__LIBRETRO__
 void SlurpOAM(_OAM_* oam_output, void* oam_buffer, int oam_index)
 {
 	u16* u16_oam_buffer = (u16*)oam_buffer;
@@ -843,6 +844,13 @@ void SlurpOAM(_OAM_* oam_output, void* oam_buffer, int oam_index)
 
 	oam_output->attr3 = attr[3];
 }
+#else
+_OAM_* SlurpOAM(void* oam_buffer, int oam_index)
+{
+	u16* u16_oam_buffer = (u16*)oam_buffer;
+   return (_OAM_*)&u16_oam_buffer[oam_index << 2];
+}
+#endif
 
 //gets the affine parameter associated with the specified oam index.
 u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index)
@@ -861,11 +869,18 @@ static void mosaicSpriteLinePixel(GPU * gpu, int x, u16 l, u8 * dst, u8 * dst_al
 	int x_int;
 	int y = l;
 
+#ifndef ARMSPRITE // __LIBRETRO__
 	_OAM_ spriteInfo;
 	SlurpOAM(&spriteInfo,gpu->oam,gpu->sprNum[x]);
 	bool enabled = spriteInfo.Mosaic!=0;
 	if(!enabled)
 		return;
+#else
+   _OAM_* spriteInfo = SlurpOAM(gpu->oam,gpu->sprNum[x]);
+   if (!spriteInfo->Mosaic)
+      return;
+   const bool enabled = true;
+#endif
 
 	bool opaque = prioTab[x] <= 4;
 
@@ -1515,9 +1530,13 @@ void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 
 	for(int i = 0; i<128; i++)     
 	{
+#ifndef ARMSPRITE // __LIBRETRO__
 		_OAM_ oam;
 		_OAM_* spriteInfo = &oam;
 		SlurpOAM(spriteInfo, gpu->oam, i);
+#else
+		_OAM_* spriteInfo = SlurpOAM(gpu->oam, i);
+#endif
 
 		//for each sprite:
 		if(cost>=2130)
