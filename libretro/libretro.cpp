@@ -33,10 +33,16 @@ namespace /* INPUT */
 {
     static bool absolutePointer;
 
-    template<int min, int max>
+    template<int32_t MIN, int32_t MAX>
+    static int32_t Saturate(int32_t aValue)
+    {
+        return std::max(MIN, std::min(MAX, aValue));
+    }
+
+    template<int32_t MIN, int32_t MAX>
     static int32_t ClampedMove(int32_t aTarget, int32_t aValue)
     {
-        return std::max(min, std::min(max, aTarget + aValue));
+        return Saturate<MIN, MAX>(aTarget + aValue);
     }
 
     static int32_t TouchX;
@@ -58,10 +64,13 @@ namespace /* INPUT */
         if(FramesWithPointer-- < 0)
             return;
 
+        TouchX = Saturate<0, 255>(TouchX);
+        TouchY = Saturate<0, 191>(TouchY);
+
         if(TouchX >   5) DrawPointerLine<COLOR>(&aOut[TouchY * aPitchInPix + TouchX - 5], 1);
         if(TouchX < 251) DrawPointerLine<COLOR>(&aOut[TouchY * aPitchInPix + TouchX + 1], 1);
         if(TouchY >   5) DrawPointerLine<COLOR>(&aOut[(TouchY - 5) * aPitchInPix + TouchX], aPitchInPix);
-        if(TouchY < 251) DrawPointerLine<COLOR>(&aOut[(TouchY + 1) * aPitchInPix + TouchX], aPitchInPix);
+        if(TouchY < 187) DrawPointerLine<COLOR>(&aOut[(TouchY + 1) * aPitchInPix + TouchX], aPitchInPix);
     }
 }
 
