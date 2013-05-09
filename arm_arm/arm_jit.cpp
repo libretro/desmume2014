@@ -284,15 +284,15 @@ u8  _MMU_read08_9(u32 addr) { return _MMU_read08<0>(addr); }
 u8  _MMU_read08_7(u32 addr) { return _MMU_read08<1>(addr); }
 u16 _MMU_read16_9(u32 addr) { return _MMU_read16<0>(addr & 0xFFFFFFFE); }
 u16 _MMU_read16_7(u32 addr) { return _MMU_read16<1>(addr & 0xFFFFFFFE); }
-u32 _MMU_read32_9(u32 addr) { if (addr & 3) abort; return ::ROR(_MMU_read32<0>(addr & 0xFFFFFFFC), 8 * (addr & 3)); }
-u32 _MMU_read32_7(u32 addr) { if (addr & 3) abort; return ::ROR(_MMU_read32<1>(addr & 0xFFFFFFFC), 8 * (addr & 3)); }
+u32 _MMU_read32_9(u32 addr) { return ::ROR(_MMU_read32<0>(addr & 0xFFFFFFFC), 8 * (addr & 3)); }
+u32 _MMU_read32_7(u32 addr) { return ::ROR(_MMU_read32<1>(addr & 0xFFFFFFFC), 8 * (addr & 3)); }
 
 void _MMU_write08_9(u32 addr, u8  val) { _MMU_write08<0>(addr, val); }
 void _MMU_write08_7(u32 addr, u8  val) { _MMU_write08<1>(addr, val); }
 void _MMU_write16_9(u32 addr, u16 val) { _MMU_write16<0>(addr & 0xFFFFFFFE, val); }
 void _MMU_write16_7(u32 addr, u16 val) { _MMU_write16<1>(addr & 0xFFFFFFFE, val); }
-void _MMU_write32_9(u32 addr, u32 val) { if (addr & 3) abort; _MMU_write32<0>(addr & 0xFFFFFFFC, val); }
-void _MMU_write32_7(u32 addr, u32 val) { if (addr & 3) abort; _MMU_write32<1>(addr & 0xFFFFFFFC, val); }
+void _MMU_write32_9(u32 addr, u32 val) { _MMU_write32<0>(addr & 0xFFFFFFFC, val); }
+void _MMU_write32_7(u32 addr, u32 val) { _MMU_write32<1>(addr & 0xFFFFFFFC, val); }
 
 static const uint32_t mem_funcs[12] =
 {
