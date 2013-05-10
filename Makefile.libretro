@@ -105,7 +105,7 @@ SOURCES = \
 	debug.cpp \
 	Disassembler.cpp \
 	emufile.cpp FIFO.cpp \
-	firmware.cpp GPU.cpp \
+	firmware.cpp GPU_arm.cpp \
 	mc.cpp \
 	path.cpp \
 	readwrite.cpp \
@@ -220,7 +220,7 @@ endif
 
 SOURCES2   = $(foreach src,$(SOURCES),src/$(src)) libretro/libretro.cpp
 
-OBJECTS    = $(SOURCES2:.cpp=.o) src/utils/ConvertUTF.o libretro/performance.o
+OBJECTS    = $(SOURCES2:.cpp=.o) src/utils/ConvertUTF.o libretro/performance.o 
 LIBS       = -lz
 CFLAGS     += -std=gnu99
 CPPFLAGS   += -D__LIBRETRO__ $(fpic) -iquote src -iquote libretro 
@@ -239,7 +239,7 @@ else ifeq ($(platform), xenon)
 else ifeq ($(platform), wii)
 	$(AR) rcs $@ $(OBJECTS)
 else
-	$(CXX) $(LDFLAGS) $(fpic) $(SHARED) $(LIBS) -o $@ $(OBJECTS)
+	$(CXX) $(LDFLAGS) $(fpic) $(SHARED) $(LIBS) -o $@ $(OBJECTS) 
 endif
 
 clean:

@@ -18,12 +18,8 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef GPU_H
-#define GPU_H
-
-#if 1
-#include "GPU_arm.h"
-#else
+#ifndef GPU_ARM_H
+#define GPU_ARM_H
 
 #include <stdio.h>
 #include "mem.h"
@@ -35,10 +31,6 @@
 
 //#undef FORCEINLINE
 //#define FORCEINLINE
-
-#if defined(__LIBRETRO__) && defined(__RETRO_ARM__)
-#define ARMSPRITE
-#endif
 
 void gpu_savestate(EMUFILE* os);
 bool gpu_loadstate(EMUFILE* is, int size);
@@ -195,14 +187,15 @@ typedef struct {
     this structure is for rotoscale parameters
 *******************************************************************************/
 
-typedef struct {
-    s16 BGxPA;
-    s16 BGxPB;
-    s16 BGxPC;
-    s16 BGxPD;
-    s32 BGxX;
-    s32 BGxY;
-} BGxPARMS;
+struct BGxPARMS
+{
+    s16 PA;
+    s16 PB;
+    s16 PC;
+    s16 PD;
+    s32 X;
+    s32 Y;
+};
 
 
 /*******************************************************************************
@@ -444,11 +437,14 @@ struct _ROTOCOORD
 	s32 Integer:20;
 	u32 pad:4;
 };
-typedef union
+
+union ROTOCOORD
 {
+   ROTOCOORD(s32 v) { val = v; }
+
 	struct _ROTOCOORD bits;
 	s32 val;
-} ROTOCOORD;
+};
 
 
 /*
@@ -518,30 +514,6 @@ enum GPU_OBJ_MODE
 	GPU_OBJ_MODE_Bitmap = 3
 };
 
-#ifndef ARMSPRITE // __LIBRETRO__
-struct _OAM_
-{
-	//attr0
-	u8 Y;
-	u8 RotScale;
-	u8 Mode;
-	u8 Mosaic;
-	u8 Depth;
-	u8 Shape;
-	//att1
-	s16 X;
-	u8 RotScalIndex;
-	u8 HFlip, VFlip;
-	u8 Size;
-	//attr2
-	u16 TileIndex;
-	u8 Priority;
-	u8 PaletteIndex;
-	//attr3
-	u16 attr3;
-};
-void SlurpOAM(_OAM_* oam_output, void* oam_buffer, int oam_index);
-#else
 union _OAM_tag
 {
    u16 attr[4];
@@ -572,8 +544,6 @@ union _OAM_tag
 typedef const _OAM_tag _OAM_;
 
 _OAM_* SlurpOAM(void* oam_buffer, int oam_index);
-#endif
-
 u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index);
 
 typedef struct
@@ -619,16 +589,9 @@ extern const BGType GPU_mode2type[8][4];
 
 struct GPU
 {
-	GPU()
-		: debug(false)
-	{}
-
 	// some structs are becoming redundant
 	// some functions too (no need to recopy some vars as it is done by MMU)
 	REG_DISPx * dispx_st;
-
-	//this indicates whether this gpu is handling debug tools
-	bool debug;
 
 	_BGxCNT & bgcnt(int num) { return (dispx_st)->dispx_BGxCNT[num].bits; }
 	_DISPCNT & dispCnt() { return dispx_st->dispx_DISPCNT.bits; }
@@ -675,8 +638,6 @@ struct GPU
 	//FIFO	fifo;
 
 	u8 bgPrio[5];
-
-	BOOL bg0HasHighestPrio;
 
 	void * oam;
 	u32	sprMem;
@@ -836,25 +797,6 @@ struct GPU
 	}
 	
 };
-#if 0
-// normally should have same addresses
-static void REG_DISPx_pack_test(GPU * gpu)
-{
-	REG_DISPx * r = gpu->dispx_st;
-	printf ("%08x %02x\n",  (u32)r, (u32)(&r->dispx_DISPCNT) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispA_DISPSTAT) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispx_VCOUNT) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispx_BGxCNT[0]) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispx_BGxOFS[0]) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispx_BG2PARMS) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispx_BG3PARMS) - (u32)r);
-//	printf ("\t%02x\n", (u32)(&r->dispx_WINCNT) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispx_MISC) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispA_DISP3DCNT) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispA_DISPCAPCNT) - (u32)r);
-	printf ("\t%02x\n", (u32)(&r->dispA_DISPMMEMFIFO) - (u32)r);
-}
-#endif
 
 CACHE_ALIGN extern u8 GPU_screen[4*256*192];
 
@@ -895,10 +837,6 @@ void GPU_setBGProp(GPU *, u16 num, u16 p);
 void GPU_setBLDCNT(GPU *gpu, u16 v) ;
 void GPU_setBLDY(GPU *gpu, u16 v) ;
 void GPU_setMOSAIC(GPU *gpu, u16 v) ;
-
-
-void GPU_remove(GPU *, u8 num);
-void GPU_addBack(GPU *, u8 num);
 
 int GPU_ChangeGraphicsCore(int coreid);
 
@@ -961,4 +899,4 @@ void gpu_SetRotateScreen(u16 angle);
 //#define FORCEINLINE __forceinline
 
 #endif
-#endif
+

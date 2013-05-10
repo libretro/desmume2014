@@ -32,7 +32,7 @@ extern "C" {
 #define PERF_TEST
 #endif
 
-#ifdef __ANDROID__
+#if defined(__ANDROID__) && defined(PERF_TEST)
 #include <android/log.h>
 #define RARCH_LOG(...) __android_log_print(ANDROID_LOG_INFO, "libretro", __VA_ARGS__)
 #else
