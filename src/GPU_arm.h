@@ -743,14 +743,12 @@ struct GPU
 	} spriteRenderMode;
 
 	template<GPU::SpriteRenderMode MODE>
-	void _spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab);
+	bool _spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab);
 	
-	inline void spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
+	inline bool spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 	{
-		if(spriteRenderMode == SPRITE_1D)
-			_spriteRender<SPRITE_1D>(dst,dst_alpha,typeTab, prioTab);
-		else
-			_spriteRender<SPRITE_2D>(dst,dst_alpha,typeTab, prioTab);
+      return (spriteRenderMode == SPRITE_1D) ? _spriteRender<SPRITE_1D>(dst,dst_alpha,typeTab, prioTab)
+                                             : _spriteRender<SPRITE_2D>(dst,dst_alpha,typeTab, prioTab);
 	}
 
 

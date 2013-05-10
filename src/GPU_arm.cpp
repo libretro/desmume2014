@@ -930,9 +930,6 @@ static void expand_tile_256(GPU* gpu, u16 tile_entry, u8 line, const u16* ex_pal
 template<bool MOSAIC>
 static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
 {
-   RARCH_PERFORMANCE_INIT(renderline_textBGP);
-   RARCH_PERFORMANCE_START(renderline_textBGP);
-
    // Change tile tag, effectively clearing the tile cache
    // TODO: Make tile cache more persistent
    tile_tag ++;
@@ -972,7 +969,6 @@ static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
       const u16* palette_base = (dispCnt.ExBGxPalette_Enable) ? (u16*)MMU.ExtPal[gpu->core][gpu->BGExtPalSlot[num]] : 0;
       if (dispCnt.ExBGxPalette_Enable && (palette_base == 0))
       {
-         RARCH_PERFORMANCE_STOP(renderline_textBGP);
          return;
       }
 
@@ -993,8 +989,6 @@ static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
    {
       gpu->__setFinalColorBck<MOSAIC,false>(pixels[x_base + i].color, i, pixels[x_base + i].opaque);
    }
-
-   RARCH_PERFORMANCE_STOP(renderline_textBGP);
 }
 
 /*****************************************************************************/
@@ -1352,8 +1346,10 @@ static u32 bmp_sprite_address(GPU* gpu, _OAM_ * spriteInfo, size sprSize, s32 y)
 
 
 template<GPU::SpriteRenderMode MODE>
-void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
+bool GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 {
+   bool has_sprite = false;
+
 	u16 l = currLine;
 	GPU *gpu = this;
 
@@ -1490,6 +1486,8 @@ void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 
 						colour = src[offset];
 
+                  has_sprite = true;
+
 						if (colour && (prio<prioTab[sprX]))
 						{ 
 							HostWriteWord(dst, (sprX<<1), HostReadWord(pal, (colour<<1)));
@@ -1538,6 +1536,8 @@ void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 						u16* mem = (u16*)MMU_gpu_map(srcadr + (offset<<1));
 						
 						colour = T1ReadWord(mem,0);
+
+                  has_sprite = true;
 
 						if((colour&0x8000) && (prio<prioTab[sprX]))
 						{
@@ -1589,6 +1589,8 @@ void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 						if (auxX&1)	colour >>= 4;
 						else		colour &= 0xF;
 
+                  has_sprite = true;
+
 						if(colour && (prio<prioTab[sprX]))
 						{
 							if(spriteInfo->Mode==2)
@@ -1618,6 +1620,8 @@ void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 	
 			if (!compute_sprite_vars(spriteInfo, l, sprSize, sprX, sprY, x, y, lg, xdir))
 				continue;
+
+         has_sprite = true;
 
 			cost += sprSize.x;
 
@@ -1688,6 +1692,8 @@ void GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 			render_sprite_16 (gpu, l, dst, srcadr, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, spriteInfo->Mode == 1);
 		}
 	}
+
+   return has_sprite;
 
 }
 
@@ -1855,6 +1861,7 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 	CACHE_ALIGN u8 sprAlpha[256];
 	CACHE_ALIGN u8 sprType[256];
 	CACHE_ALIGN u8 sprPrio[256];
+   bool has_sprites = false;
 
 	if (gpu->LayersEnable[4]) 
 	{
@@ -1870,26 +1877,29 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 		//zero 06-may-09: I properly supported window color effects for backdrop, but I am not sure
 		//how it interacts with this. I wish we knew why we needed this
 		
-		gpu->spriteRender(spr, sprAlpha, sprType, sprPrio);
+		has_sprites = gpu->spriteRender(spr, sprAlpha, sprType, sprPrio);
 
-      // Apply mosaic
-	   if(gpu->mosaicLookup.widthValue != 0 || gpu->mosaicLookup.heightValue != 0)
+      if (has_sprites)
       {
-		   for(int i = 0; i < 256; i ++)
+         // Apply mosaic
+         if(gpu->mosaicLookup.widthValue != 0 || gpu->mosaicLookup.heightValue != 0)
          {
-      		mosaicSpriteLinePixel(gpu, i, l, spr, sprAlpha, sprType, sprPrio);
+            for(int i = 0; i < 256; i ++)
+            {
+               mosaicSpriteLinePixel(gpu, i, l, spr, sprAlpha, sprType, sprPrio);
+            }
+         }
+
+         // assign them to the good priority item
+         for(int i = 0; i < 256; i++) 
+         {
+            if (sprPrio[i] < 5)
+            {
+               itemsForPriority_t* item = &(gpu->itemsForPriority[sprPrio[i]]);
+               item->PixelsX[item->nbPixelsX ++] = i;
+            }
          }
       }
-
-   	// assign them to the good priority item
-		for(int i = 0; i < 256; i++) 
-		{
-         if (sprPrio[i] < 5)
-         {
-  			   itemsForPriority_t* item = &(gpu->itemsForPriority[sprPrio[i]]);
-            item->PixelsX[item->nbPixelsX ++] = i;
-         }
-		}
 	}
 
    // Draw all layers
@@ -1933,7 +1943,7 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 		}
 
       // render sprite Pixels
-		if (gpu->LayersEnable[4])
+		if (has_sprites)
 		{
 			gpu->currBgNum = 4;
 			gpu->blend1 = (gpu->BLDCNT & (1 << gpu->currBgNum))!=0;
@@ -2287,6 +2297,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 	{
 		u8 * dst =  GPU_screen + (screen->offset + l) * 512;
 		memset(dst,0,512);
+
 		return;
 	}
 
@@ -2299,9 +2310,13 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 		{
 			gpu->currLine = l;
 			GPU_RenderLine_MasterBrightness(screen, l);
+
 			return;
 		}
 	}
+
+   RARCH_PERFORMANCE_INIT(renderlineP);
+   RARCH_PERFORMANCE_START(renderlineP);
 
 	//cache some parameters which are assumed to be stable throughout the rendering of the entire line
 	gpu->currLine = l;
@@ -2379,6 +2394,8 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 
 
 	GPU_RenderLine_MasterBrightness(screen, l);
+
+   RARCH_PERFORMANCE_STOP(renderlineP);
 }
 
 void gpu_savestate(EMUFILE* os)
