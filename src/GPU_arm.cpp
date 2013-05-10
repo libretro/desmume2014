@@ -274,18 +274,6 @@ FORCEINLINE u16 GPU::blend(u16 colA, u16 colB)
 	return _blend(colA, colB, blendTable);
 }
 
-
-void GPU_setMasterBrightness (GPU *gpu, u16 val)
-{
-	if(!nds.isInVblank()) {
-		PROGINFO("Changing master brightness outside of vblank\n");
-	}
- 	gpu->MasterBrightFactor = (val & 0x1F);
-	gpu->MasterBrightMode	= (val>>14);
-	//printf("MASTER BRIGHTNESS %d to %d at %d\n",gpu->core,gpu->MasterBrightFactor,nds.VCount);
-
-}
-
 void SetupFinalPixelBlitter (GPU *gpu)
 {
 	u8 windowUsed = (gpu->WIN0_ENABLED | gpu->WIN1_ENABLED | gpu->WINOBJ_ENABLED);
@@ -2147,69 +2135,34 @@ template<bool SKIP> static void GPU_RenderLine_DispCapture(u16 l)
 
 static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
 {
-	GPU * gpu = screen->gpu;
+   // NOTE: This is a good candidate for vectorization
 
-	u8 * dst =  GPU_screen + (screen->offset + l) * 512;
-	u16 i16;
+   const MASTER_BRIGHT& master_bright = screen->gpu->dispx_st->master_bright;
+	u16* dst = (u16*)(GPU_screen + (screen->offset + l) * 512);
 
-	//isn't it odd that we can set uselessly high factors here?
-	//factors above 16 change nothing. curious.
-	int factor = gpu->MasterBrightFactor;
-	if(factor==0) return;
-	if(factor>16) factor=16;
-
-
-	//Apply final brightness adjust (MASTER_BRIGHT)
-	//http://nocash.emubase.de/gbatek.htm#dsvideo (Under MASTER_BRIGHTNESS)
-	
-	switch (gpu->MasterBrightMode)
-	{
-		// Disabled
-		case 0:
-			break;
-
-		// Bright up
-		case 1:
-		{
-			if(factor != 16)
-			{
-				for(i16 = 0; i16 < 256; ++i16)
-				{
-					((u16*)dst)[i16] = fadeInColors[factor][((u16*)dst)[i16]&0x7FFF];
-				}
-			}
-			else
-			{
-				// all white (optimization)
-				for(i16 = 0; i16 < 256; ++i16)
-					((u16*)dst)[i16] = 0x7FFF;
-			}
-			break;
-		}
-
-		// Bright down
-		case 2:
-		{
-			if(factor != 16)
-			{
-				for(i16 = 0; i16 < 256; ++i16)
-				{
-					((u16*)dst)[i16] = fadeOutColors[factor][((u16*)dst)[i16]&0x7FFF];
-				}
-			}
-			else
-			{
-				// all black (optimization)
-				memset(dst, 0, 512);
-			}
-			break;
-		}
-
-		// Reserved
-		case 3:
-			break;
-	 }
-
+   // It's turned off, nothing to do
+   if (master_bright.mode == 0 || master_bright.mode == 3 || (master_bright.max == 0 && master_bright.factor == 0))
+   {
+      return;
+   }
+   // It's saturated to a single color
+   else if (master_bright.max)
+   {
+      const u16 value = (master_bright.mode == 1) ? 0x7FFF : 0;
+      for (int i = 0; i < 256; i ++)
+      {
+         dst[i] = value;
+      }
+   }
+   // Needs lookup
+   else
+   {
+      const u16* const fade_table = (master_bright.mode == 1) ? fadeInColors[master_bright.factor] : fadeOutColors[master_bright.factor];
+      for (int i = 0; i < 256; i ++)
+      {
+         dst[i] = fade_table[dst[i] & 0x7FFF];
+      }
+   }
 }
 
 template<int WIN_NUM>
@@ -2338,7 +2291,8 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 	}
 
 	// skip some work if master brightness makes the screen completely white or completely black
-	if(gpu->MasterBrightFactor >= 16 && (gpu->MasterBrightMode == 1 || gpu->MasterBrightMode == 2))
+   const MASTER_BRIGHT& master_bright = gpu->dispx_st->master_bright;
+	if(master_bright.max && (master_bright.mode == 1 || master_bright.mode == 2))
 	{
 		// except if it could cause any side effects (for example if we're capturing), then don't skip anything
 		if(!(gpu->core == GPU_MAIN && (gpu->dispCapCnt.enabled || l == 0 || l == 191)))

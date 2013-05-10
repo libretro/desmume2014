@@ -2634,9 +2634,6 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 			case REG_DISPB_BLDY: 	 
 				GPU_setBLDY_EVY(SubScreen.gpu,val) ; 	 
 				break;
-			case REG_DISPA_MASTERBRIGHT:
-				GPU_setMasterBrightness (MainScreen.gpu, val);
-				break;
 				/*
 			case REG_DISPA_MOSAIC: 	 
 				GPU_setMOSAIC(MainScreen.gpu,val) ; 	 
@@ -2732,10 +2729,6 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 			case REG_DISPB_WINOUT: 	 
 				GPU_setWINOUT16(SubScreen.gpu, val) ; 	 
 				break ;
-
-			case REG_DISPB_MASTERBRIGHT:
-				GPU_setMasterBrightness (SubScreen.gpu, val);
-				break;
 
             case REG_POWCNT1:
 				writereg_POWCNT1(16,adr,val);
@@ -3181,13 +3174,6 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 				GPU_setWIN1_V(SubScreen.gpu, val>>16);
 				break;
 			}
-
-			case REG_DISPA_MASTERBRIGHT:
-				GPU_setMasterBrightness(MainScreen.gpu, val & 0xFFFF);
-				break;
-			case REG_DISPB_MASTERBRIGHT:
-				GPU_setMasterBrightness(SubScreen.gpu, val & 0xFFFF);
-				break;
 
 			case REG_DISPA_BLDCNT:
 			{

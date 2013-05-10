@@ -301,12 +301,10 @@ typedef struct {
     u16 unused3;//BLDALPHA;
     u16 unused4;//BLDY;
     u16 unused5;
-	/*
     u16 unused6;
     u16 unused7;
     u16 unused8;
     u16 unused9;
-	*/
 } MISCCNT;
 
 
@@ -363,13 +361,27 @@ struct DISPCAPCNT
 	u8 capSrc;
 } ;
 
+union MASTER_BRIGHT
+{
+   u16 bits;
+
+   struct
+   {
+      unsigned factor : 4;
+      unsigned max    : 1;
+      unsigned unused : 9;
+      unsigned mode   : 2;
+   };
+};
+
+
 /*******************************************************************************
     this structure holds everything and should be mapped to
     * core A : 0x04000000
     * core B : 0x04001000
 *******************************************************************************/
 
-typedef struct _reg_dispx {
+struct REG_DISPx {
     DISPCNT dispx_DISPCNT;            // 0x0400x000
     u16 dispA_DISPSTAT;               // 0x04000004
     u16 dispx_VCOUNT;                 // 0x0400x006
@@ -377,12 +389,13 @@ typedef struct _reg_dispx {
     BGxOFS dispx_BGxOFS[4];           // 0x0400x010
     BGxPARMS dispx_BG2PARMS;          // 0x0400x020
     BGxPARMS dispx_BG3PARMS;          // 0x0400x030
-    u8			filler[12];           // 0x0400x040
+    u8			filler[12];            // 0x0400x040
     MISCCNT dispx_MISC;               // 0x0400x04C
     DISP3DCNT dispA_DISP3DCNT;        // 0x04000060
-    DISPCAPCNT dispA_DISPCAPCNT;      // 0x04000064
+    u32 dispA_DISPCAPCNT;             // 0x04000064
     u32 dispA_DISPMMEMFIFO;           // 0x04000068
-} REG_DISPx ;
+    MASTER_BRIGHT master_bright;      // 0x0400x06C
+} __attribute__((packed)) ;
 
 
 typedef BOOL (*fun_gl_Begin) (int screen);
@@ -680,9 +693,6 @@ struct GPU
 	CACHE_ALIGN u16 tempScanlineBuffer[256];
 	u8 *tempScanline;
 
-	u8	MasterBrightMode;
-	u32 MasterBrightFactor;
-
 	CACHE_ALIGN u8 bgPixels[1024]; //yes indeed, this is oversized. map debug tools try to write to it
 
 	u32 currLine;
@@ -842,7 +852,6 @@ int GPU_ChangeGraphicsCore(int coreid);
 
 void GPU_set_DISPCAPCNT(u32 val) ;
 void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip = false) ;
-void GPU_setMasterBrightness (GPU *gpu, u16 val);
 
 inline void GPU_setWIN0_H(GPU* gpu, u16 val) { gpu->WIN0H0 = val >> 8; gpu->WIN0H1 = val&0xFF; gpu->need_update_winh[0] = true; }
 inline void GPU_setWIN0_H0(GPU* gpu, u8 val) { gpu->WIN0H0 = val;  gpu->need_update_winh[0] = true; }
