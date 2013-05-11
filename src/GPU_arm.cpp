@@ -1881,8 +1881,8 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 
       if (has_sprites)
       {
-         // Apply mosaic
-         if(gpu->mosaicLookup.widthValue != 0 || gpu->mosaicLookup.heightValue != 0)
+         // Apply mosaic: TODO: The original code used the background sizes here too (I think), but maybe is should be using the object mosaic size?
+         if(gpu->dispx_st->mosaic_size.background_width || gpu->dispx_st->mosaic_size.background_height)
          {
             for(int i = 0; i < 256; i ++)
             {
@@ -1922,14 +1922,13 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 					gpu->blend1 = (gpu->BLDCNT & (1 << bg_number)) != 0;
 
 					struct _BGxCNT *bgCnt = &(gpu->dispx_st)->dispx_BGxCNT[bg_number].bits;
-					gpu->curr_mosaic_enabled = bgCnt->Mosaic_Enable;
 
 					if (bg_number == 0 && gpu->core == GPU_MAIN && dispCnt->BG0_3D)
 					{
                   render_3d_line(gpu, l);
 					}
 #ifndef DISABLE_MOSAIC
-               else if(gpu->curr_mosaic_enabled)
+               else if(gpu->dispx_st->dispx_BGxCNT[bg_number].bits.Mosaic_Enable)
                {
    				   gpu->modeRender<true>(bg_number);
                }
@@ -2320,17 +2319,8 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 
 	//cache some parameters which are assumed to be stable throughout the rendering of the entire line
 	gpu->currLine = l;
-	u16 mosaic_control = T1ReadWord((u8 *)&gpu->dispx_st->dispx_MISC.MOSAIC, 0);
-	u16 mosaic_width = (mosaic_control & 0xF);
-	u16 mosaic_height = ((mosaic_control>>4) & 0xF);
-
-	//mosaic test hacks
-	//mosaic_width = mosaic_height = 3;
-
-	GPU::mosaicLookup.widthValue = mosaic_width;
-	GPU::mosaicLookup.heightValue = mosaic_height;
-	GPU::mosaicLookup.width = &GPU::mosaicLookup.table[mosaic_width][0];
-	GPU::mosaicLookup.height = &GPU::mosaicLookup.table[mosaic_height][0];
+	GPU::mosaicLookup.width = &GPU::mosaicLookup.table[gpu->dispx_st->mosaic_size.background_width][0];
+	GPU::mosaicLookup.height = &GPU::mosaicLookup.table[gpu->dispx_st->mosaic_size.background_height][0];
 
 	if(gpu->need_update_winh[0]) gpu->update_winh(0);
 	if(gpu->need_update_winh[1]) gpu->update_winh(1);

@@ -295,7 +295,6 @@ typedef struct {
 *******************************************************************************/
 
 typedef struct {
-    u16 MOSAIC;
     u16 unused1;
     u16 unused2;//BLDCNT;
     u16 unused3;//BLDALPHA;
@@ -361,6 +360,19 @@ struct DISPCAPCNT
 	u8 capSrc;
 } ;
 
+union MOSAIC
+{
+   u16 bits;
+
+   struct
+   {
+      unsigned background_width : 4;
+      unsigned background_height : 4;
+      unsigned object_width : 4;
+      unsigned object_height : 4;
+   };
+};
+
 union MASTER_BRIGHT
 {
    u16 bits;
@@ -390,7 +402,8 @@ struct REG_DISPx {
     BGxPARMS dispx_BG2PARMS;          // 0x0400x020
     BGxPARMS dispx_BG3PARMS;          // 0x0400x030
     u8			filler[12];            // 0x0400x040
-    MISCCNT dispx_MISC;               // 0x0400x04C
+    MOSAIC mosaic_size;               // 0x0400x04C
+    MISCCNT dispx_MISC;               // 0x0400x04E
     DISP3DCNT dispA_DISP3DCNT;        // 0x04000060
     u32 dispA_DISPCAPCNT;             // 0x04000064
     u32 dispA_DISPMMEMFIFO;           // 0x04000068
@@ -720,10 +733,7 @@ struct GPU
 		}
 
 		TableEntry *width, *height;
-		int widthValue, heightValue;
-		
-	} mosaicLookup;
-	bool curr_mosaic_enabled;
+   } mosaicLookup;
 
 	u16 blend(u16 colA, u16 colB);
 
@@ -844,7 +854,6 @@ void GPU_setBGProp(GPU *, u16 num, u16 p);
 
 void GPU_setBLDCNT(GPU *gpu, u16 v) ;
 void GPU_setBLDY(GPU *gpu, u16 v) ;
-void GPU_setMOSAIC(GPU *gpu, u16 v) ;
 
 int GPU_ChangeGraphicsCore(int coreid);
 
@@ -895,10 +904,6 @@ void SetupFinalPixelBlitter (GPU *gpu);
 
 
 #define GPU_setBLDY_EVY(gpu, val) {gpu->BLDY_EVY = ((val)&0x1f) > 16 ? 16 : ((val)&0x1f);}
-
-//these arent needed right now since the values get poked into memory via default mmu handling and dispx_st
-//#define GPU_setBGxHOFS(bg, gpu, val) gpu->dispx_st->dispx_BGxOFS[bg].BGxHOFS = ((val) & 0x1FF)
-//#define GPU_setBGxVOFS(bg, gpu, val) gpu->dispx_st->dispx_BGxOFS[bg].BGxVOFS = ((val) & 0x1FF)
 
 void gpu_SetRotateScreen(u16 angle);
 
