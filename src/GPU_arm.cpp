@@ -33,15 +33,13 @@
 #include "NDSSystem.h"
 #include "readwrite.h"
 
-#include "GPU_arm_neon.h"
+//#include "GPU_arm_neon.h"
 
 #include "../libretro/performance.h"
 
 #ifdef FASTBUILD
 	#undef FORCEINLINE
 	#define FORCEINLINE
-	//compilation speed hack (cuts time exactly in half by cutting out permutations)
-	#define DISABLE_MOSAIC
 #endif
 
 #define SCREEN_WIDTH 256
@@ -49,9 +47,6 @@
 extern BOOL click;
 NDS_Screen MainScreen;
 NDS_Screen SubScreen;
-
-//instantiate static instance
-GPU::MosaicLookup GPU::mosaicLookup;
 
 //#define DEBUG_TRI
 
@@ -708,15 +703,15 @@ FORCEINLINE void setFinalColorSpr(GPU* gpu, u8 *dst, u16 color, u8 alpha, u8 typ
 	};
 }
 
-template<bool MOSAIC, bool BACKDROP>
+template<bool BACKDROP>
 FORCEINLINE void GPU::__setFinalColorBck(u16 color, const u32 x, const int opaque)
 {
-	return ___setFinalColorBck<MOSAIC, BACKDROP, 0>(color,x,opaque);
+	return ___setFinalColorBck<BACKDROP, 0>(color,x,opaque);
 }
 
 //this was forced inline because most of the time it just falls through to setFinalColorBck() and the function call
 //overhead was ridiculous and terrible
-template<bool MOSAIC, bool BACKDROP, int FUNCNUM>
+template<bool BACKDROP, int FUNCNUM>
 FORCEINLINE void GPU::___setFinalColorBck(u16 color, const u32 x, const int opaque)
 {
 	//under ordinary circumstances, nobody should pass in something >=256
@@ -724,31 +719,10 @@ FORCEINLINE void GPU::___setFinalColorBck(u16 color, const u32 x, const int opaq
 	//which try to render the enter BG. in cases where that is large, it could be up to 1024 wide.
 	assert(debug || x<256);
 
-	int x_int;
-
-	//due to this early out, we will get incorrect behavior in cases where 
-	//we enable mosaic in the middle of a frame. this is deemed unlikely.
-	if(!MOSAIC) {
-		if(opaque) goto finish;
-		else return;
-	}
-
-	if(!opaque) color = 0xFFFF;
-	else color &= 0x7FFF;
-
-	//due to the early out, enabled must always be true
-	//x_int = enabled ? GPU::mosaicLookup.width[x].trunc : x;
-	x_int = GPU::mosaicLookup.width[x].trunc;
-
-	if(GPU::mosaicLookup.width[x].begin && GPU::mosaicLookup.height[currLine].begin) {}
-	else color = mosaicColors.bg[currBgNum][x_int];
-	mosaicColors.bg[currBgNum][x] = color;
-
-	if(color != 0xFFFF)
-	{
-finish:
-		setFinalColorBG<BACKDROP,FUNCNUM>(color,x);
-	}
+   if (opaque)
+   {
+      setFinalColorBG<BACKDROP,FUNCNUM>(color, x);
+   }
 }
 
 
@@ -761,41 +735,7 @@ u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index)
 }
 
 
-//this is fantastically inaccurate.
-//we do the early return even though it reduces the resulting accuracy
-//because we need the speed, and because it is inaccurate anyway
-static void mosaicSpriteLinePixel(GPU * gpu, int x, u16 l, u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
-{
-	int x_int;
-	int y = l;
-
-   _OAM_* spriteInfo = (_OAM_*)&((u16*)gpu->oam)[gpu->sprNum[x]];
-   if (!spriteInfo->Mosaic)
-      return;
-   const bool enabled = true;
-
-	bool opaque = prioTab[x] <= 4;
-
-	GPU::MosaicColor::Obj objColor;
-	objColor.color = T1ReadWord(dst,x<<1);
-	objColor.alpha = dst_alpha[x];
-	objColor.opaque = opaque;
-
-	x_int = enabled ? GPU::mosaicLookup.width[x].trunc : x;
-
-	if(enabled)
-	{
-		if(GPU::mosaicLookup.width[x].begin && GPU::mosaicLookup.height[y].begin) {}
-		else objColor = gpu->mosaicColors.obj[x_int];
-	}
-	gpu->mosaicColors.obj[x] = objColor;
-
-	T1WriteWord(dst,x<<1,objColor.color);
-	dst_alpha[x] = objColor.alpha;
-	if(!objColor.opaque) prioTab[x] = 0xFF;
-}
-
-template<bool MOSAIC> void lineLarge8bpp(GPU * gpu)
+void lineLarge8bpp(GPU * gpu)
 {
 	if(gpu->core == 1) {
 		PROGINFO("Cannot use large 8bpp screen on sub core\n");
@@ -823,7 +763,7 @@ template<bool MOSAIC> void lineLarge8bpp(GPU * gpu)
 		XBG &= wmask;
 		u8 pixel = map[XBG];
 		u16 color = T1ReadWord(pal, pixel<<1);
-		gpu->__setFinalColorBck<MOSAIC,false>(color,x,color);
+		gpu->__setFinalColorBck<false>(color,x,color);
 	}
 	
 }
@@ -929,7 +869,6 @@ static void expand_tile_256(GPU* gpu, u16 tile_entry, u8 line, const u16* ex_pal
 }
 
 // render a text background to the combined pixelbuffer
-template<bool MOSAIC>
 static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
 {
    // Change tile tag, effectively clearing the tile cache
@@ -989,7 +928,7 @@ static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
    const u32 x_base = start_x & 7;
    for (int i = 0; i < width; i ++)
    {
-      gpu->__setFinalColorBck<MOSAIC,false>(pixels[x_base + i].color, i, pixels[x_base + i].opaque);
+      gpu->__setFinalColorBck<false>(pixels[x_base + i].color, i, pixels[x_base + i].opaque);
    }
 }
 
@@ -1004,7 +943,7 @@ static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
 // tile_base : Base VRAM address of tile pixels
 //   palette : Tile palette, duh
 
-template<bool MOSAIC> FORCEINLINE void rot_tiled_8bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
+FORCEINLINE void rot_tiled_8bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
 	u8 palette_entry;
 	u16 tileindex, x, y, color;
 
@@ -1015,10 +954,10 @@ template<bool MOSAIC> FORCEINLINE void rot_tiled_8bit_entry(GPU * gpu, s32 x_pix
 
 	palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileindex<<6)+(y<<3)+x));
 	color = T1ReadWord(palette, palette_entry << 1);
-	gpu->__setFinalColorBck<MOSAIC,false>(color,i,palette_entry);
+	gpu->__setFinalColorBck<false>(color,i,palette_entry);
 }
 
-template<bool MOSAIC, bool extPal> FORCEINLINE void rot_tiled_16bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
+template<bool extPal> FORCEINLINE void rot_tiled_16bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
 	void* const map_addr = MMU_gpu_map(map_base + (((x_pixel / 8) + (y_pixel / 8) * (bg_width / 8)) * 2));
 	
 	TILEENTRY tileentry;
@@ -1029,10 +968,10 @@ template<bool MOSAIC, bool extPal> FORCEINLINE void rot_tiled_16bit_entry(GPU * 
 
 	const u8 palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileentry.bits.TileNum<<6)+(y<<3)+x));
 	const u16 color = T1ReadWord(palette, (palette_entry + (extPal ? (tileentry.bits.Palette<<8) : 0)) << 1);
-	gpu->__setFinalColorBck<MOSAIC,false>(color, i, palette_entry);
+	gpu->__setFinalColorBck<false>(color, i, palette_entry);
 }
 
-template<bool MOSAIC> FORCEINLINE void rot_256_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
+FORCEINLINE void rot_256_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
 	u8 palette_entry;
 	u16 color;
 
@@ -1040,14 +979,14 @@ template<bool MOSAIC> FORCEINLINE void rot_256_map(GPU * gpu, s32 x_pixel, s32 y
 
 	palette_entry = *adr;
 	color = T1ReadWord(palette, palette_entry << 1);
-	gpu->__setFinalColorBck<MOSAIC,false>(color, i, palette_entry);
+	gpu->__setFinalColorBck<false>(color, i, palette_entry);
 }
 
-template<bool MOSAIC> FORCEINLINE void rot_BMP_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
+FORCEINLINE void rot_BMP_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
 	u16 color;
 	void* adr = MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width) * 2));
 	color = T1ReadWord(adr, 0);
-	gpu->__setFinalColorBck<MOSAIC,false>(color, i, color&0x8000);
+	gpu->__setFinalColorBck<false>(color, i, color&0x8000);
 }
 
 typedef void (*rot_fun)(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i);
@@ -1105,7 +1044,7 @@ FORCEINLINE void apply_rot_fun(GPU * gpu, const BGxPARMS& params, u32 map, u32 t
 	else                          rot_scale_op<fun,false>(gpu, params, width, height, map, tile, pal);	
 }
 
-template<bool MOSAIC> FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
+FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 {
 	u8 num = gpu->currBgNum;
 	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
@@ -1116,7 +1055,7 @@ template<bool MOSAIC> FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 	{
       case BGType_Affine:
       {
-         apply_rot_fun<rot_tiled_8bit_entry<MOSAIC> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
+         apply_rot_fun<rot_tiled_8bit_entry>(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
          return;
       }
 
@@ -1128,12 +1067,12 @@ template<bool MOSAIC> FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 
             if (pal)
             {
-               apply_rot_fun<rot_tiled_16bit_entry<MOSAIC, true> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
+               apply_rot_fun<rot_tiled_16bit_entry<true> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
             }
          }
          else
          {
-            apply_rot_fun<rot_tiled_16bit_entry<MOSAIC, false> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
+            apply_rot_fun<rot_tiled_16bit_entry<false> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
          }
 
          return;
@@ -1141,19 +1080,19 @@ template<bool MOSAIC> FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 
       case BGType_AffineExt_256x1:
       {
-   		apply_rot_fun<rot_256_map<MOSAIC> >(gpu, params, gpu->BG_bmp_ram[num], 0, pal);
+   		apply_rot_fun<rot_256_map>(gpu, params, gpu->BG_bmp_ram[num], 0, pal);
          return;
       }
 
       case BGType_AffineExt_Direct:
       {
-		   apply_rot_fun<rot_BMP_map<MOSAIC> >(gpu, params, gpu->BG_bmp_ram[num], 0, NULL);
+		   apply_rot_fun<rot_BMP_map>(gpu, params, gpu->BG_bmp_ram[num], 0, NULL);
 		   return;
       }
 
    	case BGType_Large8bpp:
       {
-		   apply_rot_fun<rot_256_map<MOSAIC> >(gpu, params, gpu->BG_bmp_large_ram[num], 0, pal);
+		   apply_rot_fun<rot_256_map>(gpu, params, gpu->BG_bmp_large_ram[num], 0, pal);
 		   return;
       }
 
@@ -1804,10 +1743,10 @@ static void render_backdrop(GPU* gpu, u16 color)
    {
       case 2: color = (gpu->BLDCNT & 0x20) ? gpu->currentFadeInColors[color] : color; break;
       case 3: color = (gpu->BLDCNT & 0x20) ? gpu->currentFadeOutColors[color] : color; break;
-      case 4: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<false,true,4>(color, x, 1); return;
-      case 5: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<false,true,5>(color, x, 1); return;
-      case 6: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<false,true,6>(color, x, 1); return;
-      case 7: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<false,true,7>(color, x, 1); return;
+      case 4: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,4>(color, x, 1); return;
+      case 5: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,5>(color, x, 1); return;
+      case 6: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,6>(color, x, 1); return;
+      case 7: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,7>(color, x, 1); return;
    }
 
    memset_u16_le<256>(gpu->currDst, color); 
@@ -1883,15 +1822,6 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 
       if (has_sprites)
       {
-         // Apply mosaic: TODO: The original code used the background sizes here too (I think), but maybe is should be using the object mosaic size?
-         if(gpu->dispx_st->mosaic_size.background_width || gpu->dispx_st->mosaic_size.background_height)
-         {
-            for(int i = 0; i < 256; i ++)
-            {
-               mosaicSpriteLinePixel(gpu, i, l, spr, sprAlpha, sprType, sprPrio);
-            }
-         }
-
          // assign them to the good priority item
          for(int i = 0; i < 256; i++) 
          {
@@ -1929,15 +1859,9 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 					{
                   render_3d_line(gpu, l);
 					}
-#ifndef DISABLE_MOSAIC
-               else if(gpu->dispx_st->dispx_BGxCNT[bg_number].bits.Mosaic_Enable)
-               {
-   				   gpu->modeRender<true>(bg_number);
-               }
-#endif
 					else 
                {
-						gpu->modeRender<false>(bg_number);
+						gpu->modeRender(bg_number);
                }
 				}
 			}
@@ -2171,6 +2095,7 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
       RARCH_PERFORMANCE_INIT(mbP);
       RARCH_PERFORMANCE_START(mbP);
 
+#if 0
       if (master_bright.mode == 2)
       {
 	      uint16x8_t* vector_dst = (uint16x8_t*)dst;
@@ -2181,6 +2106,7 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
          }
       }
       else
+#endif
       {
          const u16* const fade_table = (master_bright.mode == 1) ? fadeInColors[master_bright.factor] : fadeOutColors[master_bright.factor];
          for (int i = 0; i < 256; i ++)
@@ -2338,8 +2264,6 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 
 	//cache some parameters which are assumed to be stable throughout the rendering of the entire line
 	gpu->currLine = l;
-	GPU::mosaicLookup.width = &GPU::mosaicLookup.table[gpu->dispx_st->mosaic_size.background_width][0];
-	GPU::mosaicLookup.height = &GPU::mosaicLookup.table[gpu->dispx_st->mosaic_size.background_height][0];
 
 	if(gpu->need_update_winh[0]) gpu->update_winh(0);
 	if(gpu->need_update_winh[1]) gpu->update_winh(1);
@@ -2514,18 +2438,18 @@ void GPU::refreshAffineStartRegs(const int num, const int xy)
 		parms->Y = affineInfo[num-2].y;
 }
 
-template<bool MOSAIC> void GPU::modeRender(int layer)
+void GPU::modeRender(int layer)
 {
    const BGType type = GPU_mode2type[dispCnt().BG_Mode][layer];
 
    if (type == BGType_Text)
    {
-     	renderline_textBG<MOSAIC>(this, getHOFS(layer), currLine + getVOFS(layer), 256);
+     	renderline_textBG(this, getHOFS(layer), currLine + getVOFS(layer), 256);
    }
    else if ((type == BGType_Affine) || (type == BGType_AffineExt) || (type == BGType_Large8bpp))
    {
    	BGxPARMS& parms = (layer == 2) ? dispx_st->dispx_BG2PARMS : dispx_st->dispx_BG3PARMS;
-      rotBG2<MOSAIC>(this, parms);
+      rotBG2(this, parms);
 
    	parms.X += parms.PB;
 	   parms.Y += parms.PD;

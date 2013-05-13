@@ -46,17 +46,9 @@ void rarch_perf_register(struct rarch_perf_counter *perf)
 
 void rarch_perf_log(void)
 {
-#ifdef __APPLE__
-   ra_perf_logf = fopen("/var/mobile/perf.log", "a");
-#endif
-
    RARCH_LOG("[PERF]: Performance counters:\n");
    for (unsigned i = 0; i < perf_ptr; i++)
       RARCH_PERFORMANCE_LOG(perf_counters[i]->ident, *perf_counters[i]);
-
-#ifdef __APPLE__
-   fclose(ra_perf_logf);
-#endif
 }
 
 rarch_perf_tick_t rarch_get_perf_counter(void)

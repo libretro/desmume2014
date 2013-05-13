@@ -360,19 +360,6 @@ struct DISPCAPCNT
 	u8 capSrc;
 } ;
 
-union MOSAIC
-{
-   u16 bits;
-
-   struct
-   {
-      unsigned background_width : 4;
-      unsigned background_height : 4;
-      unsigned object_width : 4;
-      unsigned object_height : 4;
-   } __attribute__((packed));
-} __attribute__((packed));
-
 union MASTER_BRIGHT
 {
    u16 bits;
@@ -402,7 +389,7 @@ struct REG_DISPx {
     BGxPARMS dispx_BG2PARMS;          // 0x0400x020
     BGxPARMS dispx_BG3PARMS;          // 0x0400x030
     u8			filler[12];            // 0x0400x040
-    MOSAIC mosaic_size;               // 0x0400x04C
+    u16 mosaic_size;               // 0x0400x04C
     MISCCNT dispx_MISC;               // 0x0400x04E
     DISP3DCNT dispA_DISP3DCNT;        // 0x04000060
     u32 dispA_DISPCAPCNT;             // 0x04000064
@@ -621,7 +608,7 @@ struct GPU
 
 	_BGxCNT & bgcnt(int num) { return (dispx_st)->dispx_BGxCNT[num].bits; }
 	_DISPCNT dispCnt() { return dispx_st->dispx_DISPCNT.bits; }
-	template<bool MOSAIC> void modeRender(int layer);
+	void modeRender(int layer);
 
 	DISPCAPCNT dispCapCnt;
 	BOOL LayersEnable[5];
@@ -638,14 +625,6 @@ struct GPU
 	u8 BGExtPalSlot[4];
 	u32 BGSize[4][2];
 	BGType BGTypes[4];
-
-	struct MosaicColor {
-		u16 bg[4][256];
-		struct Obj {
-			u16 color;
-			u8 alpha, opaque;
-		} obj[256];
-	} mosaicColors;
 
 	u8 sprNum[256];
 	u8 h_win[2][256];
@@ -715,26 +694,6 @@ struct GPU
 
 	u8* _3dColorLine;
 
-
-	static struct MosaicLookup {
-
-		struct TableEntry {
-			u8 begin, trunc;
-		} table[16][256];
-
-		MosaicLookup() {
-			for(int m=0;m<16;m++)
-				for(int i=0;i<256;i++) {
-					int mosaic = m+1;
-					TableEntry &te = table[m][i];
-					te.begin = (i%mosaic==0);
-					te.trunc = i/mosaic*mosaic;
-				}
-		}
-
-		TableEntry *width, *height;
-   } mosaicLookup;
-
 	u16 blend(u16 colA, u16 colB);
 
 	template<bool BACKDROP, BlendFunc FUNC, bool WINDOW>
@@ -765,8 +724,8 @@ struct GPU
 	void setFinalColor3d(int dstX, int srcX);
 	
 	template<bool BACKDROP, int FUNCNUM> void setFinalColorBG(u16 color, const u32 x);
-	template<bool MOSAIC, bool BACKDROP> FORCEINLINE void __setFinalColorBck(u16 color, const u32 x, const int opaque);
-	template<bool MOSAIC, bool BACKDROP, int FUNCNUM> FORCEINLINE void ___setFinalColorBck(u16 color, const u32 x, const int opaque);
+	template<bool BACKDROP> FORCEINLINE void __setFinalColorBck(u16 color, const u32 x, const int opaque);
+	template<bool BACKDROP, int FUNCNUM> FORCEINLINE void ___setFinalColorBck(u16 color, const u32 x, const int opaque);
 
 	void setAffineStart(int layer, int xy, u32 val);
 	void setAffineStartWord(int layer, int xy, u16 val, int word);
