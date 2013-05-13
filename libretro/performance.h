@@ -36,7 +36,9 @@ extern "C" {
 #include <android/log.h>
 #define RARCH_LOG(...) __android_log_print(ANDROID_LOG_INFO, "libretro", __VA_ARGS__)
 #else
-#define RARCH_LOG(...) printf(__VA_ARGS__)
+FILE* ra_perf_logf;
+#define RARCH_LOG(...) fprintf(ra_perf_logf, __VA_ARGS__)
+//#define RARCH_LOG(...) printf(__VA_ARGS__)
 #endif
 
 #include <stdint.h>

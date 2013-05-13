@@ -2142,6 +2142,8 @@ template<bool SKIP> static void GPU_RenderLine_DispCapture(u16 l)
 	}
 }
 
+#include <arm_neon.h>
+
 static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
 {
    // NOTE: This is a good candidate for vectorization
@@ -2166,11 +2168,58 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
    // Needs lookup
    else
    {
-      const u16* const fade_table = (master_bright.mode == 1) ? fadeInColors[master_bright.factor] : fadeOutColors[master_bright.factor];
-      for (int i = 0; i < 256; i ++)
+      RARCH_PERFORMANCE_INIT(mbP);
+      RARCH_PERFORMANCE_START(mbP);
+
+      if (master_bright.mode == 2)
       {
-         dst[i] = fade_table[dst[i] & 0x7FFF];
+	      uint16x8_t* vector_dst = (uint16x8_t*)dst;
+
+         for (int i = 0; i < 32; i ++)
+         {
+            uint16x8_t color = vector_dst[i];
+            uint16x8_t mask = vmovq_n_u16(0x1F);
+
+            uint16x8_t r = color;
+            uint16x8_t g = vshrq_n_u16(color,  5);
+            uint16x8_t b = vshrq_n_u16(color, 10);
+
+            uint16x8_t r2 = vandq_u16(r, mask);
+            uint16x8_t g2 = vandq_u16(g, mask);
+            uint16x8_t b2 = vandq_u16(b, mask);
+
+            r = vmulq_n_u16(r2, master_bright.factor);
+            g = vmulq_n_u16(g2, master_bright.factor);
+            b = vmulq_n_u16(b2, master_bright.factor);
+
+            r = vshrq_n_u16(r, 4);
+            g = vshrq_n_u16(g, 4);
+            b = vshrq_n_u16(b, 4);
+
+            r2 = vsubq_u16(r2, r);
+            g2 = vsubq_u16(g2, g);
+            b2 = vsubq_u16(b2, b);
+
+            color = r2;
+            g = vshlq_n_u16(g2,  5);
+            b = vshlq_n_u16(b2, 10);
+
+            color = vorrq_u16(color, g);
+            color = vorrq_u16(color, b);
+
+            vector_dst[i] = color;
+         }
       }
+      else
+      {
+         const u16* const fade_table = (master_bright.mode == 1) ? fadeInColors[master_bright.factor] : fadeOutColors[master_bright.factor];
+         for (int i = 0; i < 256; i ++)
+         {
+            dst[i] = fade_table[dst[i] & 0x7FFF];
+         }
+      }
+
+      RARCH_PERFORMANCE_STOP(mbP);
    }
 }
 

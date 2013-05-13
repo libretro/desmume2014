@@ -26,6 +26,8 @@
 #include <PPCIntrinsics.h>
 #elif defined(__linux__)
 #include <sys/time.h>
+#elif defined(__APPLE__)
+#include <mach/mach_time.h>
 #endif
 
 
@@ -44,9 +46,17 @@ void rarch_perf_register(struct rarch_perf_counter *perf)
 
 void rarch_perf_log(void)
 {
+#ifdef __APPLE__
+   ra_perf_logf = fopen("/var/mobile/perf.log", "a");
+#endif
+
    RARCH_LOG("[PERF]: Performance counters:\n");
    for (unsigned i = 0; i < perf_ptr; i++)
       RARCH_PERFORMANCE_LOG(perf_counters[i]->ident, *perf_counters[i]);
+
+#ifdef __APPLE__
+   fclose(ra_perf_logf);
+#endif
 }
 
 rarch_perf_tick_t rarch_get_perf_counter(void)
@@ -62,12 +72,15 @@ rarch_perf_tick_t rarch_get_perf_counter(void)
    time = time_tmp.QuadPart;
 
 #elif defined(__linux__)
+
    struct timespec tv;
    if (clock_gettime(CLOCK_MONOTONIC, &tv) == 0)
       time = (rarch_perf_tick_t)tv.tv_sec * 1000000000 + (rarch_perf_tick_t)tv.tv_nsec;
    else
       time = 0;
 
+#elif defined(__APPLE__)
+   time = mach_absolute_time();
 #elif defined(__GNUC__) && !defined(RARCH_CONSOLE)
 
 #if defined(__i386__) || defined(__i486__) || defined(__i686__)
@@ -77,7 +90,6 @@ rarch_perf_tick_t rarch_get_perf_counter(void)
    asm volatile ("rdtsc" : "=a" (a), "=d" (d));
    time = (rarch_perf_tick_t)a | ((rarch_perf_tick_t)d << 32);
 #endif
-
 #elif defined(__ARM_ARCH_6__) || defined(__ANDROID__)
     asm volatile( "mrc p15, 0, %0, c9, c13, 0" : "=r"(time) );
 #elif defined(__CELLOS_LV2__) || defined(GEKKO) || defined(_XBOX360)

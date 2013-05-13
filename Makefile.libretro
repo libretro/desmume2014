@@ -75,7 +75,7 @@ else ifeq ($(platform), android)
    TARGET := $(TARGET_NAME)_libretro_$(TARGET_NAME).so
    CC = arm-linux-androideabi-gcc$(EXE_EXT)
    CXX = arm-linux-androideabi-g++$(EXE_EXT)
-   CPPFLAGS += -D__RETRO_ARM__
+   CPPFLAGS += -D__RETRO_ARM__ -mfloat-abi=softfp -mfpu=neon
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=libretro/link.T
    DESMUME_JIT_ARM = 1
@@ -220,7 +220,7 @@ endif
 
 SOURCES2   = $(foreach src,$(SOURCES),src/$(src)) libretro/libretro.cpp
 
-OBJECTS    = $(SOURCES2:.cpp=.o) src/utils/ConvertUTF.o libretro/performance.o 
+OBJECTS    = $(SOURCES2:.cpp=.o) src/utils/ConvertUTF.o libretro/performance.o
 LIBS       = -lz
 CFLAGS     += -std=gnu99
 CPPFLAGS   += -D__LIBRETRO__ $(fpic) -iquote src -iquote libretro 

@@ -370,8 +370,8 @@ union MOSAIC
       unsigned background_height : 4;
       unsigned object_width : 4;
       unsigned object_height : 4;
-   };
-};
+   } __attribute__((packed));
+} __attribute__((packed));
 
 union MASTER_BRIGHT
 {
@@ -620,7 +620,7 @@ struct GPU
 	REG_DISPx * dispx_st;
 
 	_BGxCNT & bgcnt(int num) { return (dispx_st)->dispx_BGxCNT[num].bits; }
-	_DISPCNT & dispCnt() { return dispx_st->dispx_DISPCNT.bits; }
+	_DISPCNT dispCnt() { return dispx_st->dispx_DISPCNT.bits; }
 	template<bool MOSAIC> void modeRender(int layer);
 
 	DISPCAPCNT dispCapCnt;
