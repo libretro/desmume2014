@@ -722,7 +722,7 @@ struct TILE
 static TILE tile_cache[0x10000];
 static u32  tile_tag;
 
-static void expand_tile_16(GPU* gpu, u16 tile_entry, u8 line, PIXEL* output_buffer)
+static void expand_tile(GPU* gpu, bool colors256, u16 tile_entry, u32 line, const u16* ex_palette, PIXEL* output_buffer)
 {
    if (tile_cache[tile_entry].tag != tile_tag)
    {
@@ -734,11 +734,11 @@ static void expand_tile_16(GPU* gpu, u16 tile_entry, u8 line, PIXEL* output_buff
 
       line = (tile.bits.VFlip) ? 7 - line : line;
 
-      const u8* tile_pixels = (u8*)MMU_gpu_map(gpu->BG_tile_ram[gpu->currBgNum] + (tile.bits.TileNum * 32) + (line * 4));
-      const u16* palette = (u16*)((MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB) + (tile.bits.Palette * 32));
-
-      if (!tile.bits.HFlip)
+      if (!colors256)
       {
+         const u8* tile_pixels = (u8*)MMU_gpu_map(gpu->BG_tile_ram[gpu->currBgNum] + (tile.bits.TileNum * 32) + (line * 4));
+         const u16* palette = (u16*)((MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB) + (tile.bits.Palette * 32));
+
          for (int i = 0; i != 4; i ++)
          {
             const u8 pixels = tile_pixels[i];
@@ -748,46 +748,25 @@ static void expand_tile_16(GPU* gpu, u16 tile_entry, u8 line, PIXEL* output_buff
       }
       else
       {
-         for (int i = 0; i != 4; i ++)
-         {
-            const u8 pixels = tile_pixels[3 - i];
-            tile_buffer[i * 2 + 0] = BuildPIXEL(palette[pixels >> 4], pixels >> 4);
-            tile_buffer[i * 2 + 1] = BuildPIXEL(palette[pixels & 0xF], pixels & 0xF);
-         }
-      }
-   }
+         const u8* tile_pixels = (u8*)MMU_gpu_map(gpu->BG_tile_ram[gpu->currBgNum] + (tile.bits.TileNum * 64) + (line * 8));
+         const u16* palette = ex_palette ? &ex_palette[256 * tile.bits.Palette]
+                                         : (u16*)(MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB);
 
-   memcpy(output_buffer, tile_cache[tile_entry].pixels, sizeof(PIXEL) * 8);
-}
-
-static void expand_tile_256(GPU* gpu, u16 tile_entry, u8 line, const u16* ex_palette, PIXEL* output_buffer)
-{
-   if (tile_cache[tile_entry].tag != tile_tag)
-   {
-      PIXEL* tile_buffer = tile_cache[tile_entry].pixels;
-      tile_cache[tile_entry].tag = tile_tag;
-
-      TILEENTRY tile;
-      tile.val = tile_entry;
-
-      line = (tile.bits.VFlip) ? 7 - line : line;
-
-      const u8* tile_pixels = (u8*)MMU_gpu_map(gpu->BG_tile_ram[gpu->currBgNum] + (tile.bits.TileNum * 64) + (line * 8));
-      const u16* palette = ex_palette ? &ex_palette[256 * tile.bits.Palette]
-                                      : (u16*)(MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB);
-
-      if (!tile.bits.HFlip)
-      {
          for (int i = 0; i != 8; i ++)
          {
             tile_buffer[i] = BuildPIXEL(palette[tile_pixels[i]], tile_pixels[i]);
          }
       }
-      else
+
+      // HFlip
+      if (tile.bits.HFlip)
       {
+         PIXEL tmp[8];
+         memcpy(tmp, tile_buffer, sizeof(tmp));
+
          for (int i = 0; i != 8; i ++)
          {
-            tile_buffer[7 - i] = BuildPIXEL(palette[tile_pixels[i]], tile_pixels[i]);
+            tile_buffer[7 - i] = tmp[i];
          }
       }
    }
@@ -796,7 +775,7 @@ static void expand_tile_256(GPU* gpu, u16 tile_entry, u8 line, const u16* ex_pal
 }
 
 // render a text background to the combined pixelbuffer
-static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
+static void renderline_textBG(GPU * gpu, u32 start_x, u32 line, u32 width)
 {
    // Change tile tag, effectively clearing the tile cache
    // TODO: Make tile cache more persistent
@@ -817,45 +796,28 @@ static void renderline_textBG(GPU * gpu, u16 start_x, u16 line, u16 width)
    const u32 tile_map_base   = (gpu->BG_map_ram[num] + (y_tile & 31) * 64)
                              + ((y_tile >= 32) ? ADDRESS_STEP_512B << bgCnt.ScreenSize : 0);
 
-   PIXEL pixels[33 * 8];
+   const u32 x_offset        = start_x & 7;
 
-   // 16 Colors
-	if(!bgCnt.Palette_256)
-	{
-      for (int i = 0; i < 33; i ++)
-      {
-         const u32 x_tile    = ((start_x / 8) + i) & bg_width_mask;
-         const u32 tile_map  = tile_map_base + (x_tile & 0x1F) * 2
-                             + ((x_tile >= 32) ? 32 * 32 * 2 : 0);
+   PIXEL pixels[34 * 8];
 
-         expand_tile_16(gpu, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, &pixels[i * 8]);
-      }
-   }
-   // 256 Colors
-   else
+   // This is set so that pixels[8] will be the first displayed pixel
+   PIXEL* pixel_base = &pixels[8 - (start_x & 7)];
+
+   for (int i = 0; i < 33; i ++)
    {
-      const u16* palette_base = (dispCnt.ExBGxPalette_Enable) ? (u16*)MMU.ExtPal[gpu->core][gpu->BGExtPalSlot[num]] : 0;
-      if (dispCnt.ExBGxPalette_Enable && (palette_base == 0))
-      {
-         return;
-      }
+      const u32 x_tile      = ((start_x / 8) + i) & bg_width_mask;
+      const u32 tile_map    = tile_map_base + (x_tile & 0x1F) * 2
+                            + ((x_tile >= 32) ? 32 * 32 * 2 : 0);
 
-      for (int i = 0; i < 33; i ++)
-      {
-         const u32 x_tile    = ((start_x / 8) + i) & bg_width_mask;
-         const u32 tile_map  = tile_map_base + (x_tile & 0x1F) * 2
-                             + ((x_tile >= 32) ? 32 * 32 * 2 : 0);
+      const u16* ex_palette = (dispCnt.ExBGxPalette_Enable && bgCnt.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][gpu->BGExtPalSlot[num]] : 0;
 
-         expand_tile_256(gpu, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, palette_base, &pixels[i * 8]);
-      }
+      expand_tile(gpu, bgCnt.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
    }
-
 
    // Finish
-   const u32 x_base = start_x & 7;
    for (int i = 0; i < width; i ++)
    {
-      gpu->__setFinalColorBck<false>(pixels[x_base + i].color, i, pixels[x_base + i].opaque);
+      gpu->__setFinalColorBck<false>(pixels[8 + i].color, i, pixels[8 + i].opaque);
    }
 }
 
