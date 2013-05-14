@@ -200,8 +200,6 @@ void GPU_Reset(GPU *g, u8 l)
 
 	g->spriteRenderMode = GPU::SPRITE_1D;
 
-	g->bgPrio[4] = 0xFF;
-
 	if(g->core == GPU_SUB)
 	{
 		g->oam = (MMU.ARM9_OAM + ADDRESS_STEP_1KB);
@@ -222,39 +220,6 @@ void GPU_DeInit(GPU * gpu)
 {
 	if(gpu==&GPU_main || gpu==&GPU_sub) return;
 	free(gpu);
-}
-
-static void GPU_resortBGs(GPU *gpu)
-{
-	int i, prio;
-	struct _DISPCNT * cnt = &gpu->dispx_st->dispx_DISPCNT.bits;
-	itemsForPriority_t * item;
-
-	// we don't need to check for windows here...
-// if we tick boxes, invisible layers become invisible & vice versa
-#define OP ^ !
-// if we untick boxes, layers become invisible
-//#define OP &&
-	gpu->LayersEnable[0] = CommonSettings.dispLayers[gpu->core][0] OP(cnt->BG0_Enable/* && !(cnt->BG0_3D && (gpu->core==0))*/);
-	gpu->LayersEnable[1] = CommonSettings.dispLayers[gpu->core][1] OP(cnt->BG1_Enable);
-	gpu->LayersEnable[2] = CommonSettings.dispLayers[gpu->core][2] OP(cnt->BG2_Enable);
-	gpu->LayersEnable[3] = CommonSettings.dispLayers[gpu->core][3] OP(cnt->BG3_Enable);
-	gpu->LayersEnable[4] = CommonSettings.dispLayers[gpu->core][4] OP(cnt->OBJ_Enable);
-
-	// KISS ! lower priority first, if same then lower num
-	for (i=0;i<NB_PRIORITIES;i++) {
-		item = &(gpu->itemsForPriority[i]);
-		item->nbBGs=0;
-		item->nbPixelsX=0;
-	}
-	for (i=NB_BG; i>0; ) {
-		i--;
-		if (!gpu->LayersEnable[i]) continue;
-		prio = (gpu->dispx_st)->dispx_BGxCNT[i].bits.Priority;
-		item = &(gpu->itemsForPriority[prio]);
-		item->BGs[item->nbBGs]=i;
-		item->nbBGs++;
-	}
 }
 
 static FORCEINLINE u16 _blend(u16 colA, u16 colB, GPU::TBlendTable* blendTable)
@@ -344,8 +309,6 @@ void GPU_setVideoProp(GPU * gpu, u32 p)
 	GPU_setBGProp(gpu, 2, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 12));
 	GPU_setBGProp(gpu, 1, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 10));
 	GPU_setBGProp(gpu, 0, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 8));
-	
-	//GPU_resortBGs(gpu);
 }
 
 //this handles writing in BGxCNT
@@ -356,7 +319,7 @@ void GPU_setBGProp(GPU * gpu, u16 num, u16 p)
 	
 	T1WriteWord((u8 *)&(gpu->dispx_st)->dispx_BGxCNT[num].val, 0, p);
 	
-	GPU_resortBGs(gpu);
+   gpu->resort_backgrounds();
 
 	if(gpu->core == GPU_SUB)
 	{
@@ -415,8 +378,6 @@ void GPU_setBGProp(GPU * gpu, u16 num, u16 p)
 
 	gpu->BGSize[num][0] = sizeTab[mode][cnt->ScreenSize][0];
 	gpu->BGSize[num][1] = sizeTab[mode][cnt->ScreenSize][1];
-	
-	gpu->bgPrio[num] = (p & 0x3);
 }
 
 /*****************************************************************************/
@@ -732,40 +693,6 @@ u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index)
 	u16* u16_oam_buffer = (u16*)oam_buffer;
 	int u16_offset = oam_index<<2;
 	return LE_TO_LOCAL_16(u16_oam_buffer[u16_offset + 3]);
-}
-
-
-void lineLarge8bpp(GPU * gpu)
-{
-	if(gpu->core == 1) {
-		PROGINFO("Cannot use large 8bpp screen on sub core\n");
-		return;
-	}
-
-	u8 num = gpu->currBgNum;
-	u16 XBG = gpu->getHOFS(gpu->currBgNum);
-	u16 YBG = gpu->currLine + gpu->getVOFS(gpu->currBgNum);
-	u16 lg     = gpu->BGSize[num][0];
-	u16 ht     = gpu->BGSize[num][1];
-	u16 wmask  = (lg-1);
-	u16 hmask  = (ht-1);
-	YBG &= hmask;
-
-	//TODO - handle wrapping / out of bounds correctly from rot_scale_op?
-
-	u32 tmp_map = gpu->BG_bmp_large_ram[num] + lg * YBG;
-	u8* map = (u8 *)MMU_gpu_map(tmp_map);
-
-	u8* pal = MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB;
-
-	for(int x = 0; x < lg; ++x, ++XBG)
-	{
-		XBG &= wmask;
-		u8 pixel = map[XBG];
-		u16 color = T1ReadWord(pal, pixel<<1);
-		gpu->__setFinalColorBck<false>(color,x,color);
-	}
-	
 }
 
 /*****************************************************************************/
@@ -2458,4 +2385,30 @@ void GPU::modeRender(int layer)
    {
       PROGINFO("Attempting to render an invalid BG type\n");
    }
+}
+
+void GPU::resort_backgrounds()
+{
+   _DISPCNT display_control = dispCnt();
+
+	LayersEnable[0] = CommonSettings.dispLayers[core][0] ^ !(display_control.BG0_Enable);
+	LayersEnable[1] = CommonSettings.dispLayers[core][1] ^ !(display_control.BG1_Enable);
+	LayersEnable[2] = CommonSettings.dispLayers[core][2] ^ !(display_control.BG2_Enable);
+	LayersEnable[3] = CommonSettings.dispLayers[core][3] ^ !(display_control.BG3_Enable);
+	LayersEnable[4] = CommonSettings.dispLayers[core][4] ^ !(display_control.OBJ_Enable);
+
+	for (int i = 0; i < NB_PRIORITIES; i ++)
+   {
+      itemsForPriority[i].nbBGs = 0;
+      itemsForPriority[i].nbPixelsX = 0;
+	}
+
+	for (int i = NB_BG - 1; i >= 0; i --)
+   {
+      if (LayersEnable[i])
+      {
+   		itemsForPriority_t* item = &itemsForPriority[bgcnt(i).Priority];
+         item->BGs[item->nbBGs ++] = i;
+      }
+	}
 }

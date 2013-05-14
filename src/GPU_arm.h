@@ -642,8 +642,6 @@ struct GPU
 
 	//FIFO	fifo;
 
-	u8 bgPrio[5];
-
 	void * oam;
 	u32	sprMem;
 	u8 sprBoundary;
@@ -773,6 +771,9 @@ struct GPU
 		blendTable = (TBlendTable*)&gpuBlendTable555[BLDALPHA_EVA][BLDALPHA_EVB][0][0];
 	}
 	
+
+   public:
+      void resort_backgrounds();
 };
 
 CACHE_ALIGN extern u8 GPU_screen[4*256*192];
