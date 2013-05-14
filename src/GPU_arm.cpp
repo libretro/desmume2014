@@ -832,21 +832,20 @@ static void renderline_textBG(GPU * gpu, u32 start_x, u32 line, u32 width)
 // tile_base : Base VRAM address of tile pixels
 //   palette : Tile palette, duh
 
-FORCEINLINE void rot_tiled_8bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
-	u8 palette_entry;
-	u16 tileindex, x, y, color;
+FORCEINLINE PIXEL rot_tiled_8bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+{
+	const u32 tileindex = *(u8*)MMU_gpu_map(map_base + ((x_pixel / 8) + (y_pixel / 8) * (bg_width / 8)));
+	const u32 x = (x_pixel & 7); 
+	const u32 y = (y_pixel & 7);
 
-	tileindex = *(u8*)MMU_gpu_map(map_base + ((x_pixel / 8) + (y_pixel / 8) * (bg_width / 8)));
+	const u32 palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileindex<<6)+(y<<3)+x));
+	const u32 color = T1ReadWord(palette, palette_entry << 1);
 
-	x = (x_pixel & 7); 
-	y = (y_pixel & 7);
-
-	palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileindex<<6)+(y<<3)+x));
-	color = T1ReadWord(palette, palette_entry << 1);
-	gpu->__setFinalColorBck<false>(color,i,palette_entry);
+   return BuildPIXEL(color, palette_entry);
 }
 
-template<bool extPal> FORCEINLINE void rot_tiled_16bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
+template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+{
 	void* const map_addr = MMU_gpu_map(map_base + (((x_pixel / 8) + (y_pixel / 8) * (bg_width / 8)) * 2));
 	
 	TILEENTRY tileentry;
@@ -857,28 +856,27 @@ template<bool extPal> FORCEINLINE void rot_tiled_16bit_entry(GPU * gpu, s32 x_pi
 
 	const u8 palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileentry.bits.TileNum<<6)+(y<<3)+x));
 	const u16 color = T1ReadWord(palette, (palette_entry + (extPal ? (tileentry.bits.Palette<<8) : 0)) << 1);
-	gpu->__setFinalColorBck<false>(color, i, palette_entry);
+
+   return BuildPIXEL(color, palette_entry);
 }
 
-FORCEINLINE void rot_256_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
-	u8 palette_entry;
-	u16 color;
+FORCEINLINE PIXEL rot_256_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+{
+	u8* const adr = (u8*)MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width)));
+	const u32 palette_entry = *adr;
+	const u32 color = T1ReadWord(palette, palette_entry << 1);
 
-	u8* adr = (u8*)MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width)));
-
-	palette_entry = *adr;
-	color = T1ReadWord(palette, palette_entry << 1);
-	gpu->__setFinalColorBck<false>(color, i, palette_entry);
+   return BuildPIXEL(color, palette_entry);
 }
 
-FORCEINLINE void rot_BMP_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i) {
-	u16 color;
-	void* adr = MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width) * 2));
-	color = T1ReadWord(adr, 0);
-	gpu->__setFinalColorBck<false>(color, i, color&0x8000);
+FORCEINLINE PIXEL rot_BMP_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+{
+	void* const adr = MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width) * 2));
+	const u32 color = T1ReadWord(adr, 0);
+   return BuildPIXEL(color, color & 0x8000);
 }
 
-typedef void (*rot_fun)(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette, int i);
+typedef PIXEL (*rot_fun)(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette);
 
 template<rot_fun fun, bool WRAP>
 FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 height, u32 map, u32 tile, u8 * pal)
@@ -893,6 +891,8 @@ FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 
 
    // TODO: Don't check bounds every pixel, instead calculate how many pixels can be drawn or skipped before overflow or wrap   
 
+   PIXEL pixels[256];
+
 	// as an optimization, specially handle the fairly common case of
 	// "unrotated + unscaled + no boundary checking required"
 	if(params.PA == 0x100 && params.PC == 0 && 
@@ -904,7 +904,7 @@ FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 
       for(int i = 0; i < 256; i ++, x_pos ++)
       {
          x_pos &= (WRAP) ? width - 1 : 0xFFFFFFFF;
-         fun(gpu, x_pos, y_pos, width, map, tile, pal, i);
+         pixels[i] = fun(gpu, x_pos, y_pos, width, map, tile, pal);
       }
 	}
    else
@@ -916,9 +916,14 @@ FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 
 
          if(WRAP || ((x_pos >= 0) && (x_pos < width) && (y_pos >= 0) && (y_pos < height)))
          {
-            fun(gpu, x_pos, y_pos, width, map, tile, pal, i);
+            pixels[i] = fun(gpu, x_pos, y_pos, width, map, tile, pal);
          }
       }
+   }
+
+   for (int i = 0; i < 256; i ++)
+   {
+      gpu->__setFinalColorBck<false>(pixels[i].color, i, pixels[i].opaque);
    }
 }
 
