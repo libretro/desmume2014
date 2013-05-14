@@ -614,9 +614,6 @@ struct GPU
 	BOOL LayersEnable[5];
 	itemsForPriority_t itemsForPriority[NB_PRIORITIES];
 
-#define BGBmpBB BG_bmp_ram
-#define BGChBB BG_tile_ram
-
 	u32 BG_bmp_large_ram[4];
 	u32 BG_bmp_ram[4];
 	u32 BG_tile_ram[4];
@@ -864,11 +861,6 @@ void SetupFinalPixelBlitter (GPU *gpu);
 
 
 #define GPU_setBLDY_EVY(gpu, val) {gpu->BLDY_EVY = ((val)&0x1f) > 16 ? 16 : ((val)&0x1f);}
-
-void gpu_SetRotateScreen(u16 angle);
-
-//#undef FORCEINLINE
-//#define FORCEINLINE __forceinline
 
 #endif
 
