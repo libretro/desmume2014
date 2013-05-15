@@ -198,6 +198,8 @@ void GPU_Reset(GPU *g, u8 l)
 
    for (int i = 0; i != 4; i ++)
    {
+      g->backgrounds[i].parent = g;
+      g->backgrounds[i].number = i;
       g->backgrounds[i].set_size(256, 256);
    }
 
@@ -763,9 +765,8 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
    // TODO: Make tile cache more persistent
    tile_tag ++;
 
-	const u8 num              = gpu->currBgNum;
-   GPU::background& bg       = gpu->backgrounds[num];
-	const _BGxCNT bgCnt       = gpu->dispx_st->dispx_BGxCNT[num].bits;
+   GPU::background& bg       = gpu->current_background();
+	const _BGxCNT bgCnt       = bg.control();
 	const _DISPCNT dispCnt    = gpu->dispx_st->dispx_DISPCNT.bits;
 
    // Get backgroud size info
@@ -913,18 +914,13 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const BGxPARMS& par
 template<rot_fun fun>
 FORCEINLINE void apply_rot_fun(GPU* gpu, GPU::background& bg, const BGxPARMS& params, u8 * pal)
 {
-	struct _BGxCNT * bgCnt = &(gpu->dispx_st)->dispx_BGxCNT[gpu->currBgNum].bits;
-
-	if(bgCnt->PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
-	else                          rot_scale_op<fun,false>(gpu, bg, params, pal);	
+	if(bg.control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
+	else                                rot_scale_op<fun,false>(gpu, bg, params, pal);	
 }
 
 FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 {
-	u8 num = gpu->currBgNum;
-	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
-   GPU::background& bg = gpu->backgrounds[num];	
-
+   GPU::background& bg = gpu->current_background();
 	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
 
 	switch(bg.type)
@@ -937,7 +933,7 @@ FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 
    	case BGType_AffineExt_256x16:
       {
-         if (dispCnt->ExBGxPalette_Enable)
+         if (gpu->dispCnt().ExBGxPalette_Enable)
          {
             pal = MMU.ExtPal[gpu->core][bg.extended_palette_slot];
 

@@ -618,8 +618,11 @@ struct GPU
    {
       public:
          void set_size(u32 width_, u32 height_) { width = width_; height = height_; }
+         _BGxCNT control() const { return parent->dispx_st->dispx_BGxCNT[number].bits; }
 
       public:
+         GPU* parent;
+         u32 number;
          BGType type;
 
          u32 tile_map_ram;
@@ -632,8 +635,9 @@ struct GPU
          u32 width;
          u32 height;
    };
+   background backgrounds[4];
 
-   struct background backgrounds[4];
+   background& current_background() { return backgrounds[currBgNum]; }
 
 	u8 sprNum[256];
 	u8 h_win[2][256];
