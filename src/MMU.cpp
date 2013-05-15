@@ -2700,43 +2700,43 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 
 			case REG_DISPA_BG0CNT :
 				//GPULOG("MAIN BG0 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(MainScreen.gpu, 0, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x8, val);
+            MainScreen.gpu->refresh_background_control(0);
 				return;
 			case REG_DISPA_BG1CNT :
 				//GPULOG("MAIN BG1 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(MainScreen.gpu, 1, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0xA, val);
+            MainScreen.gpu->refresh_background_control(1);
 				return;
 			case REG_DISPA_BG2CNT :
 				//GPULOG("MAIN BG2 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(MainScreen.gpu, 2, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0xC, val);
+            MainScreen.gpu->refresh_background_control(2);
 				return;
 			case REG_DISPA_BG3CNT :
 				//GPULOG("MAIN BG3 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(MainScreen.gpu, 3, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0xE, val);
+            MainScreen.gpu->refresh_background_control(3);
 				return;
 			case REG_DISPB_BG0CNT :
 				//GPULOG("SUB BG0 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(SubScreen.gpu, 0, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x1008, val);
+            SubScreen.gpu->refresh_background_control(0);
 				return;
 			case REG_DISPB_BG1CNT :
 				//GPULOG("SUB BG1 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(SubScreen.gpu, 1, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x100A, val);
+            SubScreen.gpu->refresh_background_control(1);
 				return;
 			case REG_DISPB_BG2CNT :
 				//GPULOG("SUB BG2 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(SubScreen.gpu, 2, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x100C, val);
+            SubScreen.gpu->refresh_background_control(2);
 				return;
 			case REG_DISPB_BG3CNT :
 				//GPULOG("SUB BG3 SETPROP 16B %08X\r\n", val);
-				GPU_setBGProp(SubScreen.gpu, 3, val);
 				T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x100E, val);
+            SubScreen.gpu->refresh_background_control(3);
 				return;
 
 			case REG_VRAMCNTA:
@@ -2790,15 +2790,15 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 			case REG_DISPA_DISPCNT :
 				{
 					u32 v = (T1ReadLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0) & 0xFFFF0000) | val;
-					GPU_setVideoProp(MainScreen.gpu, v);
 					T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0, v);
+               MainScreen.gpu->refresh_display_control();
 					return;
 				}
 			case REG_DISPA_DISPCNT+2 : 
 				{
 					u32 v = (T1ReadLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0) & 0xFFFF) | ((u32) val << 16);
-					GPU_setVideoProp(MainScreen.gpu, v);
 					T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0, v);
+               MainScreen.gpu->refresh_display_control();
 				}
 				return;
 			case REG_DISPA_DISPCAPCNT :
@@ -2819,16 +2819,16 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 			case REG_DISPB_DISPCNT :
 				{
 					u32 v = (T1ReadLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x1000) & 0xFFFF0000) | val;
-					GPU_setVideoProp(SubScreen.gpu, v);
 					T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x1000, v);
+               SubScreen.gpu->refresh_display_control();
 					return;
 				}
 			case REG_DISPB_DISPCNT+2 : 
 				{
 					//emu_halt();
 					u32 v = (T1ReadLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x1000) & 0xFFFF) | ((u32) val << 16);
-					GPU_setVideoProp(SubScreen.gpu, v);
 					T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x1000, v);
+               SubScreen.gpu->refresh_display_control();
 					return;
 				}
 
@@ -3139,15 +3139,15 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 				break;
 
 			case REG_DISPA_DISPCNT :
-				GPU_setVideoProp(MainScreen.gpu, val);
-				//GPULOG("MAIN INIT 32B %08X\r\n", val);
 				T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0, val);
+            MainScreen.gpu->refresh_display_control();
+				//GPULOG("MAIN INIT 32B %08X\r\n", val);
 				return;
 				
 			case REG_DISPB_DISPCNT : 
-				GPU_setVideoProp(SubScreen.gpu, val);
-				//GPULOG("SUB INIT 32B %08X\r\n", val);
 				T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x1000, val);
+            SubScreen.gpu->refresh_display_control();
+				//GPULOG("SUB INIT 32B %08X\r\n", val);
 				return;
 
 			case REG_VRAMCNTA:
@@ -3241,25 +3241,25 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 				return;
 				
 			case REG_DISPA_BG0CNT :
-				GPU_setBGProp(MainScreen.gpu, 0, (val&0xFFFF));
-				GPU_setBGProp(MainScreen.gpu, 1, (val>>16));
-				//if((val>>16)==0x400) emu_halt();
 				T1WriteLong(MMU.ARM9_REG, 8, val);
+            MainScreen.gpu->refresh_background_control(0);
+            MainScreen.gpu->refresh_background_control(1);
+				//if((val>>16)==0x400) emu_halt();
 				return;
 			case REG_DISPA_BG2CNT :
-					GPU_setBGProp(MainScreen.gpu, 2, (val&0xFFFF));
-					GPU_setBGProp(MainScreen.gpu, 3, (val>>16));
 					T1WriteLong(MMU.ARM9_REG, 0xC, val);
+               MainScreen.gpu->refresh_background_control(2);
+               MainScreen.gpu->refresh_background_control(3);
 				return;
 			case REG_DISPB_BG0CNT :
-					GPU_setBGProp(SubScreen.gpu, 0, (val&0xFFFF));
-					GPU_setBGProp(SubScreen.gpu, 1, (val>>16));
 					T1WriteLong(MMU.ARM9_REG, 0x1008, val);
+               SubScreen.gpu->refresh_background_control(0);
+               SubScreen.gpu->refresh_background_control(1);
 				return;
 			case REG_DISPB_BG2CNT :
-					GPU_setBGProp(SubScreen.gpu, 2, (val&0xFFFF));
-					GPU_setBGProp(SubScreen.gpu, 3, (val>>16));
 					T1WriteLong(MMU.ARM9_REG, 0x100C, val);
+               SubScreen.gpu->refresh_background_control(2);
+               SubScreen.gpu->refresh_background_control(3);
 				return;
 			case REG_DISPA_DISPMMEMFIFO:
 			{

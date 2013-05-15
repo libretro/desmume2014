@@ -253,31 +253,28 @@ void SetupFinalPixelBlitter (GPU *gpu)
 }
     
 //Sets up LCD control variables for Display Engines A and B for quick reading
-void GPU_setVideoProp(GPU * gpu, u32 p)
+void GPU::refresh_display_control()
 {
-	struct _DISPCNT * cnt;
-	cnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
+   const _DISPCNT display_control = dispCnt();
 
-	T1WriteLong((u8 *)&(gpu->dispx_st)->dispx_DISPCNT.val, 0, p);
+	WIN0_ENABLED	  = display_control.Win0_Enable;
+	WIN1_ENABLED	  = display_control.Win1_Enable;
+	WINOBJ_ENABLED = display_control.WinOBJ_Enable;
 
-	gpu->WIN0_ENABLED	= cnt->Win0_Enable;
-	gpu->WIN1_ENABLED	= cnt->Win1_Enable;
-	gpu->WINOBJ_ENABLED = cnt->WinOBJ_Enable;
+	SetupFinalPixelBlitter(this);
 
-	SetupFinalPixelBlitter (gpu);
+   dispMode = display_control.DisplayMode & ((core)?1:3);
 
-    gpu->dispMode = cnt->DisplayMode & ((gpu->core)?1:3);
+	vramBlock = display_control.VRAM_Block;
 
-	gpu->vramBlock = cnt->VRAM_Block;
-
-	switch (gpu->dispMode)
+	switch (dispMode)
 	{
 		case 0: // Display Off
 			break;
 		case 1: // Display BG and OBJ layers
 			break;
 		case 2: // Display framebuffer
-			gpu->VRAMaddr = (u8 *)MMU.ARM9_LCD + (gpu->vramBlock * 0x20000);
+			VRAMaddr = (u8 *)MMU.ARM9_LCD + (vramBlock * 0x20000);
 			break;
 		case 3: // Display from Main RAM
 			// nothing to be done here
@@ -285,84 +282,99 @@ void GPU_setVideoProp(GPU * gpu, u32 p)
 			break;
 	}
 
-	if(cnt->OBJ_Tile_mapping)
+	if(display_control.OBJ_Tile_mapping)
 	{
 		//1-d sprite mapping boundaries:
 		//32k, 64k, 128k, 256k
-		gpu->sprBoundary = 5 + cnt->OBJ_Tile_1D_Bound ;
+		sprBoundary = 5 + display_control.OBJ_Tile_1D_Bound ;
 		
 		//do not be deceived: even though a sprBoundary==8 (256KB region) is impossible to fully address
 		//in GPU_SUB, it is still fully legal to address it with that granularity.
-		//so don't do this: //if((gpu->core == GPU_SUB) && (cnt->OBJ_Tile_1D_Bound == 3)) gpu->sprBoundary = 7;
+		//so don't do this: //if((core == GPU_SUB) && (display_control.OBJ_Tile_1D_Bound == 3)) sprBoundary = 7;
 
-		gpu->spriteRenderMode = GPU::SPRITE_1D;
+		spriteRenderMode = GPU::SPRITE_1D;
 	} else {
 		//2d sprite mapping
 		//boundary : 32k
-		gpu->sprBoundary = 5;
-		gpu->spriteRenderMode = GPU::SPRITE_2D;
+		sprBoundary = 5;
+		spriteRenderMode = GPU::SPRITE_2D;
 	}
      
-	if(cnt->OBJ_BMP_1D_Bound && (gpu->core == GPU_MAIN))
-		gpu->sprBMPBoundary = 8;
+	if(display_control.OBJ_BMP_1D_Bound && (core == GPU_MAIN))
+		sprBMPBoundary = 8;
 	else
-		gpu->sprBMPBoundary = 7;
+		sprBMPBoundary = 7;
 
-	gpu->sprEnable = cnt->OBJ_Enable;
-	
-	GPU_setBGProp(gpu, 3, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 14));
-	GPU_setBGProp(gpu, 2, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 12));
-	GPU_setBGProp(gpu, 1, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 10));
-	GPU_setBGProp(gpu, 0, T1ReadWord(MMU.ARM9_REG, gpu->core * ADDRESS_STEP_4KB + 8));
+	sprEnable = display_control.OBJ_Enable;
+
+   for (int i = 0; i != 4; i ++)
+   {
+      refresh_background_control(i);
+   }
 }
 
 //this handles writing in BGxCNT
-void GPU_setBGProp(GPU* gpu, u16 num, u16 p)
+void GPU::refresh_background_control(u32 bg_number)
 {
-	struct _BGxCNT * cnt = &((gpu->dispx_st)->dispx_BGxCNT[num].bits);
-	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
+   GPU::background& bg = backgrounds[bg_number];
+
+	const _DISPCNT display_control = dispCnt();
+	const _BGxCNT  bg_control      = bgcnt(bg_number);
 	
-   GPU::background& bg = gpu->backgrounds[num];
+   resort_backgrounds();
 
-	T1WriteWord((u8 *)&(gpu->dispx_st)->dispx_BGxCNT[num].val, 0, p);
-	
-   gpu->resort_backgrounds();
+   const u32 gpu_memory_base  = (core == GPU_SUB) ? MMU_BBG : MMU_ABG;
+   bg.tile_map_ram            = gpu_memory_base + ((core == GPU_MAIN) ? display_control.ScreenBase_Block * ADDRESS_STEP_64KB : 0);
+   bg.tile_pixel_ram          = gpu_memory_base + ((core == GPU_MAIN) ? display_control.CharacBase_Block * ADDRESS_STEP_64KB : 0);
+   bg.bitmap_ram              = gpu_memory_base;
+   bg.large_bitmap_ram        = gpu_memory_base;
 
-	if(gpu->core == GPU_SUB)
-	{
-		bg.tile_map_ram  = MMU_BBG;
-		bg.tile_pixel_ram = MMU_BBG;
-		bg.bitmap_ram = MMU_BBG;
-		bg.large_bitmap_ram = MMU_BBG;
+	bg.tile_map_ram           += bg_control.ScreenBase_Block * ADDRESS_STEP_2KB;
+	bg.tile_pixel_ram         += bg_control.CharacBase_Block * ADDRESS_STEP_16KB;
+	bg.bitmap_ram             += bg_control.ScreenBase_Block * ADDRESS_STEP_16KB;
 
-	} 
-	else 
-	{
-		bg.tile_map_ram  = MMU_ABG + dispCnt->ScreenBase_Block * ADDRESS_STEP_64KB;
-		bg.tile_pixel_ram = MMU_ABG + dispCnt->CharacBase_Block * ADDRESS_STEP_64KB;
-		bg.bitmap_ram = MMU_ABG;
-		bg.large_bitmap_ram = MMU_ABG;
-	}
+   bg.extended_palette_slot   = bg_number + ((bg_number < 2) ? bg_control.PaletteSet_Wrap * 2 : 0);
 
-	bg.tile_map_ram += (cnt->ScreenBase_Block * ADDRESS_STEP_2KB);
-	bg.tile_pixel_ram += (cnt->CharacBase_Block * ADDRESS_STEP_16KB);
-	bg.bitmap_ram += (cnt->ScreenBase_Block * ADDRESS_STEP_16KB);
-
-   bg.extended_palette_slot = num + ((num < 2) ? cnt->PaletteSet_Wrap * 2 : 0);
-
-	bg.type = GPU_mode2type[dispCnt->BG_Mode][num];
+	bg.type                    = GPU_mode2type[display_control.BG_Mode][bg_number];
 
 	//clarify affine ext modes 
 	if(bg.type == BGType_AffineExt)
 	{
       static const BGType affine_modes[4] = { BGType_AffineExt_256x16, BGType_AffineExt_256x16, BGType_AffineExt_256x1, BGType_AffineExt_Direct };
-		const u32 affine_mode = (cnt->Palette_256 << 1) | (cnt->CharacBase_Block & 1);
+		const u32 affine_mode = (bg_control.Palette_256 << 1) | (bg_control.CharacBase_Block & 1);
 
       bg.type = affine_modes[affine_mode];
 	}
 
-   gpu->backgrounds[num].set_size(sizeTab[bg.type][cnt->ScreenSize][0], sizeTab[bg.type][cnt->ScreenSize][1]);
+   bg.set_size(sizeTab[bg.type][bg_control.ScreenSize][0], sizeTab[bg.type][bg_control.ScreenSize][1]);
 }
+
+void GPU::resort_backgrounds()
+{
+   _DISPCNT display_control = dispCnt();
+
+	LayersEnable[0] = CommonSettings.dispLayers[core][0] ^ !(display_control.BG0_Enable);
+	LayersEnable[1] = CommonSettings.dispLayers[core][1] ^ !(display_control.BG1_Enable);
+	LayersEnable[2] = CommonSettings.dispLayers[core][2] ^ !(display_control.BG2_Enable);
+	LayersEnable[3] = CommonSettings.dispLayers[core][3] ^ !(display_control.BG3_Enable);
+	LayersEnable[4] = CommonSettings.dispLayers[core][4] ^ !(display_control.OBJ_Enable);
+
+	for (int i = 0; i < NB_PRIORITIES; i ++)
+   {
+      itemsForPriority[i].nbBGs = 0;
+      itemsForPriority[i].nbPixelsX = 0;
+	}
+
+	for (int i = NB_BG - 1; i >= 0; i --)
+   {
+      if (LayersEnable[i])
+      {
+   		itemsForPriority_t* item = &itemsForPriority[bgcnt(i).Priority];
+         item->BGs[item->nbBGs ++] = i;
+      }
+	}
+}
+
 
 /*****************************************************************************/
 //		ROUTINES FOR INSIDE / OUTSIDE WINDOW CHECKS
@@ -2327,28 +2339,3 @@ void GPU::modeRender(int layer)
    }
 }
 
-void GPU::resort_backgrounds()
-{
-   _DISPCNT display_control = dispCnt();
-
-	LayersEnable[0] = CommonSettings.dispLayers[core][0] ^ !(display_control.BG0_Enable);
-	LayersEnable[1] = CommonSettings.dispLayers[core][1] ^ !(display_control.BG1_Enable);
-	LayersEnable[2] = CommonSettings.dispLayers[core][2] ^ !(display_control.BG2_Enable);
-	LayersEnable[3] = CommonSettings.dispLayers[core][3] ^ !(display_control.BG3_Enable);
-	LayersEnable[4] = CommonSettings.dispLayers[core][4] ^ !(display_control.OBJ_Enable);
-
-	for (int i = 0; i < NB_PRIORITIES; i ++)
-   {
-      itemsForPriority[i].nbBGs = 0;
-      itemsForPriority[i].nbPixelsX = 0;
-	}
-
-	for (int i = NB_BG - 1; i >= 0; i --)
-   {
-      if (LayersEnable[i])
-      {
-   		itemsForPriority_t* item = &itemsForPriority[bgcnt(i).Priority];
-         item->BGs[item->nbBGs ++] = i;
-      }
-	}
-}
