@@ -263,30 +263,10 @@ void GPU::refresh_display_control()
 
 	SetupFinalPixelBlitter(this);
 
-	if(display_control.OBJ_Tile_mapping)
-	{
-		//1-d sprite mapping boundaries:
-		//32k, 64k, 128k, 256k
-		sprBoundary = 5 + display_control.OBJ_Tile_1D_Bound ;
-		
-		//do not be deceived: even though a sprBoundary==8 (256KB region) is impossible to fully address
-		//in GPU_SUB, it is still fully legal to address it with that granularity.
-		//so don't do this: //if((core == GPU_SUB) && (display_control.OBJ_Tile_1D_Bound == 3)) sprBoundary = 7;
-
-		spriteRenderMode = GPU::SPRITE_1D;
-	} else {
-		//2d sprite mapping
-		//boundary : 32k
-		sprBoundary = 5;
-		spriteRenderMode = GPU::SPRITE_2D;
-	}
-     
-	if(display_control.OBJ_BMP_1D_Bound && (core == GPU_MAIN))
-		sprBMPBoundary = 8;
-	else
-		sprBMPBoundary = 7;
-
 	sprEnable = display_control.OBJ_Enable;
+   sprBoundary = 5 + (display_control.OBJ_Tile_mapping ? display_control.OBJ_Tile_1D_Bound : 0);
+   spriteRenderMode = display_control.OBJ_Tile_mapping ? SPRITE_1D : SPRITE_2D;
+   sprBMPBoundary = (core == GPU_MAIN && display_control.OBJ_BMP_1D_Bound) ? 8 : 7;
 
    for (int i = 0; i != 4; i ++)
    {
@@ -886,7 +866,7 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const BGxPARMS& par
 	}
    else
    {
-      for(int i = 0; i < SCREEN_WIDTH; i ++, x.val += params.PA, y.val += params.PC)
+      for(int i = 0; i < SCREEN_WIDTH; i ++, x.val += dx, y.val += dy)
       {
          x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
          y_pos &= (WRAP) ? bg.height - 1 : 0xFFFFFFFF;
@@ -2135,7 +2115,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
    const _DISPCNT display_control = gpu->get_display_control();
    const u32 display_mode = display_control.DisplayMode & ((gpu->core) ? 1 : 3);
 
-   gpu->currDst = (display_mode == 1) ? (u8*)(GPU_screen) + (screen->offset + l) * 512 : (u8*)gpu->tempScanlineBuffer
+   gpu->currDst = (display_mode == 1) ? (u8*)(GPU_screen) + (screen->offset + l) * 512 : (u8*)gpu->tempScanlineBuffer;
 
 	GPU_RenderLine_layer(screen, l);
 
