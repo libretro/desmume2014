@@ -255,32 +255,13 @@ void SetupFinalPixelBlitter (GPU *gpu)
 //Sets up LCD control variables for Display Engines A and B for quick reading
 void GPU::refresh_display_control()
 {
-   const _DISPCNT display_control = dispCnt();
+   const _DISPCNT display_control = get_display_control();
 
 	WIN0_ENABLED	  = display_control.Win0_Enable;
 	WIN1_ENABLED	  = display_control.Win1_Enable;
 	WINOBJ_ENABLED = display_control.WinOBJ_Enable;
 
 	SetupFinalPixelBlitter(this);
-
-   dispMode = display_control.DisplayMode & ((core)?1:3);
-
-	vramBlock = display_control.VRAM_Block;
-
-	switch (dispMode)
-	{
-		case 0: // Display Off
-			break;
-		case 1: // Display BG and OBJ layers
-			break;
-		case 2: // Display framebuffer
-			VRAMaddr = (u8 *)MMU.ARM9_LCD + (vramBlock * 0x20000);
-			break;
-		case 3: // Display from Main RAM
-			// nothing to be done here
-			// see GPU_RenderLine who gets data from FIFO.
-			break;
-	}
 
 	if(display_control.OBJ_Tile_mapping)
 	{
@@ -318,8 +299,8 @@ void GPU::refresh_background_control(u32 bg_number)
 {
    GPU::background& bg = backgrounds[bg_number];
 
-	const _DISPCNT display_control = dispCnt();
-	const _BGxCNT  bg_control      = bgcnt(bg_number);
+	const _DISPCNT display_control = get_display_control();
+	const _BGxCNT  bg_control      = bg.get_control();
 	
    resort_backgrounds();
 
@@ -351,7 +332,7 @@ void GPU::refresh_background_control(u32 bg_number)
 
 void GPU::resort_backgrounds()
 {
-   _DISPCNT display_control = dispCnt();
+   _DISPCNT display_control = get_display_control();
 
 	LayersEnable[0] = CommonSettings.dispLayers[core][0] ^ !(display_control.BG0_Enable);
 	LayersEnable[1] = CommonSettings.dispLayers[core][1] ^ !(display_control.BG1_Enable);
@@ -369,7 +350,7 @@ void GPU::resort_backgrounds()
    {
       if (LayersEnable[i])
       {
-   		itemsForPriority_t* item = &itemsForPriority[bgcnt(i).Priority];
+   		itemsForPriority_t* item = &itemsForPriority[backgrounds[i].get_control().Priority];
          item->BGs[item->nbBGs ++] = i;
       }
 	}
@@ -777,8 +758,8 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
    // TODO: Make tile cache more persistent
    tile_tag ++;
 
-   GPU::background& bg       = gpu->current_background();
-	const _BGxCNT bgCnt       = bg.control();
+   GPU::background& bg       = gpu->get_current_background();
+	const _BGxCNT bgCnt       = bg.get_control();
 	const _DISPCNT dispCnt    = gpu->dispx_st->dispx_DISPCNT.bits;
 
    // Get backgroud size info
@@ -926,13 +907,13 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const BGxPARMS& par
 template<rot_fun fun>
 FORCEINLINE void apply_rot_fun(GPU* gpu, GPU::background& bg, const BGxPARMS& params, u8 * pal)
 {
-	if(bg.control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
-	else                                rot_scale_op<fun,false>(gpu, bg, params, pal);	
+	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
+	else                                    rot_scale_op<fun,false>(gpu, bg, params, pal);	
 }
 
 FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 {
-   GPU::background& bg = gpu->current_background();
+   GPU::background& bg = gpu->get_current_background();
 	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
 
 	switch(bg.type)
@@ -945,7 +926,7 @@ FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 
    	case BGType_AffineExt_256x16:
       {
-         if (gpu->dispCnt().ExBGxPalette_Enable)
+         if (gpu->get_display_control().ExBGxPalette_Enable)
          {
             pal = MMU.ExtPal[gpu->core][bg.extended_palette_slot];
 
@@ -1145,7 +1126,7 @@ FORCEINLINE BOOL compute_sprite_vars(_OAM_ * spriteInfo, u16 l,
 
 static u32 bmp_sprite_address(GPU* gpu, _OAM_ * spriteInfo, size sprSize, s32 y)
 {
-	if (gpu->dispCnt().OBJ_BMP_mapping)
+	if (gpu->get_display_control().OBJ_BMP_mapping)
 	{
 		//tested by buffy sacrifice damage blood splatters in corner
 		return gpu->sprMem + (spriteInfo->TileIndex<<gpu->sprBMPBoundary) + (y*sprSize.x*2);
@@ -1155,7 +1136,7 @@ static u32 bmp_sprite_address(GPU* gpu, _OAM_ * spriteInfo, size sprSize, s32 y)
 		//2d mapping:
 		//verified in rotozoomed mode by knights in the nightmare intro
 
-		if (gpu->dispCnt().OBJ_BMP_2D_dim)
+		if (gpu->get_display_control().OBJ_BMP_2D_dim)
 			//256*256, verified by heroes of mana FMV intro
 			return gpu->sprMem + (((spriteInfo->TileIndex&0x3E0) * 64  + (spriteInfo->TileIndex&0x1F) *8 + ( y << 8)) << 1);
 		else 
@@ -2151,17 +2132,23 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 	gpu->setup_windows<1>();
 
 	//generate the 2d engine output
-	if(gpu->dispMode == 1) {
+   const _DISPCNT display_control = gpu->get_display_control();
+   const u32 display_mode = display_control.DisplayMode & ((gpu->core) ? 1 : 3);
+
+	if(display_mode == 1)
+   {
 		//optimization: render straight to the output buffer when thats what we are going to end up displaying anyway
 		gpu->tempScanline = screen->gpu->currDst = (u8 *)(GPU_screen) + (screen->offset + l) * 512;
-	} else {
+	}
+   else
+   {
 		//otherwise, we need to go to a temp buffer
 		gpu->tempScanline = screen->gpu->currDst = (u8 *)gpu->tempScanlineBuffer;
 	}
 
 	GPU_RenderLine_layer(screen, l);
 
-	switch (gpu->dispMode)
+	switch (display_mode)
 	{
 		case 0: // Display Off(Display white)
 			{
@@ -2179,7 +2166,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 		case 2: // Display vram framebuffer
 			{
 				u8 * dst = GPU_screen + (screen->offset + l) * 512;
-				u8 * src = gpu->VRAMaddr + (l*512);
+				u8 * src = (u8 *)MMU.ARM9_LCD + (display_control.VRAM_Block * 0x20000) + (l*512);
 				memcpy (dst, src, 512);
 			}
 			break;
@@ -2319,7 +2306,7 @@ void GPU::refreshAffineStartRegs(const int num, const int xy)
 
 void GPU::modeRender(int layer)
 {
-   const BGType type = GPU_mode2type[dispCnt().BG_Mode][layer];
+   const BGType type = GPU_mode2type[get_display_control().BG_Mode][layer];
 
    if (type == BGType_Text)
    {
