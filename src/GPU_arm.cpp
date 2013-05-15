@@ -963,7 +963,6 @@ INLINE void render_sprite_BMP (GPU * gpu, u8 spriteNum, u16 l, u8 * dst, u32 src
 			dst_alpha[sprX] = alpha;
 			typeTab[sprX] = 3;
 			prioTab[sprX] = prio;
-			gpu->sprNum[sprX] = spriteNum;
 		}
 	}
 }
@@ -988,7 +987,6 @@ INLINE void render_sprite_256(GPU * gpu, u8 spriteNum, u16 l, u8 * dst, u32 srca
 			dst_alpha[sprX] = 16;
 			typeTab[sprX] = (alpha ? 1 : 0);
 			prioTab[sprX] = prio;
-			gpu->sprNum[sprX] = spriteNum;
 		}
 	}
 }

@@ -541,7 +541,6 @@ struct GPU
 
 
    // 
-	u8 sprNum[256];
 	u8 h_win[2][256];
 	const u8 *curr_win[2];
 	void update_winh(int WIN_NUM); 
@@ -557,7 +556,6 @@ struct GPU
 	u32	sprMem;
 	u8 sprBoundary;
 	u8 sprBMPBoundary;
-	u8 sprBMPMode;
 	u32 sprEnable;
 
 	u8 WIN0H0;
@@ -611,7 +609,6 @@ struct GPU
 	FORCEINLINE FASTCALL void _master_setFinal3dColor(int dstX, int srcX);
 
 	int setFinalColorBck_funcNum;
-	int bgFunc;
 	int setFinalColor3d_funcNum;
 	int setFinalColorSpr_funcNum;
 	//Final3DColFunct setFinalColor3D;
