@@ -495,8 +495,6 @@ enum BGType {
 	BGType_AffineExt=4, BGType_AffineExt_256x16=5, BGType_AffineExt_256x1=6, BGType_AffineExt_Direct=7
 };
 
-extern const BGType GPU_mode2type[8][4];
-
 struct GPU
 {
    struct background
@@ -594,7 +592,6 @@ struct GPU
 	bool blend2[8];
 
 	CACHE_ALIGN u16 tempScanlineBuffer[256];
-	u8 *tempScanline;
 
 	CACHE_ALIGN u8 bgPixels[1024]; //yes indeed, this is oversized. map debug tools try to write to it
 
@@ -691,18 +688,6 @@ CACHE_ALIGN extern u8 GPU_screen[4*256*192];
 GPU * GPU_Init(u8 l);
 void GPU_Reset(GPU *g, u8 l);
 void GPU_DeInit(GPU *);
-
-//these are functions used by debug tools which want to render layers etc outside the context of the emulation
-namespace GPU_EXT
-{
-	void textBG(GPU * gpu, u8 num, u8 * DST);		//Draw text based background
-	void rotBG(GPU * gpu, u8 num, u8 * DST);
-	void extRotBG(GPU * gpu, u8 num, u8 * DST);
-};
-void sprite1D(GPU * gpu, u16 l, u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab);
-void sprite2D(GPU * gpu, u16 l, u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab);
-
-extern const size sprSizeTab[4][4];
 
 typedef struct {
 	GPU * gpu;

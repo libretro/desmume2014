@@ -53,7 +53,7 @@ NDS_Screen SubScreen;
 CACHE_ALIGN u8 GPU_screen[4*256*192];
 CACHE_ALIGN u8 sprWin[256];
 
-const size sprSizeTab[4][4] = 
+static const size sprSizeTab[4][4] = 
 {
      {{8, 8}, {16, 8}, {8, 16}, {8, 8}},
      {{16, 16}, {32, 8}, {8, 32}, {8, 8}},
@@ -61,7 +61,7 @@ const size sprSizeTab[4][4] =
      {{64, 64}, {64, 32}, {32, 64}, {8, 8}},
 };
 
-const BGType GPU_mode2type[8][4] = 
+static const BGType GPU_mode2type[8][4] = 
 {
       {BGType_Text, BGType_Text, BGType_Text, BGType_Text},
       {BGType_Text, BGType_Text, BGType_Text, BGType_Affine},
@@ -75,7 +75,7 @@ const BGType GPU_mode2type[8][4] =
 
 //dont ever think of changing these to bits because you could avoid the multiplies in the main tile blitter.
 //it doesnt really help any
-const short sizeTab[8][4][2] =
+static const short sizeTab[8][4][2] =
 {
 	{{0, 0}, {0, 0}, {0, 0}, {0, 0}}, //Invalid
     {{256,256}, {512,256}, {256,512}, {512,512}}, //text
@@ -1813,7 +1813,7 @@ template<bool SKIP> static void GPU_RenderLine_DispCapture(u16 l)
 									//INFO("Capture screen (BG + OBJ + 3D)\n");
 
 									u8 *src;
-									src = (u8*)(gpu->tempScanline);
+									src = (u8*)(gpu->currDst);
 									CAPCOPY(src,cap_dst,true);
 								}
 							break;
@@ -1855,7 +1855,7 @@ template<bool SKIP> static void GPU_RenderLine_DispCapture(u16 l)
 						if (gpu->dispCapCnt.srcA == 0)
 						{
 							// Capture screen (BG + OBJ + 3D)
-							srcA = (u16*)(gpu->tempScanline);
+							srcA = (u16*)(gpu->currDst);
 						}
 						else
 						{
@@ -2135,16 +2135,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
    const _DISPCNT display_control = gpu->get_display_control();
    const u32 display_mode = display_control.DisplayMode & ((gpu->core) ? 1 : 3);
 
-	if(display_mode == 1)
-   {
-		//optimization: render straight to the output buffer when thats what we are going to end up displaying anyway
-		gpu->tempScanline = screen->gpu->currDst = (u8 *)(GPU_screen) + (screen->offset + l) * 512;
-	}
-   else
-   {
-		//otherwise, we need to go to a temp buffer
-		gpu->tempScanline = screen->gpu->currDst = (u8 *)gpu->tempScanlineBuffer;
-	}
+   gpu->currDst = (display_mode == 1) ? (u8*)(GPU_screen) + (screen->offset + l) * 512 : (u8*)gpu->tempScanlineBuffer
 
 	GPU_RenderLine_layer(screen, l);
 
