@@ -614,14 +614,26 @@ struct GPU
 	BOOL LayersEnable[5];
 	itemsForPriority_t itemsForPriority[NB_PRIORITIES];
 
-	u32 BG_bmp_large_ram[4];
-	u32 BG_bmp_ram[4];
-	u32 BG_tile_ram[4];
-	u32 BG_map_ram[4];
+   struct background
+   {
+      public:
+         void set_size(u32 width_, u32 height_) { width = width_; height = height_; }
 
-	u8 BGExtPalSlot[4];
-	u32 BGSize[4][2];
-	BGType BGTypes[4];
+      public:
+         BGType type;
+
+         u32 tile_map_ram;
+         u32 tile_pixel_ram;
+         u32 bitmap_ram;
+         u32 large_bitmap_ram;
+
+         u32 extended_palette_slot;
+
+         u32 width;
+         u32 height;
+   };
+
+   struct background backgrounds[4];
 
 	u8 sprNum[256];
 	u8 h_win[2][256];

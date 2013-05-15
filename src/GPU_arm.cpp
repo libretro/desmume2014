@@ -195,8 +195,11 @@ void GPU_Reset(GPU *g, u8 l)
 	g->setFinalColor3d_funcNum = 0;
 	g->setFinalColorSpr_funcNum = 0;
 	g->core = l;
-	g->BGSize[0][0] = g->BGSize[1][0] = g->BGSize[2][0] = g->BGSize[3][0] = 256;
-	g->BGSize[0][1] = g->BGSize[1][1] = g->BGSize[2][1] = g->BGSize[3][1] = 256;
+
+   for (int i = 0; i != 4; i ++)
+   {
+      g->backgrounds[i].set_size(256, 256);
+   }
 
 	g->spriteRenderMode = GPU::SPRITE_1D;
 
@@ -312,72 +315,51 @@ void GPU_setVideoProp(GPU * gpu, u32 p)
 }
 
 //this handles writing in BGxCNT
-void GPU_setBGProp(GPU * gpu, u16 num, u16 p)
+void GPU_setBGProp(GPU* gpu, u16 num, u16 p)
 {
 	struct _BGxCNT * cnt = &((gpu->dispx_st)->dispx_BGxCNT[num].bits);
 	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
 	
+   GPU::background& bg = gpu->backgrounds[num];
+
 	T1WriteWord((u8 *)&(gpu->dispx_st)->dispx_BGxCNT[num].val, 0, p);
 	
    gpu->resort_backgrounds();
 
 	if(gpu->core == GPU_SUB)
 	{
-		gpu->BG_tile_ram[num] = MMU_BBG;
-		gpu->BG_bmp_ram[num]  = MMU_BBG;
-		gpu->BG_bmp_large_ram[num]  = MMU_BBG;
-		gpu->BG_map_ram[num]  = MMU_BBG;
+		bg.tile_map_ram  = MMU_BBG;
+		bg.tile_pixel_ram = MMU_BBG;
+		bg.bitmap_ram = MMU_BBG;
+		bg.large_bitmap_ram = MMU_BBG;
+
 	} 
 	else 
 	{
-		gpu->BG_tile_ram[num] = MMU_ABG +  dispCnt->CharacBase_Block * ADDRESS_STEP_64KB ;
-		gpu->BG_bmp_ram[num]  = MMU_ABG;
-		gpu->BG_bmp_large_ram[num] = MMU_ABG;
-		gpu->BG_map_ram[num]  = MMU_ABG +  dispCnt->ScreenBase_Block * ADDRESS_STEP_64KB;
+		bg.tile_map_ram  = MMU_ABG + dispCnt->ScreenBase_Block * ADDRESS_STEP_64KB;
+		bg.tile_pixel_ram = MMU_ABG + dispCnt->CharacBase_Block * ADDRESS_STEP_64KB;
+		bg.bitmap_ram = MMU_ABG;
+		bg.large_bitmap_ram = MMU_ABG;
 	}
 
-	gpu->BG_tile_ram[num] += (cnt->CharacBase_Block * ADDRESS_STEP_16KB);
-	gpu->BG_bmp_ram[num]  += (cnt->ScreenBase_Block * ADDRESS_STEP_16KB);
-	gpu->BG_map_ram[num]  += (cnt->ScreenBase_Block * ADDRESS_STEP_2KB);
+	bg.tile_map_ram += (cnt->ScreenBase_Block * ADDRESS_STEP_2KB);
+	bg.tile_pixel_ram += (cnt->CharacBase_Block * ADDRESS_STEP_16KB);
+	bg.bitmap_ram += (cnt->ScreenBase_Block * ADDRESS_STEP_16KB);
 
-	switch(num)
-	{
-		case 0:
-		case 1:
-			gpu->BGExtPalSlot[num] = cnt->PaletteSet_Wrap * 2 + num ;
-			break;
-			
-		default:
-			gpu->BGExtPalSlot[num] = (u8)num;
-			break;
-	}
+   bg.extended_palette_slot = num + ((num < 2) ? cnt->PaletteSet_Wrap * 2 : 0);
 
-	BGType mode = GPU_mode2type[dispCnt->BG_Mode][num];
+	bg.type = GPU_mode2type[dispCnt->BG_Mode][num];
 
 	//clarify affine ext modes 
-	if(mode == BGType_AffineExt)
+	if(bg.type == BGType_AffineExt)
 	{
-		//see: http://nocash.emubase.de/gbatek.htm#dsvideobgmodescontrol
-		u8 affineModeSelection = (cnt->Palette_256 << 1) | (cnt->CharacBase_Block & 1) ;
-		switch(affineModeSelection)
-		{
-		case 0:
-		case 1:
-			mode = BGType_AffineExt_256x16;
-			break;
-		case 2:
-			mode = BGType_AffineExt_256x1;
-			break;
-		case 3:
-			mode = BGType_AffineExt_Direct;
-			break;
-		}
+      static const BGType affine_modes[4] = { BGType_AffineExt_256x16, BGType_AffineExt_256x16, BGType_AffineExt_256x1, BGType_AffineExt_Direct };
+		const u32 affine_mode = (cnt->Palette_256 << 1) | (cnt->CharacBase_Block & 1);
+
+      bg.type = affine_modes[affine_mode];
 	}
 
-	gpu->BGTypes[num] = mode;
-
-	gpu->BGSize[num][0] = sizeTab[mode][cnt->ScreenSize][0];
-	gpu->BGSize[num][1] = sizeTab[mode][cnt->ScreenSize][1];
+   gpu->backgrounds[num].set_size(sizeTab[bg.type][cnt->ScreenSize][0], sizeTab[bg.type][cnt->ScreenSize][1]);
 }
 
 /*****************************************************************************/
@@ -722,7 +704,7 @@ struct TILE
 static TILE tile_cache[0x10000];
 static u32  tile_tag;
 
-static void expand_tile(GPU* gpu, bool colors256, u16 tile_entry, u32 line, const u16* ex_palette, PIXEL* output_buffer)
+static void expand_tile(GPU* gpu, GPU::background& bg, bool colors256, u16 tile_entry, u32 line, const u16* ex_palette, PIXEL* output_buffer)
 {
    if (tile_cache[tile_entry].tag != tile_tag)
    {
@@ -736,7 +718,7 @@ static void expand_tile(GPU* gpu, bool colors256, u16 tile_entry, u32 line, cons
 
       if (!colors256)
       {
-         const u8* tile_pixels = (u8*)MMU_gpu_map(gpu->BG_tile_ram[gpu->currBgNum] + (tile.bits.TileNum * 32) + (line * 4));
+         const u8* tile_pixels = (u8*)MMU_gpu_map(bg.tile_pixel_ram + (tile.bits.TileNum * 32) + (line * 4));
          const u16* palette = (u16*)((MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB) + (tile.bits.Palette * 32));
 
          for (int i = 0; i != 4; i ++)
@@ -748,7 +730,7 @@ static void expand_tile(GPU* gpu, bool colors256, u16 tile_entry, u32 line, cons
       }
       else
       {
-         const u8* tile_pixels = (u8*)MMU_gpu_map(gpu->BG_tile_ram[gpu->currBgNum] + (tile.bits.TileNum * 64) + (line * 8));
+         const u8* tile_pixels = (u8*)MMU_gpu_map(bg.tile_pixel_ram + (tile.bits.TileNum * 64) + (line * 8));
          const u16* palette = ex_palette ? &ex_palette[256 * tile.bits.Palette]
                                          : (u16*)(MMU.ARM9_VMEM + gpu->core * ADDRESS_STEP_1KB);
 
@@ -775,13 +757,14 @@ static void expand_tile(GPU* gpu, bool colors256, u16 tile_entry, u32 line, cons
 }
 
 // render a text background to the combined pixelbuffer
-static void renderline_textBG(GPU * gpu, u32 start_x, u32 line, u32 width)
+static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
 {
    // Change tile tag, effectively clearing the tile cache
    // TODO: Make tile cache more persistent
    tile_tag ++;
 
 	const u8 num              = gpu->currBgNum;
+   GPU::background& bg       = gpu->backgrounds[num];
 	const _BGxCNT bgCnt       = gpu->dispx_st->dispx_BGxCNT[num].bits;
 	const _DISPCNT dispCnt    = gpu->dispx_st->dispx_DISPCNT.bits;
 
@@ -793,7 +776,7 @@ static void renderline_textBG(GPU * gpu, u32 start_x, u32 line, u32 width)
 
    // Get the base Y location of the tile map
    const u32 y_tile          = (line / 8) & bg_height_mask;
-   const u32 tile_map_base   = (gpu->BG_map_ram[num] + (y_tile & 31) * 64)
+   const u32 tile_map_base   = (bg.tile_map_ram + (y_tile & 31) * 64)
                              + ((y_tile >= 32) ? ADDRESS_STEP_512B << bgCnt.ScreenSize : 0);
 
    const u32 x_offset        = start_x & 7;
@@ -809,9 +792,9 @@ static void renderline_textBG(GPU * gpu, u32 start_x, u32 line, u32 width)
       const u32 tile_map    = tile_map_base + (x_tile & 0x1F) * 2
                             + ((x_tile >= 32) ? 32 * 32 * 2 : 0);
 
-      const u16* ex_palette = (dispCnt.ExBGxPalette_Enable && bgCnt.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][gpu->BGExtPalSlot[num]] : 0;
+      const u16* ex_palette = (dispCnt.ExBGxPalette_Enable && bgCnt.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][bg.extended_palette_slot] : 0;
 
-      expand_tile(gpu, bgCnt.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
+      expand_tile(gpu, bg, bgCnt.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
    }
 
    // Finish
@@ -825,28 +808,26 @@ static void renderline_textBG(GPU * gpu, u32 start_x, u32 line, u32 width)
 //			BACKGROUND RENDERING -ROTOSCALE-
 /*****************************************************************************/
 
+//        bg : Background structure
 //   x_pixel : X Coordinate of pixel to draw
 //   y_pixel : Y Coordinate of pixel to draw
-//  bg_width : Width, in pixels, of background
-//  map_base : Base VRAM address of tile map
-// tile_base : Base VRAM address of tile pixels
 //   palette : Tile palette, duh
 
-FORCEINLINE PIXEL rot_tiled_8bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+FORCEINLINE PIXEL rot_tiled_8bit_entry(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	const u32 tileindex = *(u8*)MMU_gpu_map(map_base + ((x_pixel / 8) + (y_pixel / 8) * (bg_width / 8)));
+	const u32 tileindex = *(u8*)MMU_gpu_map(bg.tile_map_ram + ((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)));
 	const u32 x = (x_pixel & 7); 
 	const u32 y = (y_pixel & 7);
 
-	const u32 palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileindex<<6)+(y<<3)+x));
+	const u32 palette_entry = *(u8*)MMU_gpu_map(bg.tile_pixel_ram + ((tileindex<<6)+(y<<3)+x));
 	const u32 color = T1ReadWord(palette, palette_entry << 1);
 
    return BuildPIXEL(color, palette_entry);
 }
 
-template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	void* const map_addr = MMU_gpu_map(map_base + (((x_pixel / 8) + (y_pixel / 8) * (bg_width / 8)) * 2));
+	void* const map_addr = MMU_gpu_map(bg.tile_map_ram + (((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)) * 2));
 	
 	TILEENTRY tileentry;
 	tileentry.val = T1ReadWord(map_addr, 0);
@@ -854,32 +835,34 @@ template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU * gpu, s32 x_p
 	const u16 x = ((tileentry.bits.HFlip) ? 7 - (x_pixel) : (x_pixel))&7;
 	const u16 y = ((tileentry.bits.VFlip) ? 7 - (y_pixel) : (y_pixel))&7;
 
-	const u8 palette_entry = *(u8*)MMU_gpu_map(tile_base + ((tileentry.bits.TileNum<<6)+(y<<3)+x));
+	const u8 palette_entry = *(u8*)MMU_gpu_map(bg.tile_pixel_ram + ((tileentry.bits.TileNum<<6)+(y<<3)+x));
 	const u16 color = T1ReadWord(palette, (palette_entry + (extPal ? (tileentry.bits.Palette<<8) : 0)) << 1);
 
    return BuildPIXEL(color, palette_entry);
 }
 
-FORCEINLINE PIXEL rot_256_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+FORCEINLINE PIXEL rot_256_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	u8* const adr = (u8*)MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width)));
+   const u32 bitmap_ram = (bg.type == BGType_Large8bpp) ? bg.large_bitmap_ram : bg.bitmap_ram;
+
+	u8* const adr = (u8*)MMU_gpu_map((bitmap_ram) + ((x_pixel + y_pixel * bg.width)));
 	const u32 palette_entry = *adr;
 	const u32 color = T1ReadWord(palette, palette_entry << 1);
 
    return BuildPIXEL(color, palette_entry);
 }
 
-FORCEINLINE PIXEL rot_BMP_map(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette)
+FORCEINLINE PIXEL rot_BMP_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	void* const adr = MMU_gpu_map((map_base) + ((x_pixel + y_pixel * bg_width) * 2));
+	void* const adr = MMU_gpu_map((bg.bitmap_ram) + ((x_pixel + y_pixel * bg.width) * 2));
 	const u32 color = T1ReadWord(adr, 0);
    return BuildPIXEL(color, color & 0x8000);
 }
 
-typedef PIXEL (*rot_fun)(GPU * gpu, s32 x_pixel, s32 y_pixel, u32 bg_width, u32 map_base, u32 tile_base, u8* palette);
+typedef PIXEL (*rot_fun)(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette);
 
 template<rot_fun fun, bool WRAP>
-FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 height, u32 map, u32 tile, u8 * pal)
+FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const BGxPARMS& params, u8 * pal)
 {
 	ROTOCOORD x = params.X;
    ROTOCOORD y = params.Y;
@@ -896,27 +879,27 @@ FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 
 	// as an optimization, specially handle the fairly common case of
 	// "unrotated + unscaled + no boundary checking required"
 	if(params.PA == 0x100 && params.PC == 0 && 
-      (WRAP || (x_pos + SCREEN_WIDTH < width && x_pos >= 0 && y_pos < height && y_pos >= 0)))
+      (WRAP || (x_pos + SCREEN_WIDTH < bg.width && x_pos >= 0 && y_pos < bg.height && y_pos >= 0)))
 	{
-      x_pos &= (WRAP) ? width - 1 : 0xFFFFFFFF;
-      y_pos &= (WRAP) ? height - 1 : 0xFFFFFFFF;
+      x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
+      y_pos &= (WRAP) ? bg.height - 1 : 0xFFFFFFFF;
 
       for(int i = 0; i < 256; i ++, x_pos ++)
       {
-         x_pos &= (WRAP) ? width - 1 : 0xFFFFFFFF;
-         pixels[i] = fun(gpu, x_pos, y_pos, width, map, tile, pal);
+         x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
+         pixels[i] = fun(gpu, bg, x_pos, y_pos, pal);
       }
 	}
    else
    {
       for(int i = 0; i < SCREEN_WIDTH; i ++, x.val += params.PA, y.val += params.PC)
       {
-         x_pos &= (WRAP) ? width - 1 : 0xFFFFFFFF;
-         y_pos &= (WRAP) ? height - 1 : 0xFFFFFFFF;
+         x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
+         y_pos &= (WRAP) ? bg.height - 1 : 0xFFFFFFFF;
 
-         if(WRAP || ((x_pos >= 0) && (x_pos < width) && (y_pos >= 0) && (y_pos < height)))
+         if(WRAP || ((x_pos >= 0) && (x_pos < bg.width) && (y_pos >= 0) && (y_pos < bg.height)))
          {
-            pixels[i] = fun(gpu, x_pos, y_pos, width, map, tile, pal);
+            pixels[i] = fun(gpu, bg, x_pos, y_pos, pal);
          }
       }
    }
@@ -928,28 +911,27 @@ FORCEINLINE void rot_scale_op(GPU * gpu, const BGxPARMS& params, s32 width, s32 
 }
 
 template<rot_fun fun>
-FORCEINLINE void apply_rot_fun(GPU * gpu, const BGxPARMS& params, u32 map, u32 tile, u8 * pal)
+FORCEINLINE void apply_rot_fun(GPU* gpu, GPU::background& bg, const BGxPARMS& params, u8 * pal)
 {
 	struct _BGxCNT * bgCnt = &(gpu->dispx_st)->dispx_BGxCNT[gpu->currBgNum].bits;
-	s32 width = gpu->BGSize[gpu->currBgNum][0];
-	s32 height = gpu->BGSize[gpu->currBgNum][1];
 
-	if(bgCnt->PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, params, width, height, map, tile, pal);	
-	else                          rot_scale_op<fun,false>(gpu, params, width, height, map, tile, pal);	
+	if(bgCnt->PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
+	else                          rot_scale_op<fun,false>(gpu, bg, params, pal);	
 }
 
 FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
 {
 	u8 num = gpu->currBgNum;
 	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
-	
+   GPU::background& bg = gpu->backgrounds[num];	
+
 	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
 
-	switch(gpu->BGTypes[num])
+	switch(bg.type)
 	{
       case BGType_Affine:
       {
-         apply_rot_fun<rot_tiled_8bit_entry>(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
+         apply_rot_fun<rot_tiled_8bit_entry>(gpu, bg, params, pal);
          return;
       }
 
@@ -957,36 +939,31 @@ FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
       {
          if (dispCnt->ExBGxPalette_Enable)
          {
-            pal = MMU.ExtPal[gpu->core][gpu->BGExtPalSlot[num]];
+            pal = MMU.ExtPal[gpu->core][bg.extended_palette_slot];
 
             if (pal)
             {
-               apply_rot_fun<rot_tiled_16bit_entry<true> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
+               apply_rot_fun<rot_tiled_16bit_entry<true> >(gpu, bg, params, pal);
             }
          }
          else
          {
-            apply_rot_fun<rot_tiled_16bit_entry<false> >(gpu, params, gpu->BG_map_ram[num], gpu->BG_tile_ram[num], pal);
+            apply_rot_fun<rot_tiled_16bit_entry<false> >(gpu, bg, params, pal);
          }
 
          return;
       }
 
       case BGType_AffineExt_256x1:
+   	case BGType_Large8bpp:
       {
-   		apply_rot_fun<rot_256_map>(gpu, params, gpu->BG_bmp_ram[num], 0, pal);
+   		apply_rot_fun<rot_256_map>(gpu, bg, params, pal);
          return;
       }
 
       case BGType_AffineExt_Direct:
       {
-		   apply_rot_fun<rot_BMP_map>(gpu, params, gpu->BG_bmp_ram[num], 0, NULL);
-		   return;
-      }
-
-   	case BGType_Large8bpp:
-      {
-		   apply_rot_fun<rot_256_map>(gpu, params, gpu->BG_bmp_large_ram[num], 0, pal);
+		   apply_rot_fun<rot_BMP_map>(gpu, bg, params, NULL);
 		   return;
       }
 
