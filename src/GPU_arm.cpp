@@ -255,7 +255,7 @@ void SetupFinalPixelBlitter (GPU *gpu)
 //Sets up LCD control variables for Display Engines A and B for quick reading
 void GPU::refresh_display_control()
 {
-   const _DISPCNT display_control = get_display_control();
+   const display_control_t display_control = get_display_control();
 
 	WIN0_ENABLED	  = display_control.Win0_Enable;
 	WIN1_ENABLED	  = display_control.Win1_Enable;
@@ -279,8 +279,8 @@ void GPU::refresh_background_control(u32 bg_number)
 {
    GPU::background& bg = backgrounds[bg_number];
 
-	const _DISPCNT display_control = get_display_control();
-	const _BGxCNT  bg_control      = bg.get_control();
+	const display_control_t display_control = get_display_control();
+	const background_control_t bg_control   = bg.get_control();
 	
    resort_backgrounds();
 
@@ -312,7 +312,7 @@ void GPU::refresh_background_control(u32 bg_number)
 
 void GPU::resort_backgrounds()
 {
-   _DISPCNT display_control = get_display_control();
+   const display_control_t display_control = get_display_control();
 
 	LayersEnable[0] = CommonSettings.dispLayers[core][0] ^ !(display_control.BG0_Enable);
 	LayersEnable[1] = CommonSettings.dispLayers[core][1] ^ !(display_control.BG1_Enable);
@@ -739,19 +739,18 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
    tile_tag ++;
 
    GPU::background& bg       = gpu->get_current_background();
-	const _BGxCNT bgCnt       = bg.get_control();
-	const _DISPCNT dispCnt    = gpu->dispx_st->dispx_DISPCNT.bits;
+	const background_control_t bg_control = bg.get_control();
 
    // Get backgroud size info
-	const u16 bg_width        = 32 + ((bgCnt.ScreenSize & 1) ? 32 : 0);
-	const u16 bg_height       = 32 + ((bgCnt.ScreenSize & 2) ? 32 : 0);
+	const u16 bg_width        = 32 + ((bg_control.ScreenSize & 1) ? 32 : 0);
+	const u16 bg_height       = 32 + ((bg_control.ScreenSize & 2) ? 32 : 0);
 	const u16 bg_width_mask   = (bg_width - 1);
 	const u16 bg_height_mask  = (bg_height - 1);
 
    // Get the base Y location of the tile map
    const u32 y_tile          = (line / 8) & bg_height_mask;
    const u32 tile_map_base   = (bg.tile_map_ram + (y_tile & 31) * 64)
-                             + ((y_tile >= 32) ? ADDRESS_STEP_512B << bgCnt.ScreenSize : 0);
+                             + ((y_tile >= 32) ? ADDRESS_STEP_512B << bg_control.ScreenSize : 0);
 
    const u32 x_offset        = start_x & 7;
 
@@ -766,9 +765,9 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
       const u32 tile_map    = tile_map_base + (x_tile & 0x1F) * 2
                             + ((x_tile >= 32) ? 32 * 32 * 2 : 0);
 
-      const u16* ex_palette = (dispCnt.ExBGxPalette_Enable && bgCnt.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][bg.extended_palette_slot] : 0;
+      const u16* ex_palette = (gpu->get_display_control().ExBGxPalette_Enable && bg_control.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][bg.extended_palette_slot] : 0;
 
-      expand_tile(gpu, bg, bgCnt.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
+      expand_tile(gpu, bg, bg_control.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
    }
 
    // Finish
@@ -1134,7 +1133,7 @@ bool GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 
 	int cost = 0;
 
-	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
+	const display_control_t display_control = get_display_control();
 	u8 block = gpu->sprBoundary;
 
    _OAM_* spriteInfo = (_OAM_*)gpu->oam;
@@ -1245,7 +1244,7 @@ bool GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 				src = (u8 *)MMU_gpu_map(gpu->sprMem + (spriteInfo->TileIndex << block));
 
 				// If extended palettes are set, use them
-				if (dispCnt->ExOBJPalette_Enable)
+				if (display_control.ExOBJPalette_Enable)
 					pal = (MMU.ObjExtPal[gpu->core][0]+(spriteInfo->PaletteIndex*0x200));
 				else
 					pal = (MMU.ARM9_VMEM + 0x200 + gpu->core *0x400);
@@ -1304,7 +1303,7 @@ bool GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 
 					if (auxX >= 0 && auxY >= 0 && auxX < sprSize.x && auxY < sprSize.y)
 					{
-						if(dispCnt->OBJ_BMP_2D_dim)
+						if(display_control.OBJ_BMP_2D_dim)
 							//tested by knights in the nightmare
 							offset = (bmp_sprite_address(this,spriteInfo,sprSize,auxY)-srcadr)/2+auxX;
 						else //tested by lego indiana jones (somehow?)
@@ -1444,7 +1443,7 @@ bool GPU::_spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
 				else
 					srcadr = gpu->sprMem + (spriteInfo->TileIndex<<block) + ((y>>3)*sprSize.x*8) + ((y&0x7)*8);
 				
-				if (dispCnt->ExOBJPalette_Enable)
+				if (display_control.ExOBJPalette_Enable)
 					pal = (u16*)(MMU.ObjExtPal[gpu->core][0]+(spriteInfo->PaletteIndex*0x200));
 				else
 					pal = (u16*)(MMU.ARM9_VMEM + 0x200 + gpu->core *0x400);
@@ -1526,16 +1525,16 @@ void Screen_DeInit(void)
 void GPU_set_DISPCAPCNT(u32 val)
 {
 	GPU * gpu = MainScreen.gpu;	
-	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
+   const display_control_t display_control = gpu->get_display_control();
 
 	gpu->dispCapCnt.val = val;
 	gpu->dispCapCnt.EVA = std::min((u32)16, (val & 0x1F));
 	gpu->dispCapCnt.EVB = std::min((u32)16, ((val >> 8) & 0x1F));
 	gpu->dispCapCnt.writeBlock =  (val >> 16) & 0x03;
 	gpu->dispCapCnt.writeOffset = (val >> 18) & 0x03;
-	gpu->dispCapCnt.readBlock = dispCnt->VRAM_Block;
+	gpu->dispCapCnt.readBlock = display_control.VRAM_Block;
 
-	if (dispCnt->DisplayMode == 2)
+	if (display_control.DisplayMode == 2)
 		gpu->dispCapCnt.readOffset = 0;
 	else
 		gpu->dispCapCnt.readOffset = (val >> 26) & 0x03;
@@ -1614,7 +1613,7 @@ static void render_3d_line(GPU* gpu, u32 line)
 static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 {
 	GPU * gpu = screen->gpu;
-	struct _DISPCNT * dispCnt = &(gpu->dispx_st)->dispx_DISPCNT.bits;
+	const display_control_t display_control = gpu->get_display_control();
 
 	gpu->currentFadeInColors = &fadeInColors[gpu->BLDY_EVY][0];
 	gpu->currentFadeOutColors = &fadeOutColors[gpu->BLDY_EVY][0];
@@ -1691,9 +1690,7 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
                gpu->currBgNum = bg_number;
 					gpu->blend1 = (gpu->BLDCNT & (1 << bg_number)) != 0;
 
-					struct _BGxCNT *bgCnt = &(gpu->dispx_st)->dispx_BGxCNT[bg_number].bits;
-
-					if (bg_number == 0 && gpu->core == GPU_MAIN && dispCnt->BG0_3D)
+					if (bg_number == 0 && gpu->core == GPU_MAIN && display_control.BG0_3D)
 					{
                   render_3d_line(gpu, l);
 					}
@@ -2110,7 +2107,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 	gpu->setup_windows<1>();
 
 	//generate the 2d engine output
-   const _DISPCNT display_control = gpu->get_display_control();
+   const display_control_t display_control = gpu->get_display_control();
    const u32 display_mode = display_control.DisplayMode & ((gpu->core) ? 1 : 3);
 
    gpu->currDst = (display_mode == 1) ? (u8*)(GPU_screen) + (screen->offset + l) * 512 : (u8*)gpu->tempScanlineBuffer;

@@ -40,85 +40,73 @@ bool gpu_loadstate(EMUFILE* is, int size);
     it holds flags for general display
 *******************************************************************************/
 
-struct _DISPCNT
+union display_control_t
 {
-/* 0*/  u8 BG_Mode:3;         // A+B:
-/* 3*/  u8 BG0_3D:1;          // A  : 0=2D,         1=3D
-/* 4*/  u8 OBJ_Tile_mapping:1;     // A+B: 0=2D (32KB),  1=1D (32..256KB)
-/* 5*/  u8 OBJ_BMP_2D_dim:1;  // A+B: 0=128x512,    1=256x256 pixels
-/* 6*/  u8 OBJ_BMP_mapping:1; // A+B: 0=2D (128KB), 1=1D (128..256KB)
+   u32 value;
 
-                                    // 7-15 same as GBA
-/* 7*/  u8 ForceBlank:1;      // A+B:
-/* 8*/  u8 BG0_Enable:1;        // A+B: 0=disable, 1=Enable
-/* 9*/  u8 BG1_Enable:1;      // A+B: 0=disable, 1=Enable
-/*10*/  u8 BG2_Enable:1;      // A+B: 0=disable, 1=Enable
-/*11*/  u8 BG3_Enable:1;      // A+B: 0=disable, 1=Enable
-/*12*/  u8 OBJ_Enable:1;      // A+B: 0=disable, 1=Enable
-/*13*/  u8 Win0_Enable:1;     // A+B: 0=disable, 1=Enable
-/*14*/  u8 Win1_Enable:1;     // A+B: 0=disable, 1=Enable
-/*15*/  u8 WinOBJ_Enable:1;   // A+B: 0=disable, 1=Enable
+   struct
+   {
+      unsigned BG_Mode              : 3; // A+B:
+      unsigned BG0_3D               : 1; // A  : 0=2D,         1=3D
+      unsigned OBJ_Tile_mapping     : 1; // A+B: 0=2D (32KB),  1=1D (32..256KB)
+      unsigned OBJ_BMP_2D_dim       : 1; // A+B: 0=128x512,    1=256x256 pixels
+      unsigned OBJ_BMP_mapping      : 1; // A+B: 0=2D (128KB), 1=1D (128..256KB)
 
-/*16*/  u8 DisplayMode:2;     // A+B: coreA(0..3) coreB(0..1) GBA(Green Swap)
-                                    // 0=off (white screen)
-                                    // 1=on (normal BG & OBJ layers)
-                                    // 2=VRAM display (coreA only)
-                                    // 3=RAM display (coreA only, DMA transfers)
+                                   
+      unsigned ForceBlank           : 1; // A+B:
+      unsigned BG0_Enable           : 1; // A+B: 0=disable, 1=Enable
+      unsigned BG1_Enable           : 1; // A+B: 0=disable, 1=Enable
+      unsigned BG2_Enable           : 1; // A+B: 0=disable, 1=Enable
+      unsigned BG3_Enable           : 1; // A+B: 0=disable, 1=Enable
+      unsigned OBJ_Enable           : 1; // A+B: 0=disable, 1=Enable
+      unsigned Win0_Enable          : 1; // A+B: 0=disable, 1=Enable
+      unsigned Win1_Enable          : 1; // A+B: 0=disable, 1=Enable
+      unsigned WinOBJ_Enable        : 1; // A+B: 0=disable, 1=Enable
 
-/*18*/  u8 VRAM_Block:2;            // A  : VRAM block (0..3=A..D)
-/*20*/  u8 OBJ_Tile_1D_Bound:2;     // A+B:
-/*22*/  u8 OBJ_BMP_1D_Bound:1;      // A  :
-/*23*/  u8 OBJ_HBlank_process:1;    // A+B: OBJ processed during HBlank (GBA bit5)
-/*24*/  u8 CharacBase_Block:3;      // A  : Character Base (64K step)
-/*27*/  u8 ScreenBase_Block:3;      // A  : Screen Base (64K step)
-/*30*/  u8 ExBGxPalette_Enable:1;   // A+B: 0=disable, 1=Enable BG extended Palette
-/*31*/  u8 ExOBJPalette_Enable:1;   // A+B: 0=disable, 1=Enable OBJ extended Palette
+      unsigned DisplayMode          : 2; // A+B: coreA(0..3) coreB(0..1) GBA(Green Swap)
+                                         // 0=off (white screen)
+                                         // 1=on (normal BG & OBJ layers)
+                                         // 2=VRAM display (coreA only)
+                                         // 3=RAM display (coreA only, DMA transfers)
+
+      unsigned VRAM_Block           : 2; // A  : VRAM block (0..3=A..D)
+      unsigned OBJ_Tile_1D_Bound    : 2; // A+B:
+      unsigned OBJ_BMP_1D_Bound     : 1; // A  :
+      unsigned OBJ_HBlank_process   : 1; // A+B: OBJ processed during HBlank (GBA bit5)
+      unsigned CharacBase_Block     : 3; // A  : Character Base (64K step)
+      unsigned ScreenBase_Block     : 3; // A  : Screen Base (64K step)
+      unsigned ExBGxPalette_Enable  : 1; // A+B: 0=disable, 1=Enable BG extended Palette
+      unsigned ExOBJPalette_Enable  : 1; // A+B: 0=disable, 1=Enable OBJ extended Palette
+   } __attribute__((packed));
 };
 
-typedef union
+union background_control_t
 {
-    struct _DISPCNT bits;
-    u32 val;
-} DISPCNT;
-#define BGxENABLED(cnt,num)    ((num<8)? ((cnt.val>>8) & num):0)
+   u16 value;
 
+   struct
+   {
+      unsigned Priority             : 2; // 0..3=high..low
+      unsigned CharacBase_Block     : 4; // individual character base offset (n*16KB)
+      unsigned Mosaic_Enable        : 1; // 0=disable, 1=Enable mosaic
+      unsigned Palette_256          : 1; // 0=16x16, 1=1*256 palette
+      unsigned ScreenBase_Block     : 5; // individual screen base offset (text n*2KB, BMP n*16KB)
+      unsigned PaletteSet_Wrap      : 1; // BG0 extended palette set 0=set0, 1=set2
+                                         // BG1 extended palette set 0=set1, 1=set3
+                                         // BG2 overflow area wraparound 0=off, 1=wrap
+                                         // BG3 overflow area wraparound 0=off, 1=wrap
+      unsigned ScreenSize           : 2; // text    : 256x256 512x256 256x512 512x512
+                                         // x/rot/s : 128x128 256x256 512x512 1024x1024
+                                         // bmp     : 128x128 256x256 512x256 512x512
+                                         // large   : 512x1024 1024x512 - -
+   } __attribute__((packed));
+};
 
 enum BlendFunc
 {
 	NoBlend, Blend, Increase, Decrease
 };
 
-
-/*******************************************************************************
-    this structure is for display control of a specific layer,
-    there are 4 background layers
-    their priority indicate which one to draw on top of the other
-    some flags indicate special drawing mode, size, FX
-*******************************************************************************/
-
-struct _BGxCNT
-{
-/* 0*/ u8 Priority:2;            // 0..3=high..low
-/* 2*/ u8 CharacBase_Block:4;    // individual character base offset (n*16KB)
-/* 6*/ u8 Mosaic_Enable:1;       // 0=disable, 1=Enable mosaic
-/* 7*/ u8 Palette_256:1;         // 0=16x16, 1=1*256 palette
-/* 8*/ u8 ScreenBase_Block:5;    // individual screen base offset (text n*2KB, BMP n*16KB)
-/*13*/ u8 PaletteSet_Wrap:1;     // BG0 extended palette set 0=set0, 1=set2
-                                       // BG1 extended palette set 0=set1, 1=set3
-                                       // BG2 overflow area wraparound 0=off, 1=wrap
-                                       // BG3 overflow area wraparound 0=off, 1=wrap
-/*14*/ u8 ScreenSize:2;          // text    : 256x256 512x256 256x512 512x512
-                                       // x/rot/s : 128x128 256x256 512x512 1024x1024
-                                       // bmp     : 128x128 256x256 512x256 512x512
-                                       // large   : 512x1024 1024x512 - -
-};
-
-
-typedef union
-{
-    struct _BGxCNT bits;
-    u16 val;
-} BGxCNT;
 
 /*******************************************************************************
     this structure is for background offset
@@ -295,10 +283,10 @@ union MASTER_BRIGHT
 *******************************************************************************/
 
 struct REG_DISPx {
-    DISPCNT dispx_DISPCNT;            // 0x0400x000
+    display_control_t display_control ;            // 0x0400x000
     u16 dispA_DISPSTAT;               // 0x04000004
     u16 dispx_VCOUNT;                 // 0x0400x006
-    BGxCNT dispx_BGxCNT[4];           // 0x0400x008
+    background_control_t background_control[4];           // 0x0400x008
     BGxOFS dispx_BGxOFS[4];           // 0x0400x010
     BGxPARMS dispx_BG2PARMS;          // 0x0400x020
     BGxPARMS dispx_BG3PARMS;          // 0x0400x030
@@ -501,7 +489,7 @@ struct GPU
    {
       public:
          void set_size(u32 width_, u32 height_) { width = width_; height = height_; }
-         _BGxCNT get_control() const { return parent->dispx_st->dispx_BGxCNT[number].bits; }
+         background_control_t get_control() const { return parent->dispx_st->background_control[number]; }
 
       public:
          GPU* parent;
@@ -526,7 +514,7 @@ struct GPU
       void resort_backgrounds();
 
       background& get_current_background() { return backgrounds[currBgNum]; }
-      _DISPCNT get_display_control() const { return dispx_st->dispx_DISPCNT.bits; }
+      display_control_t get_display_control() const { return dispx_st->display_control; }
 
 
 	// some structs are becoming redundant
