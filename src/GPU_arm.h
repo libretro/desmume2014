@@ -115,6 +115,17 @@ union background_offset_t
    } __attribute__((packed));
 };
 
+struct affine_parameters_t
+{
+   s16 PA;
+   s16 PB;
+   s16 PC;
+   s16 PD;
+   s32 X;
+   s32 Y;
+};
+
+
 struct window_rects_t
 {
    union
@@ -163,43 +174,6 @@ enum BlendFunc
 	NoBlend, Blend, Increase, Decrease
 };
 
-
-/*******************************************************************************
-    this structure is for rotoscale parameters
-*******************************************************************************/
-
-struct BGxPARMS
-{
-    s16 PA;
-    s16 PB;
-    s16 PC;
-    s16 PD;
-    s32 X;
-    s32 Y;
-};
-
-
-/*******************************************************************************
-	these structures are for window description,
-	windows are square regions and can "subclass"
-	background layers or object layers (i.e window controls the layers)
-
-	screen
-	|
-	+-- Window0/Window1/OBJwindow/OutOfWindows
-		|
-		+-- BG0/BG1/BG2/BG3/OBJ
-********************************************************************************/
-/*
-typedef struct {
-    WINxDIM WIN0H;
-    WINxDIM WIN1H;
-    WINxDIM WIN0V;
-    WINxDIM WIN1V;
-    WINxCNT WININ;
-    WINxCNT WINOUT;
-} WINCNT;
-*/
 
 /*******************************************************************************
     this structure is for miscellanous settings
@@ -280,21 +254,20 @@ struct DISPCAPCNT
 *******************************************************************************/
 
 struct REG_DISPx {
-    display_control_t display_control ;            // 0x0400x000
-    u16 dispA_DISPSTAT;               // 0x04000004
-    u16 dispx_VCOUNT;                 // 0x0400x006
-    background_control_t background_control[4];           // 0x0400x008
-    background_offset_t  background_offset[4];           // 0x0400x010
-    BGxPARMS dispx_BG2PARMS;          // 0x0400x020
-    BGxPARMS dispx_BG3PARMS;          // 0x0400x030
-    window_rects_t        window_rects; // 0x0400x040
-    u8 filler[4];
-    u16 mosaic_size;               // 0x0400x04C
-    MISCCNT dispx_MISC;               // 0x0400x04E
-    DISP3DCNT dispA_DISP3DCNT;        // 0x04000060
-    u32 dispA_DISPCAPCNT;             // 0x04000064
-    u32 dispA_DISPMMEMFIFO;           // 0x04000068
-    master_bright_t master_bright;      // 0x0400x06C
+    display_control_t         display_control;        // 0x0400x000
+    u16                       display_status;         // 0x04000004  (Unused, handled elsewhere, A only)
+    u16                       vertical_counter;       // 0x0400x006  (Unused, handled elsewhere)
+    background_control_t      background_control[4];  // 0x0400x008
+    background_offset_t       background_offset[4];   // 0x0400x010
+    affine_parameters_t       affine_parameters[2];   // 0x0400x020
+    window_rects_t            window_rects;           // 0x0400x040
+    u8                        filler[4];              // 0x0400x048
+    u16                       mosaic_size;            // 0x0400x04C
+    MISCCNT                   dispx_MISC;             // 0x0400x04E
+    DISP3DCNT                 dispA_DISP3DCNT;        // 0x04000060
+    u32                       dispA_DISPCAPCNT;       // 0x04000064
+    u32                       dispA_DISPMMEMFIFO;     // 0x04000068
+    master_bright_t           master_bright;          // 0x0400x06C
 } __attribute__((packed)) ;
 
 
@@ -504,7 +477,6 @@ struct GPU
          u32 width;
          u32 height;
    };
-   background backgrounds[4];
 
    public:
       void refresh_display_control();
@@ -514,10 +486,12 @@ struct GPU
       void force_window_h_refresh(u32 window_number) { need_update_winh[window_number ? 1 : 0] = true; }
 
       background& get_current_background() { return backgrounds[currBgNum]; }
-      display_control_t get_display_control() const { return dispx_st->display_control; }
+      display_control_t& get_display_control() const { return dispx_st->display_control; }
+      affine_parameters_t& get_affine_parameters_for_bg(u32 bg) { return dispx_st->affine_parameters[(bg == 2) ? 0 : 1]; }
 
    public:
       bool need_update_winh[2];
+      background backgrounds[4];
 
    public:
 	// some structs are becoming redundant

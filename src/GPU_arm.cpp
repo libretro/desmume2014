@@ -835,7 +835,7 @@ FORCEINLINE PIXEL rot_BMP_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_
 typedef PIXEL (*rot_fun)(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette);
 
 template<rot_fun fun, bool WRAP>
-FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const BGxPARMS& params, u8 * pal)
+FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
 	ROTOCOORD x = params.X;
    ROTOCOORD y = params.Y;
@@ -884,13 +884,13 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const BGxPARMS& par
 }
 
 template<rot_fun fun>
-FORCEINLINE void apply_rot_fun(GPU* gpu, GPU::background& bg, const BGxPARMS& params, u8 * pal)
+FORCEINLINE void apply_rot_fun(GPU* gpu, GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
 	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
 	else                                    rot_scale_op<fun,false>(gpu, bg, params, pal);	
 }
 
-FORCEINLINE void rotBG2(GPU* gpu, const BGxPARMS& params)
+FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
 {
    GPU::background& bg = gpu->get_current_background();
 	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
@@ -2258,16 +2258,9 @@ void GPU::refreshAffineStartRegs(const int num, const int xy)
 		return;
 	}
 
-	BGxPARMS * parms;
-	if (num==2)
-		parms = &(dispx_st)->dispx_BG2PARMS;
-	else
-		parms = &(dispx_st)->dispx_BG3PARMS;		
-
-	if(xy==0)
-		parms->X = affineInfo[num-2].x;
-	else
-		parms->Y = affineInfo[num-2].y;
+	affine_parameters_t& parms = get_affine_parameters_for_bg(num);
+   parms.X = affineInfo[num - 2].x;
+   parms.Y = affineInfo[num - 2].y;
 }
 
 void GPU::modeRender(int layer)
@@ -2280,7 +2273,7 @@ void GPU::modeRender(int layer)
    }
    else if ((type == BGType_Affine) || (type == BGType_AffineExt) || (type == BGType_Large8bpp))
    {
-   	BGxPARMS& parms = (layer == 2) ? dispx_st->dispx_BG2PARMS : dispx_st->dispx_BG3PARMS;
+   	affine_parameters_t& parms = get_affine_parameters_for_bg(layer);
       rotBG2(this, parms);
 
    	parms.X += parms.PB;
