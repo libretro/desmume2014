@@ -840,8 +840,6 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const affine_parame
 	ROTOCOORD x = params.X;
    ROTOCOORD y = params.Y;
 
-   s32 x_pos = x.bits.Integer;
-   s32 y_pos = y.bits.Integer;
 	const s32 dx = (s32)params.PA;
 	const s32 dy = (s32)params.PC;
 
@@ -849,31 +847,14 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const affine_parame
 
    PIXEL pixels[256];
 
-	// as an optimization, specially handle the fairly common case of
-	// "unrotated + unscaled + no boundary checking required"
-	if(params.PA == 0x100 && params.PC == 0 && 
-      (WRAP || (x_pos + SCREEN_WIDTH < bg.width && x_pos >= 0 && y_pos < bg.height && y_pos >= 0)))
-	{
-      x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
-      y_pos &= (WRAP) ? bg.height - 1 : 0xFFFFFFFF;
-
-      for(int i = 0; i < 256; i ++, x_pos ++)
-      {
-         x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
-         pixels[i] = fun(gpu, bg, x_pos, y_pos, pal);
-      }
-	}
-   else
+   for(int i = 0; i < SCREEN_WIDTH; i ++, x.val += dx, y.val += dy)
    {
-      for(int i = 0; i < SCREEN_WIDTH; i ++, x.val += dx, y.val += dy)
-      {
-         x_pos &= (WRAP) ? bg.width - 1 : 0xFFFFFFFF;
-         y_pos &= (WRAP) ? bg.height - 1 : 0xFFFFFFFF;
+      s32 x_pos = x.Integer & ((WRAP) ? bg.width - 1 : 0xFFFFFFFF);
+      s32 y_pos = y.Integer & ((WRAP) ? bg.height - 1 : 0xFFFFFFFF);
 
-         if(WRAP || ((x_pos >= 0) && (x_pos < bg.width) && (y_pos >= 0) && (y_pos < bg.height)))
-         {
-            pixels[i] = fun(gpu, bg, x_pos, y_pos, pal);
-         }
+      if(WRAP || ((x_pos >= 0) && (x_pos < bg.width) && (y_pos >= 0) && (y_pos < bg.height)))
+      {
+         pixels[i] = fun(gpu, bg, x_pos, y_pos, pal);
       }
    }
 

@@ -307,21 +307,19 @@ typedef union
 	u16 val;
 } TILEENTRY;
 
-struct _ROTOCOORD
-{
-	u32 Fraction:8;
-	s32 Integer:20;
-	u32 pad:4;
-};
-
 union ROTOCOORD
 {
-   ROTOCOORD(s32 v) { val = v; }
+   ROTOCOORD(s32 value_) : val(value_) { }
 
-	struct _ROTOCOORD bits;
-	s32 val;
+   s32 val;
+
+   struct
+   {
+      unsigned Fraction : 8;
+      signed   Integer  : 20;
+      unsigned pad      : 4;
+   } __attribute__((packed));
 };
-
 
 /*
 	this structure is for color representation,
