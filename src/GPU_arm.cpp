@@ -1907,7 +1907,7 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
 {
    // NOTE: This is a good candidate for vectorization
 
-   const MASTER_BRIGHT& master_bright = screen->gpu->dispx_st->master_bright;
+   const master_bright_t& master_bright = screen->gpu->dispx_st->master_bright;
 	u16* dst = (u16*)(GPU_screen + (screen->offset + l) * 512);
 
    // It's turned off, nothing to do
@@ -1962,13 +1962,13 @@ FORCEINLINE void GPU::setup_windows()
 
 	if(WIN_NUM==0)
 	{
-		startY = WIN0V0;
-		endY = WIN0V1;
+		startY = dispx_st->window_rects.win_0_y1;
+		endY = dispx_st->window_rects.win_0_y2;
 	}
 	else
 	{
-		startY = WIN1V0;
-		endY = WIN1V1;
+		startY = dispx_st->window_rects.win_1_y1;
+		endY = dispx_st->window_rects.win_1_y2;
 	}
 
 	if(WIN_NUM == 0 && !WIN0_ENABLED) goto allout;
@@ -2002,13 +2002,13 @@ void GPU::update_winh(int WIN_NUM)
 
 	if(WIN_NUM==0)
 	{
-		startX = WIN0H0;
-		endX = WIN0H1;
+		startX = dispx_st->window_rects.win_0_x1;
+		endX = dispx_st->window_rects.win_0_x2;
 	}
 	else
 	{
-		startX = WIN1H0;
-		endX = WIN1H1;
+		startX = dispx_st->window_rects.win_1_x1;
+		endX = dispx_st->window_rects.win_1_x2;
 	}
 
 	//the original logic: if you doubt the window code, please check it against the newer implementation below
@@ -2081,7 +2081,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 	}
 
 	// skip some work if master brightness makes the screen completely white or completely black
-   const MASTER_BRIGHT& master_bright = gpu->dispx_st->master_bright;
+   const master_bright_t& master_bright = gpu->dispx_st->master_bright;
 	if(master_bright.max && (master_bright.mode == 1 || master_bright.mode == 2))
 	{
 		// except if it could cause any side effects (for example if we're capturing), then don't skip anything

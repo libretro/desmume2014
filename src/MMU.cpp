@@ -2278,56 +2278,22 @@ void FASTCALL _MMU_ARM9_write08(u32 adr, u8 val)
 				MMU_new.gxstat.write(8,adr,val);
 				break;
 
-			case REG_DISPA_WIN0H: 	 
-				GPU_setWIN0_H1(MainScreen.gpu, val);
+			case REG_DISPA_WIN0H:
+			case REG_DISPA_WIN0H+1:
+            MainScreen.gpu->force_window_h_refresh(0);
 				break ; 	 
-			case REG_DISPA_WIN0H+1: 	 
-				GPU_setWIN0_H0 (MainScreen.gpu, val);
-				break ; 	 
-			case REG_DISPA_WIN1H: 	 
-				GPU_setWIN1_H1 (MainScreen.gpu,val);
-				break ; 	 
-			case REG_DISPA_WIN1H+1: 	 
-				GPU_setWIN1_H0 (MainScreen.gpu,val);
+			case REG_DISPA_WIN1H:
+			case REG_DISPA_WIN1H+1:
+            MainScreen.gpu->force_window_h_refresh(1);
 				break ; 	 
 
-			case REG_DISPB_WIN0H: 	 
-				GPU_setWIN0_H1(SubScreen.gpu,val);
-				break ; 	 
+			case REG_DISPB_WIN0H:
 			case REG_DISPB_WIN0H+1: 	 
-				GPU_setWIN0_H0(SubScreen.gpu,val);
+            SubScreen.gpu->force_window_h_refresh(0);
 				break ; 	 
 			case REG_DISPB_WIN1H: 	 
-				GPU_setWIN1_H1(SubScreen.gpu,val);
-				break ; 	 
-			case REG_DISPB_WIN1H+1: 	 
-				GPU_setWIN1_H0(SubScreen.gpu,val);
-				break ;
-
-			case REG_DISPA_WIN0V: 	 
-				GPU_setWIN0_V1(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WIN0V+1: 	 
-				GPU_setWIN0_V0(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WIN1V: 	 
-				GPU_setWIN1_V1(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WIN1V+1: 	 
-				GPU_setWIN1_V0(MainScreen.gpu,val) ; 	 
-				break ; 	 
-
-			case REG_DISPB_WIN0V: 	 
-				GPU_setWIN0_V1(SubScreen.gpu,val) ;
-				break ; 	 
-			case REG_DISPB_WIN0V+1: 	 
-				GPU_setWIN0_V0(SubScreen.gpu,val) ;
-				break ; 	 
-			case REG_DISPB_WIN1V: 	 
-				GPU_setWIN1_V1(SubScreen.gpu,val) ;
-				break ; 	 
-			case REG_DISPB_WIN1V+1: 	 
-				GPU_setWIN1_V0(SubScreen.gpu,val) ;
+			case REG_DISPB_WIN1H+1:
+            SubScreen.gpu->force_window_h_refresh(1);
 				break ;
 
 			case REG_DISPA_WININ: 	 
@@ -2635,29 +2601,17 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 				GPU_setBLDY_EVY(SubScreen.gpu,val) ; 	 
 				break;
 
-			case REG_DISPA_WIN0H: 	 
-				GPU_setWIN0_H (MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WIN1H: 	 
-				GPU_setWIN1_H(MainScreen.gpu,val) ; 	 
+			case REG_DISPA_WIN0H:
+            MainScreen.gpu->force_window_h_refresh(0);
+            break;
+			case REG_DISPA_WIN1H:
+            MainScreen.gpu->force_window_h_refresh(1);
 				break ; 	 
 			case REG_DISPB_WIN0H: 	 
-				GPU_setWIN0_H(SubScreen.gpu,val) ; 	 
+            SubScreen.gpu->force_window_h_refresh(0);
 				break ; 	 
 			case REG_DISPB_WIN1H: 	 
-				GPU_setWIN1_H(SubScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WIN0V: 	 
-				GPU_setWIN0_V(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WIN1V: 	 
-				GPU_setWIN1_V(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPB_WIN0V: 	 
-				GPU_setWIN0_V(SubScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPB_WIN1V: 	 
-				GPU_setWIN1_V(SubScreen.gpu,val) ; 	 
+            SubScreen.gpu->force_window_h_refresh(1);
 				break ; 	 
 			case REG_DISPA_WININ: 	 
 				GPU_setWININ(MainScreen.gpu, val) ; 	 
@@ -3095,29 +3049,16 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 
 			case REG_DISPA_WIN0H:
 			{
-				GPU_setWIN0_H(MainScreen.gpu, val&0xFFFF);
-				GPU_setWIN1_H(MainScreen.gpu, val>>16);
-				break;
-			}
-			case REG_DISPA_WIN0V:
-			{
-				GPU_setWIN0_V(MainScreen.gpu, val&0xFFFF);
-				GPU_setWIN1_V(MainScreen.gpu, val>>16);
+            MainScreen.gpu->force_window_h_refresh(0);
+            MainScreen.gpu->force_window_h_refresh(1);
 				break;
 			}
 			case REG_DISPB_WIN0H:
 			{
-				GPU_setWIN0_H(SubScreen.gpu, val&0xFFFF);
-				GPU_setWIN1_H(SubScreen.gpu, val>>16);
+            SubScreen.gpu->force_window_h_refresh(0);
+            SubScreen.gpu->force_window_h_refresh(1);
 				break;
 			}
-			case REG_DISPB_WIN0V:
-			{
-				GPU_setWIN0_V(SubScreen.gpu, val&0xFFFF);
-				GPU_setWIN1_V(SubScreen.gpu, val>>16);
-				break;
-			}
-
 			case REG_DISPA_BLDCNT:
 			{
 				GPU_setBLDCNT   (MainScreen.gpu,val&0xffff);

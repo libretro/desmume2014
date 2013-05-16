@@ -102,20 +102,67 @@ union background_control_t
    } __attribute__((packed));
 };
 
+union background_offset_t
+{
+   u32 value;
+
+   struct
+   {
+      unsigned x                    : 12;
+      unsigned unused1              : 4;
+      unsigned y                    : 12;
+      unsigned unused2              : 4;
+   } __attribute__((packed));
+};
+
+struct window_rects_t
+{
+   union
+   {
+      u32 x_values;
+
+      struct
+      {
+         unsigned win_0_x2          : 8;
+         unsigned win_0_x1          : 8;
+         unsigned win_1_x2          : 8;
+         unsigned win_1_x1          : 8;
+      } __attribute__((packed));
+   };
+
+   union
+   {
+      u32 y_values;
+
+      struct
+      {
+         unsigned win_0_y2          : 8;
+         unsigned win_0_y1          : 8;
+         unsigned win_1_y2          : 8;
+         unsigned win_1_y1          : 8;
+      } __attribute__((packed));
+   };
+};
+
+union master_bright_t
+{
+   u16 value;
+
+   struct
+   {
+      unsigned factor               : 4;
+      unsigned max                  : 1;
+      unsigned unused               : 9;
+      unsigned mode                 : 2;
+   };
+};
+
+
 enum BlendFunc
 {
 	NoBlend, Blend, Increase, Decrease
 };
 
-
-/*******************************************************************************
-    this structure is for background offset
-*******************************************************************************/
-
-typedef struct {
-    u16 BGxHOFS;
-    u16 BGxVOFS;
-} BGxOFS;
 
 /*******************************************************************************
     this structure is for rotoscale parameters
@@ -142,44 +189,7 @@ struct BGxPARMS
 	+-- Window0/Window1/OBJwindow/OutOfWindows
 		|
 		+-- BG0/BG1/BG2/BG3/OBJ
-*******************************************************************************/
-
-typedef union {
-	struct	{
-		u8 end:8;
-		u8 start:8;
-	} bits ;
-	u16 val;
-} WINxDIM;
-
-typedef struct {
-/* 0*/  u8 WINx_BG0_Enable:1;
-/* 1*/  u8 WINx_BG1_Enable:1;
-/* 2*/  u8 WINx_BG2_Enable:1;
-/* 3*/  u8 WINx_BG3_Enable:1;
-/* 4*/  u8 WINx_OBJ_Enable:1;
-/* 5*/  u8 WINx_Effect_Enable:1;
-/* 6*/  u8 :2;
-} WINxBIT;
-
-typedef union {
-	struct {
-		WINxBIT win0;
-		WINxBIT win1;
-	} bits;
-	struct {
-		u8 win0_en:5;
-		u8 :3;
-		u8 win1_en:5;
-		u8 :3;
-	} packed_bits;
-	struct {
-		u8 low;
-		u8 high;
-	} bytes;
-	u16 val ;
-} WINxCNT ;
-
+********************************************************************************/
 /*
 typedef struct {
     WINxDIM WIN0H;
@@ -262,19 +272,6 @@ struct DISPCAPCNT
 	u8 capSrc;
 } ;
 
-union MASTER_BRIGHT
-{
-   u16 bits;
-
-   struct
-   {
-      unsigned factor : 4;
-      unsigned max    : 1;
-      unsigned unused : 9;
-      unsigned mode   : 2;
-   };
-};
-
 
 /*******************************************************************************
     this structure holds everything and should be mapped to
@@ -287,16 +284,17 @@ struct REG_DISPx {
     u16 dispA_DISPSTAT;               // 0x04000004
     u16 dispx_VCOUNT;                 // 0x0400x006
     background_control_t background_control[4];           // 0x0400x008
-    BGxOFS dispx_BGxOFS[4];           // 0x0400x010
+    background_offset_t  background_offset[4];           // 0x0400x010
     BGxPARMS dispx_BG2PARMS;          // 0x0400x020
     BGxPARMS dispx_BG3PARMS;          // 0x0400x030
-    u8			filler[12];            // 0x0400x040
+    window_rects_t        window_rects; // 0x0400x040
+    u8 filler[4];
     u16 mosaic_size;               // 0x0400x04C
     MISCCNT dispx_MISC;               // 0x0400x04E
     DISP3DCNT dispA_DISP3DCNT;        // 0x04000060
     u32 dispA_DISPCAPCNT;             // 0x04000064
     u32 dispA_DISPMMEMFIFO;           // 0x04000068
-    MASTER_BRIGHT master_bright;      // 0x0400x06C
+    master_bright_t master_bright;      // 0x0400x06C
 } __attribute__((packed)) ;
 
 
@@ -513,10 +511,15 @@ struct GPU
       void refresh_background_control(u32 bg_number);
       void resort_backgrounds();
 
+      void force_window_h_refresh(u32 window_number) { need_update_winh[window_number ? 1 : 0] = true; }
+
       background& get_current_background() { return backgrounds[currBgNum]; }
       display_control_t get_display_control() const { return dispx_st->display_control; }
 
+   public:
+      bool need_update_winh[2];
 
+   public:
 	// some structs are becoming redundant
 	// some functions too (no need to recopy some vars as it is done by MMU)
 	REG_DISPx * dispx_st;
@@ -532,7 +535,7 @@ struct GPU
 	u8 h_win[2][256];
 	const u8 *curr_win[2];
 	void update_winh(int WIN_NUM); 
-	bool need_update_winh[2];
+
 	
 	template<int WIN_NUM> void setup_windows();
 
@@ -545,16 +548,6 @@ struct GPU
 	u8 sprBoundary;
 	u8 sprBMPBoundary;
 	u32 sprEnable;
-
-	u8 WIN0H0;
-	u8 WIN0H1;
-	u8 WIN0V0;
-	u8 WIN0V1;
-
-	u8 WIN1H0;
-	u8 WIN1H1;
-	u8 WIN1V0;
-	u8 WIN1V1;
 
 	u8 WININ0;
 	bool WININ0_SPECIAL;
@@ -655,8 +648,8 @@ struct GPU
 		updateBLDALPHA();
 	}
 
-	u32 getHOFS(int bg) { return T1ReadWord(&dispx_st->dispx_BGxOFS[bg].BGxHOFS,0) & 0x1FF; }
-	u32 getVOFS(int bg) { return T1ReadWord(&dispx_st->dispx_BGxOFS[bg].BGxVOFS,0) & 0x1FF; }
+	u32 getHOFS(int bg) { return dispx_st->background_offset[bg].x; }
+	u32 getVOFS(int bg) { return dispx_st->background_offset[bg].y; }
 
 	typedef u8 TBlendTable[32][32];
 	TBlendTable *blendTable;
@@ -695,22 +688,6 @@ int GPU_ChangeGraphicsCore(int coreid);
 
 void GPU_set_DISPCAPCNT(u32 val) ;
 void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip = false) ;
-
-inline void GPU_setWIN0_H(GPU* gpu, u16 val) { gpu->WIN0H0 = val >> 8; gpu->WIN0H1 = val&0xFF; gpu->need_update_winh[0] = true; }
-inline void GPU_setWIN0_H0(GPU* gpu, u8 val) { gpu->WIN0H0 = val;  gpu->need_update_winh[0] = true; }
-inline void GPU_setWIN0_H1(GPU* gpu, u8 val) { gpu->WIN0H1 = val;  gpu->need_update_winh[0] = true; }
-
-inline void GPU_setWIN0_V(GPU* gpu, u16 val) { gpu->WIN0V0 = val >> 8; gpu->WIN0V1 = val&0xFF;}
-inline void GPU_setWIN0_V0(GPU* gpu, u8 val) { gpu->WIN0V0 = val; }
-inline void GPU_setWIN0_V1(GPU* gpu, u8 val) { gpu->WIN0V1 = val; }
-
-inline void GPU_setWIN1_H(GPU* gpu, u16 val) {gpu->WIN1H0 = val >> 8; gpu->WIN1H1 = val&0xFF;  gpu->need_update_winh[1] = true; }
-inline void GPU_setWIN1_H0(GPU* gpu, u8 val) { gpu->WIN1H0 = val;  gpu->need_update_winh[1] = true; }
-inline void GPU_setWIN1_H1(GPU* gpu, u8 val) { gpu->WIN1H1 = val;  gpu->need_update_winh[1] = true; }
-
-inline void GPU_setWIN1_V(GPU* gpu, u16 val) { gpu->WIN1V0 = val >> 8; gpu->WIN1V1 = val&0xFF; }
-inline void GPU_setWIN1_V0(GPU* gpu, u8 val) { gpu->WIN1V0 = val; }
-inline void GPU_setWIN1_V1(GPU* gpu, u8 val) { gpu->WIN1V1 = val; }
 
 inline void GPU_setWININ(GPU* gpu, u16 val) {
 	gpu->WININ0=val&0x1F;
