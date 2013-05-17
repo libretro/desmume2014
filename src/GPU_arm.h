@@ -125,7 +125,6 @@ struct affine_parameters_t
    s32 Y;
 };
 
-
 struct window_rects_t
 {
    union
@@ -452,6 +451,21 @@ enum BGType {
 	BGType_AffineExt=4, BGType_AffineExt_256x16=5, BGType_AffineExt_256x1=6, BGType_AffineExt_Direct=7
 };
 
+struct PIXEL
+{
+   unsigned color : 16;
+   unsigned opaque : 1;
+   unsigned pad : 15;
+};
+
+FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque)
+{
+   PIXEL result;
+   result.color = color;
+   result.opaque = opaque;
+   return result;
+}
+
 struct GPU
 {
    struct background
@@ -459,6 +473,12 @@ struct GPU
       public:
          void set_size(u32 width_, u32 height_) { width = width_; height = height_; }
          background_control_t get_control() const { return parent->dispx_st->background_control[number]; }
+
+         bool render_pixels(u32 line, PIXEL pixels[34 * 4]); // Only 8-262 are drawn
+
+         u32 get_x_offset() const { return parent->getHOFS(number); }
+         u32 get_y_offset() const { return parent->getVOFS(number); }
+         affine_parameters_t& get_affine_parameters() { return parent->dispx_st->affine_parameters[(number == 2) ? 0 : 1]; }
 
       public:
          GPU* parent;
@@ -484,8 +504,7 @@ struct GPU
       void force_window_h_refresh(u32 window_number) { need_update_winh[window_number ? 1 : 0] = true; }
 
       background& get_current_background() { return backgrounds[currBgNum]; }
-      display_control_t& get_display_control() const { return dispx_st->display_control; }
-      affine_parameters_t& get_affine_parameters_for_bg(u32 bg) { return dispx_st->affine_parameters[(bg == 2) ? 0 : 1]; }
+      display_control_t get_display_control() const { return dispx_st->display_control; }
 
    public:
       bool need_update_winh[2];
@@ -582,8 +601,6 @@ struct GPU
 	void setFinalColor3d(int dstX, int srcX);
 	
 	template<bool BACKDROP, int FUNCNUM> void setFinalColorBG(u16 color, const u32 x);
-	template<bool BACKDROP> FORCEINLINE void __setFinalColorBck(u16 color, const u32 x, const int opaque);
-	template<bool BACKDROP, int FUNCNUM> FORCEINLINE void ___setFinalColorBck(u16 color, const u32 x, const int opaque);
 
 	void setAffineStart(int layer, int xy, u32 val);
 	void setAffineStartWord(int layer, int xy, u16 val, int word);
@@ -620,8 +637,8 @@ struct GPU
 		updateBLDALPHA();
 	}
 
-	u32 getHOFS(int bg) { return dispx_st->background_offset[bg].x; }
-	u32 getVOFS(int bg) { return dispx_st->background_offset[bg].y; }
+	u32 getHOFS(int bg) const { return dispx_st->background_offset[bg].x; }
+	u32 getVOFS(int bg) const { return dispx_st->background_offset[bg].y; }
 
 	typedef u8 TBlendTable[32][32];
 	TBlendTable *blendTable;

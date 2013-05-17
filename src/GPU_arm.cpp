@@ -621,29 +621,6 @@ FORCEINLINE void setFinalColorSpr(GPU* gpu, u8 *dst, u16 color, u8 alpha, u8 typ
 	};
 }
 
-template<bool BACKDROP>
-FORCEINLINE void GPU::__setFinalColorBck(u16 color, const u32 x, const int opaque)
-{
-	return ___setFinalColorBck<BACKDROP, 0>(color,x,opaque);
-}
-
-//this was forced inline because most of the time it just falls through to setFinalColorBck() and the function call
-//overhead was ridiculous and terrible
-template<bool BACKDROP, int FUNCNUM>
-FORCEINLINE void GPU::___setFinalColorBck(u16 color, const u32 x, const int opaque)
-{
-	//under ordinary circumstances, nobody should pass in something >=256
-	//but in fact, someone is going to try. specifically, that is the map viewer debug tools
-	//which try to render the enter BG. in cases where that is large, it could be up to 1024 wide.
-	assert(debug || x<256);
-
-   if (opaque)
-   {
-      setFinalColorBG<BACKDROP,FUNCNUM>(color, x);
-   }
-}
-
-
 //gets the affine parameter associated with the specified oam index.
 u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index)
 {
@@ -655,21 +632,6 @@ u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index)
 /*****************************************************************************/
 //			BACKGROUND RENDERING -TEXT-
 /*****************************************************************************/
-struct PIXEL
-{
-   unsigned color : 16;
-   unsigned opaque : 1;
-   unsigned pad : 15;
-};
-
-FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque)
-{
-   PIXEL result;
-   result.color = color;
-   result.opaque = opaque;
-   return result;
-}
-
 struct TILE
 {
    u32   tag;
@@ -732,7 +694,7 @@ static void expand_tile(GPU* gpu, GPU::background& bg, bool colors256, u16 tile_
 }
 
 // render a text background to the combined pixelbuffer
-static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
+static void renderline_textBG(GPU* gpu, PIXEL pixels[34 * 8], u32 start_x, u32 line, u32 width)
 {
    // Change tile tag, effectively clearing the tile cache
    // TODO: Make tile cache more persistent
@@ -754,8 +716,6 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
 
    const u32 x_offset        = start_x & 7;
 
-   PIXEL pixels[34 * 8];
-
    // This is set so that pixels[8] will be the first displayed pixel
    PIXEL* pixel_base = &pixels[8 - (start_x & 7)];
 
@@ -768,12 +728,6 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
       const u16* ex_palette = (gpu->get_display_control().ExBGxPalette_Enable && bg_control.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][bg.extended_palette_slot] : 0;
 
       expand_tile(gpu, bg, bg_control.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
-   }
-
-   // Finish
-   for (int i = 0; i < width; i ++)
-   {
-      gpu->__setFinalColorBck<false>(pixels[8 + i].color, i, pixels[8 + i].opaque);
    }
 }
 
@@ -835,7 +789,7 @@ FORCEINLINE PIXEL rot_BMP_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_
 typedef PIXEL (*rot_fun)(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette);
 
 template<rot_fun fun, bool WRAP>
-FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const affine_parameters_t& params, u8 * pal)
+FORCEINLINE void rot_scale_op(GPU* gpu, PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
 	ROTOCOORD x = params.X;
    ROTOCOORD y = params.Y;
@@ -845,8 +799,6 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const affine_parame
 
    // TODO: Don't check bounds every pixel, instead calculate how many pixels can be drawn or skipped before overflow or wrap   
 
-   PIXEL pixels[256];
-
    for(int i = 0; i < SCREEN_WIDTH; i ++, x.val += dx, y.val += dy)
    {
       s32 x_pos = x.Integer & ((WRAP) ? bg.width - 1 : 0xFFFFFFFF);
@@ -854,24 +806,19 @@ FORCEINLINE void rot_scale_op(GPU* gpu, GPU::background& bg, const affine_parame
 
       if(WRAP || ((x_pos >= 0) && (x_pos < bg.width) && (y_pos >= 0) && (y_pos < bg.height)))
       {
-         pixels[i] = fun(gpu, bg, x_pos, y_pos, pal);
+         pixels[8 + i] = fun(gpu, bg, x_pos, y_pos, pal);
       }
-   }
-
-   for (int i = 0; i < 256; i ++)
-   {
-      gpu->__setFinalColorBck<false>(pixels[i].color, i, pixels[i].opaque);
    }
 }
 
 template<rot_fun fun>
-FORCEINLINE void apply_rot_fun(GPU* gpu, GPU::background& bg, const affine_parameters_t& params, u8 * pal)
+FORCEINLINE void apply_rot_fun(GPU* gpu, PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
-	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, bg, params, pal);	
-	else                                    rot_scale_op<fun,false>(gpu, bg, params, pal);	
+	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, pixels, bg, params, pal);	
+	else                                    rot_scale_op<fun,false>(gpu, pixels, bg, params, pal);	
 }
 
-FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
+FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_t& params)
 {
    GPU::background& bg = gpu->get_current_background();
 	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
@@ -880,7 +827,7 @@ FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
 	{
       case BGType_Affine:
       {
-         apply_rot_fun<rot_tiled_8bit_entry>(gpu, bg, params, pal);
+         apply_rot_fun<rot_tiled_8bit_entry>(gpu, pixels, bg, params, pal);
          return;
       }
 
@@ -892,12 +839,12 @@ FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
 
             if (pal)
             {
-               apply_rot_fun<rot_tiled_16bit_entry<true> >(gpu, bg, params, pal);
+               apply_rot_fun<rot_tiled_16bit_entry<true> >(gpu, pixels, bg, params, pal);
             }
          }
          else
          {
-            apply_rot_fun<rot_tiled_16bit_entry<false> >(gpu, bg, params, pal);
+            apply_rot_fun<rot_tiled_16bit_entry<false> >(gpu, pixels, bg, params, pal);
          }
 
          return;
@@ -906,13 +853,13 @@ FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
       case BGType_AffineExt_256x1:
    	case BGType_Large8bpp:
       {
-   		apply_rot_fun<rot_256_map>(gpu, bg, params, pal);
+   		apply_rot_fun<rot_256_map>(gpu, pixels, bg, params, pal);
          return;
       }
 
       case BGType_AffineExt_Direct:
       {
-		   apply_rot_fun<rot_BMP_map>(gpu, bg, params, NULL);
+		   apply_rot_fun<rot_BMP_map>(gpu, pixels, bg, params, NULL);
 		   return;
       }
 
@@ -1561,10 +1508,10 @@ static void render_backdrop(GPU* gpu, u16 color)
    {
       case 2: color = (gpu->BLDCNT & 0x20) ? gpu->currentFadeInColors[color] : color; break;
       case 3: color = (gpu->BLDCNT & 0x20) ? gpu->currentFadeOutColors[color] : color; break;
-      case 4: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,4>(color, x, 1); return;
-      case 5: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,5>(color, x, 1); return;
-      case 6: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,6>(color, x, 1); return;
-      case 7: for(int x = 0; x < 256; x ++) gpu->___setFinalColorBck<true,7>(color, x, 1); return;
+      case 4: for(int x = 0; x < 256; x ++) gpu->setFinalColorBG<true,4>(color, x); return;
+      case 5: for(int x = 0; x < 256; x ++) gpu->setFinalColorBG<true,5>(color, x); return;
+      case 6: for(int x = 0; x < 256; x ++) gpu->setFinalColorBG<true,6>(color, x); return;
+      case 7: for(int x = 0; x < 256; x ++) gpu->setFinalColorBG<true,7>(color, x); return;
    }
 
    memset_u16_le<256>(gpu->currDst, color); 
@@ -1677,7 +1624,19 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 					}
 					else 
                {
-						gpu->modeRender(bg_number);
+                  PIXEL buffer[34 * 8];
+                  GPU::background& bg = gpu->get_current_background();
+                  
+                  if (bg.render_pixels(gpu->currLine, buffer))
+                  {
+                     for (int x = 0; x < SCREEN_WIDTH; x ++)
+                     {
+                        if (buffer[8 + x].opaque)
+                        {
+                           gpu->setFinalColorBG<false, 0>(buffer[8 + x].color, x);
+                        }
+                     }
+                  }
                }
 				}
 			}
@@ -2239,23 +2198,26 @@ void GPU::refreshAffineStartRegs(const int num, const int xy)
 		return;
 	}
 
-	affine_parameters_t& parms = get_affine_parameters_for_bg(num);
+	affine_parameters_t& parms = backgrounds[num].get_affine_parameters();
    parms.X = affineInfo[num - 2].x;
    parms.Y = affineInfo[num - 2].y;
 }
 
-void GPU::modeRender(int layer)
+/**********************************
+ * GPU::background
+ **********************************/
+bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
 {
-   const BGType type = GPU_mode2type[get_display_control().BG_Mode][layer];
+   const BGType type = GPU_mode2type[parent->get_display_control().BG_Mode][number];
 
    if (type == BGType_Text)
    {
-     	renderline_textBG(this, getHOFS(layer), currLine + getVOFS(layer), 256);
+     	renderline_textBG(parent, pixels, get_x_offset(), line + get_y_offset(), 256);
    }
    else if ((type == BGType_Affine) || (type == BGType_AffineExt) || (type == BGType_Large8bpp))
    {
-   	affine_parameters_t& parms = get_affine_parameters_for_bg(layer);
-      rotBG2(this, parms);
+   	affine_parameters_t& parms = get_affine_parameters();
+      rotBG2(parent, pixels, parms);
 
    	parms.X += parms.PB;
 	   parms.Y += parms.PD;
@@ -2264,5 +2226,6 @@ void GPU::modeRender(int layer)
    {
       PROGINFO("Attempting to render an invalid BG type\n");
    }
-}
 
+   return true;
+}
