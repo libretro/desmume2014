@@ -211,7 +211,7 @@ ifeq ($(RETRO_PROFILE),1)
    CPPFLAGS += -DRETRO_PROFILE=1
 endif
 
-CPPFLAGS += $(OPTIMIZE)
+CPPFLAGS += $(OPTIMIZE) -MMD -MP
 
 CPPFLAGS += -DHAVE_LIBZ
 ifeq ($(INCLUDE_ZLIB_HEADERS),1)
@@ -243,9 +243,11 @@ else
 endif
 
 clean:
-	rm -f $(OBJECTS) $(TARGET)
+	rm -f $(OBJECTS) $(OBJECTS:.o=.d) $(TARGET)
 
 .PHONY: clean
+
+-include $(OBJECTS:.o=.d)
 
 
 
