@@ -1315,7 +1315,7 @@ bool gpu_loadstate(EMUFILE* is, int size)
 		if(read32le(&version,is) != 1) return false;
 		
 
-	if(version<0||version>1) return false;
+	if(version>1) return false;
 
 	is->fread((char*)GPU_screen,sizeof(GPU_screen));
 
