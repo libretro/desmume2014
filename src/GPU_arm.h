@@ -445,7 +445,9 @@ struct GPU
    {
       public:
          void set_size(u32 width_, u32 height_) { width = width_; height = height_; }
+
          background_control_t get_control() const { return parent->dispx_st->background_control[number]; }
+         void refresh_control();
 
          bool render_pixels(u32 line, PIXEL pixels[34 * 4]); // Only 8-262 are drawn
 
@@ -471,7 +473,7 @@ struct GPU
 
    public:
       void refresh_display_control();
-      void refresh_background_control(u32 bg_number);
+      void refresh_background_control(u32 bg_number) { backgrounds[bg_number].refresh_control(); }
       void resort_backgrounds();
 
       void force_window_h_refresh(u32 window_number) { need_update_winh[window_number ? 1 : 0] = true; }

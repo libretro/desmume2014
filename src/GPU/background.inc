@@ -91,35 +91,35 @@ static FORCEINLINE void horizontal_flip_tile(PIXEL* const tile_buffer)
    }
 }
 
-static FORCEINLINE void expand_tile(GPU* gpu, GPU::background& bg, bool colors256, tile_entry_t tile_entry, u32 line, const u16* ex_palette, PIXEL* output_buffer)
+static FORCEINLINE const PIXEL* expand_tile(GPU* gpu, GPU::background& bg, tile_entry_t tile, u32 line, bool colors256, const u16* ex_palette)
 {
-   if (tile_cache[tile_entry].tag != tile_tag)
+   if (tile_cache[tile].tag != tile_tag)
    {
-      PIXEL* tile_buffer = tile_cache[tile_entry].pixels;
-      tile_cache[tile_entry].tag = tile_tag;
+      PIXEL* tile_buffer = tile_cache[tile].pixels;
+      tile_cache[tile].tag = tile_tag;
 
-      line = (tile_entry.VFlip) ? 7 - line : line;
+      line = ((tile.VFlip) ? 7 - line : line) & 7;
 
       const u32 tile_size = colors256 ? 64 : 32;
       const u32 line_size = colors256 ?  8 :  4;
-      const u8* const tile_pixels = (u8*)MMU_gpu_map(bg.tile_pixel_ram + (tile_entry.TileNum * tile_size) + (line * line_size));
+      const u8* const tile_pixels = (u8*)MMU_gpu_map(bg.tile_pixel_ram + (tile.TileNum * tile_size) + (line * line_size));
 
       if (!colors256)
       {
-         expand_tile_8(tile_buffer, tile_pixels, &gpu->palette[tile_entry.Palette * 16]);
+         expand_tile_8(tile_buffer, tile_pixels, &gpu->palette[tile.Palette * 16]);
       }
       else
       {
-         expand_tile_16(tile_buffer, tile_pixels, ex_palette ? &ex_palette[256 * tile_entry.Palette] : gpu->palette);
+         expand_tile_16(tile_buffer, tile_pixels, ex_palette ? &ex_palette[256 * tile.Palette] : gpu->palette);
       }
 
-      if (tile_entry.HFlip)
+      if (tile.HFlip)
       {
          horizontal_flip_tile(tile_buffer);
       }
    }
 
-   memcpy(output_buffer, tile_cache[tile_entry].pixels, sizeof(PIXEL) * 8);
+   return tile_cache[tile].pixels;
 }
 
 /*****************************************************************************/
@@ -158,7 +158,8 @@ static void renderline_textBG(GPU* gpu, PIXEL pixels[34 * 8], u32 start_x, u32 l
 
       const u16* ex_palette = (gpu->get_display_control().ExBGxPalette_Enable && bg_control.Palette_256) ? (u16*)MMU.ExtPal[gpu->core][bg.extended_palette_slot] : 0;
 
-      expand_tile(gpu, bg, bg_control.Palette_256, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, ex_palette, &pixel_base[i * 8]);
+      const PIXEL* tile_line = expand_tile(gpu, bg, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, bg_control.Palette_256, ex_palette);
+      memcpy(&pixel_base[i * 8], tile_line, sizeof(PIXEL) * 8);
    }
 }
 
@@ -301,6 +302,41 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
 /**********************************/
 // GPU::background
 /**********************************/
+//this handles writing in BGxCNT
+void GPU::background::refresh_control()
+{
+   const u32 core = parent->core;
+	const display_control_t display_control = parent->get_display_control();
+	const background_control_t bg_control   = get_control();
+	
+   parent->resort_backgrounds();
+
+   const u32 gpu_memory_base  = (core == GPU_SUB) ? MMU_BBG : MMU_ABG;
+   tile_map_ram            = gpu_memory_base + ((core == GPU_MAIN) ? display_control.ScreenBase_Block * ADDRESS_STEP_64KB : 0);
+   tile_pixel_ram          = gpu_memory_base + ((core == GPU_MAIN) ? display_control.CharacBase_Block * ADDRESS_STEP_64KB : 0);
+   bitmap_ram              = gpu_memory_base;
+   large_bitmap_ram        = gpu_memory_base;
+
+	tile_map_ram           += bg_control.ScreenBase_Block * ADDRESS_STEP_2KB;
+	tile_pixel_ram         += bg_control.CharacBase_Block * ADDRESS_STEP_16KB;
+	bitmap_ram             += bg_control.ScreenBase_Block * ADDRESS_STEP_16KB;
+
+   extended_palette_slot   = number + ((number < 2) ? bg_control.PaletteSet_Wrap * 2 : 0);
+
+	type                    = GPU_mode2type[display_control.BG_Mode][number];
+
+	//clarify affine ext modes 
+	if(type == BGType_AffineExt)
+	{
+      static const BGType affine_modes[4] = { BGType_AffineExt_256x16, BGType_AffineExt_256x16, BGType_AffineExt_256x1, BGType_AffineExt_Direct };
+		const u32 affine_mode = (bg_control.Palette_256 << 1) | (bg_control.CharacBase_Block & 1);
+
+      type = affine_modes[affine_mode];
+	}
+
+   set_size(sizeTab[type][bg_control.ScreenSize][0], sizeTab[type][bg_control.ScreenSize][1]);
+}
+
 bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
 {
    const BGType type = GPU_mode2type[parent->get_display_control().BG_Mode][number];

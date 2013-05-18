@@ -276,42 +276,6 @@ void GPU::refresh_display_control()
    }
 }
 
-//this handles writing in BGxCNT
-void GPU::refresh_background_control(u32 bg_number)
-{
-   GPU::background& bg = backgrounds[bg_number];
-
-	const display_control_t display_control = get_display_control();
-	const background_control_t bg_control   = bg.get_control();
-	
-   resort_backgrounds();
-
-   const u32 gpu_memory_base  = (core == GPU_SUB) ? MMU_BBG : MMU_ABG;
-   bg.tile_map_ram            = gpu_memory_base + ((core == GPU_MAIN) ? display_control.ScreenBase_Block * ADDRESS_STEP_64KB : 0);
-   bg.tile_pixel_ram          = gpu_memory_base + ((core == GPU_MAIN) ? display_control.CharacBase_Block * ADDRESS_STEP_64KB : 0);
-   bg.bitmap_ram              = gpu_memory_base;
-   bg.large_bitmap_ram        = gpu_memory_base;
-
-	bg.tile_map_ram           += bg_control.ScreenBase_Block * ADDRESS_STEP_2KB;
-	bg.tile_pixel_ram         += bg_control.CharacBase_Block * ADDRESS_STEP_16KB;
-	bg.bitmap_ram             += bg_control.ScreenBase_Block * ADDRESS_STEP_16KB;
-
-   bg.extended_palette_slot   = bg_number + ((bg_number < 2) ? bg_control.PaletteSet_Wrap * 2 : 0);
-
-	bg.type                    = GPU_mode2type[display_control.BG_Mode][bg_number];
-
-	//clarify affine ext modes 
-	if(bg.type == BGType_AffineExt)
-	{
-      static const BGType affine_modes[4] = { BGType_AffineExt_256x16, BGType_AffineExt_256x16, BGType_AffineExt_256x1, BGType_AffineExt_Direct };
-		const u32 affine_mode = (bg_control.Palette_256 << 1) | (bg_control.CharacBase_Block & 1);
-
-      bg.type = affine_modes[affine_mode];
-	}
-
-   bg.set_size(sizeTab[bg.type][bg_control.ScreenSize][0], sizeTab[bg.type][bg_control.ScreenSize][1]);
-}
-
 void GPU::resort_backgrounds()
 {
    const display_control_t display_control = get_display_control();
