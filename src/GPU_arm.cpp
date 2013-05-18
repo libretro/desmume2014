@@ -53,19 +53,6 @@ NDS_Screen SubScreen;
 CACHE_ALIGN u8 GPU_screen[4*256*192];
 CACHE_ALIGN u8 sprWin[256];
 
-
-static const BGType GPU_mode2type[8][4] = 
-{
-      {BGType_Text, BGType_Text, BGType_Text, BGType_Text},
-      {BGType_Text, BGType_Text, BGType_Text, BGType_Affine},
-      {BGType_Text, BGType_Text, BGType_Affine, BGType_Affine},
-      {BGType_Text, BGType_Text, BGType_Text, BGType_AffineExt},
-      {BGType_Text, BGType_Text, BGType_Affine, BGType_AffineExt},
-      {BGType_Text, BGType_Text, BGType_AffineExt, BGType_AffineExt},
-      {BGType_Invalid, BGType_Invalid, BGType_Large8bpp, BGType_Invalid},
-      {BGType_Invalid, BGType_Invalid, BGType_Invalid, BGType_Invalid}
-};
-
 //dont ever think of changing these to bits because you could avoid the multiplies in the main tile blitter.
 //it doesnt really help any
 static const short sizeTab[8][4][2] =

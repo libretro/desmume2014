@@ -49,6 +49,17 @@ union rotocoord_t
    } __attribute__((packed));
 };
 
+const GPU::background::bg_type GPU::background::background_types[8][4] = 
+{
+   {Text,     Text,    Text,        Text       },
+   {Text,     Text,    Text,        Affine     },
+   {Text,     Text,    Affine,      Affine     },
+   {Text,     Text,    Text,        AffineExt  },
+   {Text,     Text,    Affine,      AffineExt  },
+   {Text,     Text,    AffineExt,   AffineExt  },
+   {Invalid,  Invalid, Large8bpp,   Invalid    },
+   {Invalid,  Invalid, Invalid,     Invalid    }
+};
 
 /*****************************************************************************/
 //			BACKGROUND RENDERING -TILE EXPANSION-
@@ -201,7 +212,7 @@ template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU::background& b
 
 FORCEINLINE PIXEL rot_256_map(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-   const u32 bitmap_ram = (bg.type == BGType_Large8bpp) ? bg.large_bitmap_ram : bg.bitmap_ram;
+   const u32 bitmap_ram = (bg.type == GPU::background::Large8bpp) ? bg.large_bitmap_ram : bg.bitmap_ram;
 
 	u8* const adr = (u8*)MMU_gpu_map((bitmap_ram) + ((x_pixel + y_pixel * bg.width)));
 	const u32 palette_entry = *adr;
@@ -256,13 +267,13 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
 
 	switch(bg.type)
 	{
-      case BGType_Affine:
+      case GPU::background::Affine:
       {
          apply_rot_fun<rot_tiled_8bit_entry>(pixels, bg, params, pal);
          return;
       }
 
-   	case BGType_AffineExt_256x16:
+   	case GPU::background::AffineExt_256x16:
       {
          if (gpu->get_display_control().ExBGxPalette_Enable)
          {
@@ -281,14 +292,14 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
          return;
       }
 
-      case BGType_AffineExt_256x1:
-   	case BGType_Large8bpp:
+      case GPU::background::AffineExt_256x1:
+   	case GPU::background::Large8bpp:
       {
    		apply_rot_fun<rot_256_map>(pixels, bg, params, pal);
          return;
       }
 
-      case BGType_AffineExt_Direct:
+      case GPU::background::AffineExt_Direct:
       {
 		   apply_rot_fun<rot_BMP_map>(pixels, bg, params, NULL);
 		   return;
@@ -311,11 +322,11 @@ void GPU::background::refresh_control()
 	
    parent->resort_backgrounds();
 
-   const u32 gpu_memory_base  = (core == GPU_SUB) ? MMU_BBG : MMU_ABG;
-   tile_map_ram            = gpu_memory_base + ((core == GPU_MAIN) ? display_control.ScreenBase_Block * ADDRESS_STEP_64KB : 0);
-   tile_pixel_ram          = gpu_memory_base + ((core == GPU_MAIN) ? display_control.CharacBase_Block * ADDRESS_STEP_64KB : 0);
-   bitmap_ram              = gpu_memory_base;
-   large_bitmap_ram        = gpu_memory_base;
+   const u32 memory_base   = (core == GPU_SUB) ? MMU_BBG : MMU_ABG;
+   tile_map_ram            = memory_base + ((core == GPU_MAIN) ? display_control.ScreenBase_Block * ADDRESS_STEP_64KB : 0);
+   tile_pixel_ram          = memory_base + ((core == GPU_MAIN) ? display_control.CharacBase_Block * ADDRESS_STEP_64KB : 0);
+   bitmap_ram              = memory_base;
+   large_bitmap_ram        = memory_base;
 
 	tile_map_ram           += bg_control.ScreenBase_Block * ADDRESS_STEP_2KB;
 	tile_pixel_ram         += bg_control.CharacBase_Block * ADDRESS_STEP_16KB;
@@ -323,12 +334,12 @@ void GPU::background::refresh_control()
 
    extended_palette_slot   = number + ((number < 2) ? bg_control.PaletteSet_Wrap * 2 : 0);
 
-	type                    = GPU_mode2type[display_control.BG_Mode][number];
+	type                    = background_types[display_control.BG_Mode][number];
 
 	//clarify affine ext modes 
-	if(type == BGType_AffineExt)
+	if(type == AffineExt)
 	{
-      static const BGType affine_modes[4] = { BGType_AffineExt_256x16, BGType_AffineExt_256x16, BGType_AffineExt_256x1, BGType_AffineExt_Direct };
+      static const bg_type affine_modes[4] = { AffineExt_256x16, AffineExt_256x16, AffineExt_256x1, AffineExt_Direct };
 		const u32 affine_mode = (bg_control.Palette_256 << 1) | (bg_control.CharacBase_Block & 1);
 
       type = affine_modes[affine_mode];
@@ -339,13 +350,13 @@ void GPU::background::refresh_control()
 
 bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
 {
-   const BGType type = GPU_mode2type[parent->get_display_control().BG_Mode][number];
+   const bg_type type = background_types[parent->get_display_control().BG_Mode][number];
 
-   if (type == BGType_Text)
+   if (type == Text)
    {
      	renderline_textBG(parent, pixels, get_x_offset(), line + get_y_offset(), 256);
    }
-   else if ((type == BGType_Affine) || (type == BGType_AffineExt) || (type == BGType_Large8bpp))
+   else if ((type == Affine) || (type == AffineExt) || (type == Large8bpp))
    {
    	affine_parameters_t& parms = get_affine_parameters();
       rotBG2(parent, pixels, parms);
@@ -353,7 +364,7 @@ bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
    	parms.X += parms.PB;
 	   parms.Y += parms.PD;
 	}
-   else if (type == BGType_Invalid)
+   else if (type == Invalid)
    {
       PROGINFO("Attempting to render an invalid BG type\n");
       return false;

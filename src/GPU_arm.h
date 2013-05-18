@@ -381,11 +381,6 @@ typedef struct
 
 extern CACHE_ALIGN u8 gpuBlendTable555[17][17][32][32];
 
-enum BGType {
-	BGType_Invalid=0, BGType_Text=1, BGType_Affine=2, BGType_Large8bpp=3, 
-	BGType_AffineExt=4, BGType_AffineExt_256x16=5, BGType_AffineExt_256x1=6, BGType_AffineExt_Direct=7
-};
-
 struct PIXEL
 {
    unsigned color : 16;
@@ -408,6 +403,13 @@ struct GPU
 {
    struct background
    {
+      enum bg_type
+      {
+         Invalid,   Text,             Affine,          Large8bpp, 
+         AffineExt, AffineExt_256x16, AffineExt_256x1, AffineExt_Direct
+      };
+      static const bg_type background_types[8][4];
+
       public:
          void set_size(u32 width_, u32 height_) { width = width_; height = height_; }
 
@@ -423,7 +425,7 @@ struct GPU
       public:
          GPU* parent;
          u32 number;
-         BGType type;
+         bg_type type;
 
          u32 tile_map_ram;
          u32 tile_pixel_ram;
