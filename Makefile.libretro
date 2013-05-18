@@ -22,7 +22,7 @@ else ifeq ($(platform), osx)
    fpic := -fPIC
    SHARED := -dynamiclib
 else ifeq ($(platform), ios)
-   TARGET := $(TARGET_NAME)_libretro.dylib
+   TARGET := $(TARGET_NAME)_libretro_ios.dylib
    CC = clang -arch armv7 -isysroot $(IOSSDK)
    CXX = clang++ -arch armv7 -isysroot $(IOSSDK)
    CPPFLAGS = -DUSE_POSIX_MEMALIGN -D__RETRO_ARM__
