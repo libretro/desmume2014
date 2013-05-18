@@ -293,33 +293,6 @@ void register_gl_fun(fun_gl_Begin beg,fun_gl_End end);
 #define ADDRESS_STEP_512KB	   0x80000
 #define ADDRESS_MASK_256KB	   (ADDRESS_STEP_256KB-1)
 
-struct _TILEENTRY
-{
-/* 0*/	unsigned TileNum:10;
-/*12*/	unsigned HFlip:1;	// HORIZONTAL FLIP (left<-->right)
-/*13*/	unsigned VFlip:1;	// VERTICAL FLIP (top<-->bottom)
-/*14*/	unsigned Palette:4;
-};
-typedef union
-{
-	struct _TILEENTRY bits;
-	u16 val;
-} TILEENTRY;
-
-union ROTOCOORD
-{
-   ROTOCOORD(s32 value_) : val(value_) { }
-
-   s32 val;
-
-   struct
-   {
-      unsigned Fraction : 8;
-      signed   Integer  : 20;
-      unsigned pad      : 4;
-   } __attribute__((packed));
-};
-
 /*
 	this structure is for color representation,
 	it holds 5 meaningful bits per color channel (red,green,blue)
@@ -509,6 +482,8 @@ struct GPU
    public:
       bool need_update_winh[2];
       background backgrounds[4];
+
+      u16* palette;
 
    public:
 	// some structs are becoming redundant
