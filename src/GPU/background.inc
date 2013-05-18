@@ -172,7 +172,7 @@ static void renderline_textBG(GPU* gpu, PIXEL pixels[34 * 8], u32 start_x, u32 l
 //   y_pixel : Y Coordinate of pixel to draw
 //   palette : Tile palette
 
-FORCEINLINE PIXEL rot_tiled_8bit_entry(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
+FORCEINLINE PIXEL rot_tiled_8bit_entry(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
 	const u32 tileindex = *(u8*)MMU_gpu_map(bg.tile_map_ram + ((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)));
 	const u32 x = (x_pixel & 7); 
@@ -184,7 +184,7 @@ FORCEINLINE PIXEL rot_tiled_8bit_entry(GPU* gpu, GPU::background& bg, s32 x_pixe
    return BuildPIXEL(color, palette_entry);
 }
 
-template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
+template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
 	void* const map_addr = MMU_gpu_map(bg.tile_map_ram + (((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)) * 2));
 	
@@ -199,7 +199,7 @@ template<bool extPal> FORCEINLINE PIXEL rot_tiled_16bit_entry(GPU* gpu, GPU::bac
    return BuildPIXEL(color, palette_entry);
 }
 
-FORCEINLINE PIXEL rot_256_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
+FORCEINLINE PIXEL rot_256_map(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
    const u32 bitmap_ram = (bg.type == BGType_Large8bpp) ? bg.large_bitmap_ram : bg.bitmap_ram;
 
@@ -210,17 +210,17 @@ FORCEINLINE PIXEL rot_256_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_
    return BuildPIXEL(color, palette_entry);
 }
 
-FORCEINLINE PIXEL rot_BMP_map(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
+FORCEINLINE PIXEL rot_BMP_map(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
 	void* const adr = MMU_gpu_map((bg.bitmap_ram) + ((x_pixel + y_pixel * bg.width) * 2));
 	const u32 color = T1ReadWord(adr, 0);
    return BuildPIXEL(color, color & 0x8000);
 }
 
-typedef PIXEL (*rot_fun)(GPU* gpu, GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette);
+typedef PIXEL (*rot_fun)(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette);
 
 template<rot_fun fun, bool WRAP>
-FORCEINLINE void rot_scale_op(GPU* gpu, PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
+FORCEINLINE void rot_scale_op(PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
 	rotocoord_t x = params.X;
    rotocoord_t y = params.Y;
@@ -237,16 +237,16 @@ FORCEINLINE void rot_scale_op(GPU* gpu, PIXEL pixels[34 * 8], GPU::background& b
 
       if(WRAP || ((x_pos >= 0) && (x_pos < bg.width) && (y_pos >= 0) && (y_pos < bg.height)))
       {
-         pixels[8 + i] = fun(gpu, bg, x_pos, y_pos, pal);
+         pixels[8 + i] = fun(bg, x_pos, y_pos, pal);
       }
    }
 }
 
 template<rot_fun fun>
-FORCEINLINE void apply_rot_fun(GPU* gpu, PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
+FORCEINLINE void apply_rot_fun(PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
-	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (gpu, pixels, bg, params, pal);	
-	else                                    rot_scale_op<fun,false>(gpu, pixels, bg, params, pal);	
+	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (pixels, bg, params, pal);	
+	else                                    rot_scale_op<fun,false>(pixels, bg, params, pal);	
 }
 
 FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_t& params)
@@ -258,7 +258,7 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
 	{
       case BGType_Affine:
       {
-         apply_rot_fun<rot_tiled_8bit_entry>(gpu, pixels, bg, params, pal);
+         apply_rot_fun<rot_tiled_8bit_entry>(pixels, bg, params, pal);
          return;
       }
 
@@ -270,12 +270,12 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
 
             if (pal)
             {
-               apply_rot_fun<rot_tiled_16bit_entry<true> >(gpu, pixels, bg, params, pal);
+               apply_rot_fun<rot_tiled_16bit_entry<true> >(pixels, bg, params, pal);
             }
          }
          else
          {
-            apply_rot_fun<rot_tiled_16bit_entry<false> >(gpu, pixels, bg, params, pal);
+            apply_rot_fun<rot_tiled_16bit_entry<false> >(pixels, bg, params, pal);
          }
 
          return;
@@ -284,13 +284,13 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
       case BGType_AffineExt_256x1:
    	case BGType_Large8bpp:
       {
-   		apply_rot_fun<rot_256_map>(gpu, pixels, bg, params, pal);
+   		apply_rot_fun<rot_256_map>(pixels, bg, params, pal);
          return;
       }
 
       case BGType_AffineExt_Direct:
       {
-		   apply_rot_fun<rot_BMP_map>(gpu, pixels, bg, params, NULL);
+		   apply_rot_fun<rot_BMP_map>(pixels, bg, params, NULL);
 		   return;
       }
 
