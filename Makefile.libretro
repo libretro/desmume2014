@@ -98,8 +98,7 @@ else ifeq ($(platform), arm)
 else
    TARGET := $(TARGET_NAME)_libretro.dll
    CC = gcc
-   fpic := -fPIC
-   LD_FLAGS := -fPIC
+   CXX = g++
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=libretro/link.T
 endif
 

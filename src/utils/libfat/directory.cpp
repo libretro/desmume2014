@@ -43,8 +43,17 @@
 
 #ifdef __APPLE__
 #include <AvailabilityMacros.h>
+#if !defined(MAC_OS_X_VERSION_10_7)
+#define COMPILE_IN_STRNLEN
+#endif
+#endif // __APPLE__
 
-#ifndef MAC_OS_X_VERSION_10_7
+#if defined(_WIN32) && !defined(_MSC_VER)
+#define COMPILE_IN_STRNLEN
+#include <malloc.h>
+#endif
+
+#ifdef COMPILE_IN_STRNLEN
 // In Mac OS X, strnlen() is unsupported prior to v10.7, so define it here.
 static size_t strnlen(const char *s, size_t n)
 {
@@ -53,7 +62,6 @@ static size_t strnlen(const char *s, size_t n)
 }
 #endif
 
-#endif // __APPLE__
 
 // Directory entry codes
 #define DIR_ENTRY_LAST 0x00
@@ -1097,6 +1105,24 @@ bool _FAT_directory_chdir (PARTITION* partition, const char* path) {
 
 	return true;
 }
+
+#if defined(_WIN32) && !defined(_MSC_VER)
+#ifndef S_IRGRP
+#define S_IRGRP 0
+#endif
+
+#ifndef S_IWGRP
+#define S_IWGRP 0
+#endif
+
+#ifndef S_IROTH
+#define S_IROTH 0
+#endif
+ 
+#ifndef S_IWOTH
+#define S_IWOTH 0
+#endif
+#endif
 
 void _FAT_directory_entryStat (PARTITION* partition, DIR_ENTRY* entry, struct stat *st) {
 	// Fill in the stat struct

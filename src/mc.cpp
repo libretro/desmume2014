@@ -1479,7 +1479,12 @@ u32 ADVANsCEne::convertDB(const char *in_filaname)
 		}
 		// CRC32
 		el_crc32 = el->FirstChildElement("files"); 
-		sscanf_s(el_crc32->FirstChildElement("romCRC")->GetText(), "%x", &crc32);
+#if defined(_WIN32) && !defined(_MSC_VER)
+		sscanf
+#else
+		sscanf_s
+#endif
+			(el_crc32->FirstChildElement("romCRC")->GetText(), "%x", &crc32);
 		if (fwrite(&crc32, 1, sizeof(u32), fp) != sizeof(u32))
 		{
 			fclose(fp); return 0;
