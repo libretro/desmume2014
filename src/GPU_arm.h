@@ -353,44 +353,6 @@ enum GPU_OBJ_MODE
 	GPU_OBJ_MODE_Bitmap = 3
 };
 
-union _OAM_tag
-{
-   u16 attr[4];
-
-   struct
-   {
-      //attr0
-      unsigned Y:8;
-      unsigned RotScale:2;
-      unsigned Mode:2;
-      unsigned Mosaic:1;
-      unsigned Depth:1;
-      unsigned Shape:2;
-      //att1
-      signed X:9;
-      unsigned RotScalIndex:3;
-      unsigned HFlip:1;
-      unsigned VFlip:1;
-      unsigned Size:2;
-      //attr2
-      unsigned TileIndex:10;
-      unsigned Priority:2;
-      unsigned PaletteIndex:4;
-      //attr3
-   	unsigned attr3:16;
-   };
-};
-typedef const _OAM_tag _OAM_;
-
-_OAM_* SlurpOAM(void* oam_buffer, int oam_index);
-u16 SlurpOAMAffineParam(void* oam_buffer, int oam_index);
-
-typedef struct
-{
-	 s16 x;
-	 s16 y;
-} size;
-
 
 #define NB_PRIORITIES	4
 #define NB_BG		4
@@ -439,6 +401,9 @@ FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque)
    return result;
 }
 
+union oam_object_t;
+struct size;
+
 struct GPU
 {
    struct background
@@ -471,6 +436,28 @@ struct GPU
          u32 height;
    };
 
+   struct oam_t
+   {
+      public:
+         bool render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab);
+
+         u32 bmp_sprite_address(const oam_object_t& sprite, const size& sprSize, s32 y);
+
+
+      public:
+         GPU* parent;
+         bool enable;
+
+         const void* oam;
+         u32 memory;
+
+         u32 boundary;
+         u32 bitmap_boundary;
+
+      	enum object_mode_t { SPRITE_1D, SPRITE_2D } mode;
+
+   };
+
    public:
       void refresh_display_control();
       void refresh_background_control(u32 bg_number) { backgrounds[bg_number].refresh_control(); }
@@ -484,6 +471,7 @@ struct GPU
    public:
       bool need_update_winh[2];
       background backgrounds[4];
+      oam_t oam;
 
       u16* palette;
 
@@ -510,12 +498,6 @@ struct GPU
 	u8 core;
 
 	//FIFO	fifo;
-
-	void * oam;
-	u32	sprMem;
-	u8 sprBoundary;
-	u8 sprBMPBoundary;
-	u32 sprEnable;
 
 	u8 WININ0;
 	bool WININ0_SPECIAL;
@@ -561,19 +543,6 @@ struct GPU
 	int setFinalColor3d_funcNum;
 	int setFinalColorSpr_funcNum;
 	//Final3DColFunct setFinalColor3D;
-	enum SpriteRenderMode {
-		SPRITE_1D, SPRITE_2D
-	} spriteRenderMode;
-
-	template<GPU::SpriteRenderMode MODE>
-	bool _spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab);
-	
-	inline bool spriteRender(u8 * dst, u8 * dst_alpha, u8 * typeTab, u8 * prioTab)
-	{
-      return (spriteRenderMode == SPRITE_1D) ? _spriteRender<SPRITE_1D>(dst,dst_alpha,typeTab, prioTab)
-                                             : _spriteRender<SPRITE_2D>(dst,dst_alpha,typeTab, prioTab);
-	}
-
 
 	void setFinalColor3d(int dstX, int srcX);
 	
