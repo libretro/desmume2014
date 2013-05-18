@@ -443,7 +443,7 @@ struct GPU
       public:
          bool render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab);
 
-         u32 bmp_sprite_address(const oam_object_t& sprite, const size& sprSize, s32 y);
+         u32 sprite_address(const oam_object_t& sprite, u32 line);
 
 
       public:

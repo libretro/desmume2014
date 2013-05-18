@@ -18,9 +18,25 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+struct size
+{
+	 s16 x;
+	 s16 y;
+};
+
+static const size sprSizeTab[4][4] = 
+{
+     {{8,   8}, {16,  8}, {8,  16}, {8, 8}},
+     {{16, 16}, {32,  8}, {8,  32}, {8, 8}},
+     {{32, 32}, {32, 16}, {16, 32}, {8, 8}},
+     {{64, 64}, {64, 32}, {32, 64}, {8, 8}},
+};
+
 union oam_object_t
 {
    u16 attr[4];
+
+   const size& get_size() const { return sprSizeTab[Size][Shape]; }
 
    struct
    {
@@ -46,20 +62,6 @@ union oam_object_t
    };
 };
 
-struct size
-{
-	 s16 x;
-	 s16 y;
-};
-
-static const size sprSizeTab[4][4] = 
-{
-     {{8,   8}, {16,  8}, {8,  16}, {8, 8}},
-     {{16, 16}, {32,  8}, {8,  32}, {8, 8}},
-     {{32, 32}, {32, 16}, {16, 32}, {8, 8}},
-     {{64, 64}, {64, 32}, {32, 64}, {8, 8}},
-};
-
 //gets the affine parameter associated with the specified oam index.
 u16 SlurpOAMAffineParam(const void* oam_buffer, int oam_index)
 {
@@ -75,7 +77,7 @@ u16 SlurpOAMAffineParam(const void* oam_buffer, int oam_index)
 /* if i understand it correct, and it fixes some sprite problems in chameleon shot */
 /* we have a 15 bit color, and should use the pal entry bits as alpha ?*/
 /* http://nocash.emubase.de/gbatek.htm#dsvideoobjs */
-INLINE void render_sprite_BMP (u8 spriteNum, u16 l, u8 * dst, u32 srcadr, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha) 
+INLINE void render_sprite_BMP (u16 l, u8 * dst, u32 srcadr, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha) 
 {
 	int i; u16 color;
 	for(i = 0; i < lg; i++, ++sprX, x+=xdir)
@@ -94,7 +96,7 @@ INLINE void render_sprite_BMP (u8 spriteNum, u16 l, u8 * dst, u32 srcadr, u8 * d
 	}
 }
 
-INLINE void render_sprite_256(u8 spriteNum, u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha)
+INLINE void render_sprite_256(u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha)
 {
 	int i; 
 	u8 palette_entry; 
@@ -147,10 +149,12 @@ INLINE void render_sprite_16 (u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_a
 	}
 }
 
-INLINE void render_sprite_Win (u16 l, u8 * src,
+INLINE void render_sprite_Win (u16 l, u32 srcadr,
 	int col256, int lg, int sprX, int x, int xdir) {
 	int i; u8 palette, palette_entry;
 	u16 x1;
+	u8* src = (u8 *)MMU_gpu_map(srcadr);
+
 	if (col256) {
 		for(i = 0; i < lg; i++, sprX++,x+=xdir)
 			//sprWin[sprX] = (src[x])?1:0;
@@ -171,19 +175,19 @@ INLINE void render_sprite_Win (u16 l, u8 * src,
 }
 
 // return val means if the sprite is to be drawn or not
-FORCEINLINE BOOL compute_sprite_vars(const oam_object_t* spriteInfo, u16 l, 
+FORCEINLINE BOOL compute_sprite_vars(const oam_object_t* sprite, u16 l, 
 	size &sprSize, s32 &sprX, s32 &sprY, s32 &x, s32 &y, s32 &lg, int &xdir) {
 
 	x = 0;
 	// get sprite location and size
-	sprX = (spriteInfo->X/*<<23*/)/*>>23*/;
-	sprY = spriteInfo->Y;
-	sprSize = sprSizeTab[spriteInfo->Size][spriteInfo->Shape];
+	sprX = (sprite->X/*<<23*/)/*>>23*/;
+	sprY = sprite->Y;
+	sprSize = sprSizeTab[sprite->Size][sprite->Shape];
 
 	lg = sprSize.x;
 	
 	if (sprY>=192)
-		sprY = (s32)((s8)(spriteInfo->Y));
+		sprY = (s32)((s8)(sprite->Y));
 	
 // FIXME: for rot/scale, a list of entries into the sprite should be maintained,
 // that tells us where the first pixel of a screenline starts in the sprite,
@@ -209,11 +213,11 @@ FORCEINLINE BOOL compute_sprite_vars(const oam_object_t* spriteInfo, u16 l,
 		lg = 256 - sprX;
 
 	// switch TOP<-->BOTTOM
-	if (spriteInfo->VFlip)
+	if (sprite->VFlip)
 		y = sprSize.y - y -1;
 	
 	// switch LEFT<-->RIGHT
-	if (spriteInfo->HFlip) {
+	if (sprite->HFlip) {
 		x = sprSize.x - x -1;
 		xdir  = -1;
 	} else {
@@ -234,9 +238,9 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 	int cost = 0;
 
 	const display_control_t display_control = parent->get_display_control();
-   const oam_object_t* spriteInfo = (const oam_object_t*)oam;
+   const oam_object_t* sprite = (const oam_object_t*)oam;
 
-	for(int i = 0; i < 128; i++, spriteInfo++)
+	for(int i = 0; i < 128; i++, sprite++)
 	{
 		//for each sprite:
 		if(cost>=2130)
@@ -257,13 +261,13 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 		u16 j;
 
 		// Check if sprite is disabled before everything
-		if (spriteInfo->RotScale == 2)
+		if (sprite->RotScale == 2)
 			continue;
 
-		prio = spriteInfo->Priority;
+		prio = sprite->Priority;
 
 
-		if (spriteInfo->RotScale & 1) 
+		if (sprite->RotScale & 1) 
 		{
 			s32		fieldX, fieldY, auxX, auxY, realX, realY, offset;
 			u8		blockparameter, *pal;
@@ -271,21 +275,21 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 			u16		colour;
 
 			// Get sprite positions and size
-			sprX = (spriteInfo->X<<23)>>23;
-			sprY = spriteInfo->Y;
-			sprSize = sprSizeTab[spriteInfo->Size][spriteInfo->Shape];
+			sprX = (sprite->X<<23)>>23;
+			sprY = sprite->Y;
+			sprSize = sprSizeTab[sprite->Size][sprite->Shape];
 
 			lg = sprSize.x;
 			
 			if (sprY>=192)
-				sprY = (s32)((s8)(spriteInfo->Y));
+				sprY = (s32)((s8)(sprite->Y));
 
 			// Copy sprite size, to check change it if needed
 			fieldX = sprSize.x;
 			fieldY = sprSize.y;
 
 			// If we are using double size mode, double our control vars
-			if (spriteInfo->RotScale & 2)
+			if (sprite->RotScale & 2)
 			{
 				fieldX <<= 1;
 				fieldY <<= 1;
@@ -305,7 +309,7 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 			cost += sprSize.x*2 + 10;
 
 			// Get which four parameter block is assigned to this sprite
-			blockparameter = (spriteInfo->RotScalIndex + (spriteInfo->HFlip<< 3) + (spriteInfo->VFlip << 4))*4;
+			blockparameter = (sprite->RotScalIndex + (sprite->HFlip<< 3) + (sprite->VFlip << 4))*4;
 
 			// Get rotation/scale parameters
 			dx = SlurpOAMAffineParam(oam,blockparameter+0);
@@ -337,13 +341,13 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 			}
 
 			// If we are using 1 palette of 256 colours
-			if(spriteInfo->Depth)
+			if(sprite->Depth)
 			{
-				src = (u8 *)MMU_gpu_map(memory + (spriteInfo->TileIndex << boundary));
+				src = (u8 *)MMU_gpu_map(memory + (sprite->TileIndex << boundary));
 
 				// If extended palettes are set, use them
 				if (display_control.ExOBJPalette_Enable)
-					pal = (MMU.ObjExtPal[parent->core][0]+(spriteInfo->PaletteIndex*0x200));
+					pal = (MMU.ObjExtPal[parent->core][0]+(sprite->PaletteIndex*0x200));
 				else
 					pal = (MMU.ARM9_VMEM + 0x200 + parent->core *0x400);
 
@@ -368,7 +372,7 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 						{ 
 							HostWriteWord(dst, (sprX<<1), HostReadWord(pal, (colour<<1)));
 							dst_alpha[sprX] = 16;
-							typeTab[sprX] = spriteInfo->Mode;
+							typeTab[sprX] = sprite->Mode;
 							prioTab[sprX] = prio;
 						}
 					}
@@ -382,13 +386,13 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 				continue;
 			}
 			// Rotozoomed direct color
-			else if(spriteInfo->Mode == 3)
+			else if(sprite->Mode == 3)
 			{
 				//transparent (i think, dont bother to render?) if alpha is 0
-				if(spriteInfo->PaletteIndex == 0)
+				if(sprite->PaletteIndex == 0)
 					continue;
 
-				srcadr = bmp_sprite_address(*spriteInfo,sprSize,0);
+				srcadr = sprite_address(*sprite, 0);
 
 				for(j = 0; j < lg; ++j, ++sprX)
 				{
@@ -403,7 +407,7 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 					{
 						if(display_control.OBJ_BMP_2D_dim)
 							//tested by knights in the nightmare
-							offset = (bmp_sprite_address(*spriteInfo,sprSize,auxY)-srcadr)/2+auxX;
+							offset = (sprite_address(*sprite, auxY)-srcadr)/2+auxX;
 						else //tested by lego indiana jones (somehow?)
 							//tested by buffy sacrifice damage blood splatters in corner
 							offset = auxX + (auxY*sprSize.x);
@@ -418,8 +422,8 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 						if((colour&0x8000) && (prio<prioTab[sprX]))
 						{
 							HostWriteWord(dst, (sprX<<1), colour);
-							dst_alpha[sprX] = spriteInfo->PaletteIndex;
-							typeTab[sprX] = spriteInfo->Mode;
+							dst_alpha[sprX] = sprite->PaletteIndex;
+							typeTab[sprX] = sprite->Mode;
 							prioTab[sprX] = prio;
 						}
 					}
@@ -437,13 +441,13 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 			{
 				if(mode == SPRITE_2D)
 				{
-					src = (u8 *)MMU_gpu_map(memory + (spriteInfo->TileIndex<<5));
-					pal = MMU.ARM9_VMEM + 0x200 + (parent->core*0x400 + (spriteInfo->PaletteIndex*32));
+					src = (u8 *)MMU_gpu_map(memory + (sprite->TileIndex<<5));
+					pal = MMU.ARM9_VMEM + 0x200 + (parent->core*0x400 + (sprite->PaletteIndex*32));
 				}
 				else
 				{
-					src = (u8 *)MMU_gpu_map(memory + (spriteInfo->TileIndex<<boundary));
-					pal = MMU.ARM9_VMEM + 0x200 + parent->core*0x400 + (spriteInfo->PaletteIndex*32);
+					src = (u8 *)MMU_gpu_map(memory + (sprite->TileIndex<<boundary));
+					pal = MMU.ARM9_VMEM + 0x200 + parent->core*0x400 + (sprite->PaletteIndex*32);
 				}
 
 				for(j = 0; j < lg; ++j, ++sprX)
@@ -469,13 +473,13 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 
 						if(colour && (prio<prioTab[sprX]))
 						{
-							if(spriteInfo->Mode==2)
+							if(sprite->Mode==2)
 								sprWin[sprX] = 1;
 							else
 							{
 								HostWriteWord(dst, (sprX<<1), LE_TO_LOCAL_16(HostReadWord(pal, colour << 1)));
 								dst_alpha[sprX] = 16;
-								typeTab[sprX] = spriteInfo->Mode;
+								typeTab[sprX] = sprite->Mode;
 								prioTab[sprX] = prio;
 							}
 						}
@@ -494,105 +498,98 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 		{
 			u16 * pal;
 	
-			if (!compute_sprite_vars(spriteInfo, l, sprSize, sprX, sprY, x, y, lg, xdir))
+			if (!compute_sprite_vars(sprite, l, sprSize, sprX, sprY, x, y, lg, xdir))
 				continue;
+
+         const u32 address = sprite_address(*sprite, y);
 
          has_sprite = true;
 
 			cost += sprSize.x;
 
-			if (spriteInfo->Mode == 2)
+			if (sprite->Mode == 2)
 			{
-				if(mode == SPRITE_2D)
-				{
-					if (spriteInfo->Depth)
-						src = (u8 *)MMU_gpu_map(memory + ((spriteInfo->TileIndex)<<5) + ((y>>3)<<10) + ((y&0x7)*8));
-					else
-						src = (u8 *)MMU_gpu_map(memory + ((spriteInfo->TileIndex)<<5) + ((y>>3)<<10) + ((y&0x7)*4));
-				}
-				else
-				{
-					if (spriteInfo->Depth)
-						src = (u8 *)MMU_gpu_map(memory + (spriteInfo->TileIndex<<boundary) + ((y>>3)*sprSize.x*8) + ((y&0x7)*8));
-					else
-						src = (u8 *)MMU_gpu_map(memory + (spriteInfo->TileIndex<<boundary) + ((y>>3)*sprSize.x*4) + ((y&0x7)*4));
-				}
-
-				render_sprite_Win (l, src, spriteInfo->Depth, lg, sprX, x, xdir);
+				render_sprite_Win (l, address, sprite->Depth, lg, sprX, x, xdir);
 				continue;
 			}
 
-			if (spriteInfo->Mode == 3)              //sprite is in BMP format
+			if (sprite->Mode == 3)              //sprite is in BMP format
 			{
-				srcadr = bmp_sprite_address(*spriteInfo,sprSize, y);
-
 				//transparent (i think, dont bother to render?) if alpha is 0
-				if(spriteInfo->PaletteIndex == 0)
+				if(sprite->PaletteIndex == 0)
 					continue;
 				
-				render_sprite_BMP (i, l, dst, srcadr, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, spriteInfo->PaletteIndex);
+				render_sprite_BMP (l, dst, address, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, sprite->PaletteIndex);
 				continue;
 			}
 				
-			if(spriteInfo->Depth) //256 colors
-			{
-				if(mode == SPRITE_2D)
-					srcadr = memory + ((spriteInfo->TileIndex)<<5) + ((y>>3)<<10) + ((y&0x7)*8);
-				else
-					srcadr = memory + (spriteInfo->TileIndex<<boundary) + ((y>>3)*sprSize.x*8) + ((y&0x7)*8);
-				
+			if(sprite->Depth) //256 colors
+			{				
 				if (display_control.ExOBJPalette_Enable)
-					pal = (u16*)(MMU.ObjExtPal[parent->core][0]+(spriteInfo->PaletteIndex*0x200));
+					pal = (u16*)(MMU.ObjExtPal[parent->core][0]+(sprite->PaletteIndex*0x200));
 				else
 					pal = (u16*)(MMU.ARM9_VMEM + 0x200 + parent->core *0x400);
 		
-				render_sprite_256(i, l, dst, srcadr, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, spriteInfo->Mode == 1);
+				render_sprite_256(l, dst, address, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, sprite->Mode == 1);
 
 				continue;
 			}
 
-			// 16 colors 
-			if(mode == SPRITE_2D)
-			{
-				srcadr = memory + ((spriteInfo->TileIndex)<<5) + ((y>>3)<<10) + ((y&0x7)*4);
-			}
-			else
-			{
-				srcadr = memory + (spriteInfo->TileIndex<<boundary) + ((y>>3)*sprSize.x*4) + ((y&0x7)*4);
-			}
-				
+			// 16 colors 				
 			pal = (u16*)(MMU.ARM9_VMEM + 0x200 + parent->core * 0x400);
 			
-			pal += (spriteInfo->PaletteIndex<<4);
+			pal += (sprite->PaletteIndex<<4);
 			
-			render_sprite_16 (l, dst, srcadr, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, spriteInfo->Mode == 1);
+			render_sprite_16 (l, dst, address, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, sprite->Mode == 1);
 		}
 	}
 
    return has_sprite;
 }
 
-u32 GPU::oam_t::bmp_sprite_address(const oam_object_t& sprite, const size& sprSize, s32 y)
+u32 GPU::oam_t::sprite_address(const oam_object_t& sprite, u32 line)
 {
-	if (parent->get_display_control().OBJ_BMP_mapping)
-	{
-		//tested by buffy sacrifice damage blood splatters in corner
-		return memory + (sprite.TileIndex << bitmap_boundary) + (y*sprSize.x*2);
-	}
-	else
-	{
-		//2d mapping:
-		//verified in rotozoomed mode by knights in the nightmare intro
+   const u32 width = sprite.get_size().x;
 
-		if (parent->get_display_control().OBJ_BMP_2D_dim)
+   if (sprite.Mode != 3) // Non-bitmap
+   {
+      const u32 line_size = sprite.Depth ? 8 : 4;
+
+      if(mode == SPRITE_2D)
       {
-			//256*256, verified by heroes of mana FMV intro
-			return memory + (((sprite.TileIndex & 0x3E0) * 64  + (sprite.TileIndex & 0x1F) * 8 + ( y << 8)) << 1);
+         return memory + (sprite.TileIndex * 32)
+                       + ((line / 8) * 1024)
+                       + ((line & 7) * line_size);
       }
-		else 
+      else
       {
-			//128*512, verified by harry potter and the order of the phoenix conversation portraits
-			return memory + (((sprite.TileIndex&0x3F0) * 64  + (sprite.TileIndex&0x0F) *8 + ( y << 7)) << 1);
+         return memory + (sprite.TileIndex << boundary)
+                       + ((line / 8) * width * line_size)
+                       + ((line & 7) * line_size);
       }
-	}
+   }
+   else
+   {
+      if (parent->get_display_control().OBJ_BMP_mapping)
+      {
+         //tested by buffy sacrifice damage blood splatters in corner
+         return memory + (sprite.TileIndex << bitmap_boundary) + (line * width * 2);
+      }
+      else
+      {
+         //2d mapping:
+         //verified in rotozoomed mode by knights in the nightmare intro
+
+         if (parent->get_display_control().OBJ_BMP_2D_dim)
+         {
+            //256*256, verified by heroes of mana FMV intro
+            return memory + (((sprite.TileIndex & 0x3E0) * 64  + (sprite.TileIndex & 0x1F) * 8 + ( line << 8)) << 1);
+         }
+         else 
+         {
+            //128*512, verified by harry potter and the order of the phoenix conversation portraits
+            return memory + (((sprite.TileIndex&0x3F0) * 64  + (sprite.TileIndex&0x0F) *8 + ( line << 7)) << 1);
+         }
+      }
+   }
 }
