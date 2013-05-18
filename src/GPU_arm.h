@@ -385,7 +385,10 @@ struct PIXEL
 {
    unsigned color : 16;
    unsigned opaque : 1;
-   unsigned pad : 15;
+   unsigned alpha : 4;    // For sprites
+   unsigned priority : 3; // For sprites
+   unsigned type : 2;     // For sprites
+   unsigned pad : 6;
 };
 
 FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque)
@@ -393,6 +396,17 @@ FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque)
    PIXEL result;
    result.color = color;
    result.opaque = opaque;
+   return result;
+}
+
+FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque, unsigned alpha, unsigned priority, unsigned type)
+{
+   PIXEL result;
+   result.color = color;
+   result.opaque = opaque;
+   result.alpha = alpha;
+   result.priority = priority;
+   result.type = type;
    return result;
 }
 
@@ -441,10 +455,30 @@ struct GPU
    struct oam_t
    {
       public:
-         bool render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab);
+         bool render_line();
 
          u32 sprite_address(const oam_object_t& sprite, u32 line);
 
+      public: // Inlines
+         // The CHECK template argument enables or disables bounds checking
+         // The priority field of the PIXEL value is set to 4 + priority, for performance reasons
+         template <bool CHECK>
+         FORCEINLINE void set_pixel(s32 x, u16 color, bool opaque, unsigned alpha, unsigned priority, unsigned type)
+         {
+            if (!CHECK || (x >= 0 && x < 256))
+            {
+               if (priority < (line_buffer[x].priority - 4))
+               {
+                  line_buffer[x] = BuildPIXEL(color, opaque, alpha, 4 + priority, type);
+               }
+            }
+         }
+
+         template <bool CHECK>
+         FORCEINLINE u32 priority_at(s32 x) const
+         {
+            return (!CHECK || (x >= 0 && x < 256)) ? line_buffer[x].priority - 4 : 0xFFFFFFFF;
+         }
 
       public:
          GPU* parent;
@@ -455,6 +489,8 @@ struct GPU
 
          u32 boundary;
          u32 bitmap_boundary;
+
+         PIXEL line_buffer[256];
 
       	enum object_mode_t { SPRITE_1D, SPRITE_2D } mode;
 

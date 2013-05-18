@@ -77,7 +77,7 @@ u16 SlurpOAMAffineParam(const void* oam_buffer, int oam_index)
 /* if i understand it correct, and it fixes some sprite problems in chameleon shot */
 /* we have a 15 bit color, and should use the pal entry bits as alpha ?*/
 /* http://nocash.emubase.de/gbatek.htm#dsvideoobjs */
-INLINE void render_sprite_BMP (u16 l, u8 * dst, u32 srcadr, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha) 
+INLINE void render_sprite_BMP (GPU::oam_t& oam, u16 l, u32 srcadr, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha) 
 {
 	int i; u16 color;
 	for(i = 0; i < lg; i++, ++sprX, x+=xdir)
@@ -86,17 +86,14 @@ INLINE void render_sprite_BMP (u16 l, u8 * dst, u32 srcadr, u8 * dst_alpha, u8 *
 		color = LE_TO_LOCAL_16(*src);
 
 		// alpha bit = invisible
-		if ((color&0x8000)&&(prio<prioTab[sprX]))
+		if (color&0x8000)
 		{
-			HostWriteWord(dst, (sprX<<1), color);
-			dst_alpha[sprX] = alpha;
-			typeTab[sprX] = 3;
-			prioTab[sprX] = prio;
+         oam.set_pixel<true>(sprX, color, true, alpha, prio, 3);
 		}
 	}
 }
 
-INLINE void render_sprite_256(u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha)
+INLINE void render_sprite_256(GPU::oam_t& oam, u16 l, u32 srcadr, u16 * pal, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha)
 {
 	int i; 
 	u8 palette_entry; 
@@ -110,17 +107,14 @@ INLINE void render_sprite_256(u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_a
 		color = LE_TO_LOCAL_16(pal[palette_entry]);
 
 		// palette entry = 0 means backdrop
-		if ((palette_entry>0)&&(prio<prioTab[sprX]))
+		if (palette_entry>0)
 		{
-			HostWriteWord(dst, (sprX<<1), color);
-			dst_alpha[sprX] = 16;
-			typeTab[sprX] = (alpha ? 1 : 0);
-			prioTab[sprX] = prio;
+         oam.set_pixel<true>(sprX, color, true, 16, prio, alpha ? 1 : 0);
 		}
 	}
 }
 
-INLINE void render_sprite_16 (u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_alpha, u8 * typeTab, u8 * prioTab, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha)
+INLINE void render_sprite_16 (GPU::oam_t& oam, u16 l, u32 srcadr, u16 * pal, u8 prio, int lg, int sprX, int x, int xdir, u8 alpha)
 {
 	int i; 
 	u8 palette, palette_entry;
@@ -139,12 +133,9 @@ INLINE void render_sprite_16 (u16 l, u8 * dst, u32 srcadr, u16 * pal, u8 * dst_a
 		color = LE_TO_LOCAL_16(pal[palette_entry]);
 
 		// palette entry = 0 means backdrop
-		if ((palette_entry>0)&&(prio<prioTab[sprX]))
+		if (palette_entry)
 		{
-			HostWriteWord(dst, (sprX<<1), color);
-			dst_alpha[sprX] = 16;
-			typeTab[sprX] = (alpha ? 1 : 0);
-			prioTab[sprX] = prio;
+         oam.set_pixel<true>(sprX, color, true, 16, prio, alpha ? 1 : 0);
 		}
 	}
 }
@@ -229,7 +220,7 @@ FORCEINLINE BOOL compute_sprite_vars(const oam_object_t* sprite, u16 l,
 /**********************************/
 // GPU::oam_t
 /**********************************/
-bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
+bool GPU::oam_t::render_line()
 {
    bool has_sprite = false;
 
@@ -239,6 +230,8 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 
 	const display_control_t display_control = parent->get_display_control();
    const oam_object_t* sprite = (const oam_object_t*)oam;
+
+   memset(line_buffer, 0, sizeof(line_buffer));
 
 	for(int i = 0; i < 128; i++, sprite++)
 	{
@@ -368,12 +361,9 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 
                   has_sprite = true;
 
-						if (colour && (prio<prioTab[sprX]))
+						if (colour)
 						{ 
-							HostWriteWord(dst, (sprX<<1), HostReadWord(pal, (colour<<1)));
-							dst_alpha[sprX] = 16;
-							typeTab[sprX] = sprite->Mode;
-							prioTab[sprX] = prio;
+                     set_pixel<true>(sprX, HostReadWord(pal, (colour<<1)), true, 16, prio, sprite->Mode);
 						}
 					}
 
@@ -419,12 +409,9 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 
                   has_sprite = true;
 
-						if((colour&0x8000) && (prio<prioTab[sprX]))
+						if(colour&0x8000)
 						{
-							HostWriteWord(dst, (sprX<<1), colour);
-							dst_alpha[sprX] = sprite->PaletteIndex;
-							typeTab[sprX] = sprite->Mode;
-							prioTab[sprX] = prio;
+                     set_pixel<true>(sprX, colour, true, sprite->PaletteIndex, prio, sprite->Mode);
 						}
 					}
 
@@ -471,16 +458,13 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 
                   has_sprite = true;
 
-						if(colour && (prio<prioTab[sprX]))
+						if(colour && (prio < priority_at<true>(sprX)))
 						{
 							if(sprite->Mode==2)
 								sprWin[sprX] = 1;
 							else
 							{
-								HostWriteWord(dst, (sprX<<1), LE_TO_LOCAL_16(HostReadWord(pal, colour << 1)));
-								dst_alpha[sprX] = 16;
-								typeTab[sprX] = sprite->Mode;
-								prioTab[sprX] = prio;
+                        set_pixel<true>(sprX, LE_TO_LOCAL_16(HostReadWord(pal, colour << 1)), true, 16, prio, sprite->Mode);
 							}
 						}
 					}
@@ -501,11 +485,10 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 			if (!compute_sprite_vars(sprite, l, sprSize, sprX, sprY, x, y, lg, xdir))
 				continue;
 
-         const u32 address = sprite_address(*sprite, y);
-
+			cost += sprSize.x;
          has_sprite = true;
 
-			cost += sprSize.x;
+         const u32 address = sprite_address(*sprite, y);
 
 			if (sprite->Mode == 2)
 			{
@@ -519,7 +502,7 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 				if(sprite->PaletteIndex == 0)
 					continue;
 				
-				render_sprite_BMP (l, dst, address, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, sprite->PaletteIndex);
+				render_sprite_BMP (*this, l, address, prio, lg, sprX, x, xdir, sprite->PaletteIndex);
 				continue;
 			}
 				
@@ -530,7 +513,7 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 				else
 					pal = (u16*)(MMU.ARM9_VMEM + 0x200 + parent->core *0x400);
 		
-				render_sprite_256(l, dst, address, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, sprite->Mode == 1);
+				render_sprite_256(*this, l, address, pal, prio, lg, sprX, x, xdir, sprite->Mode == 1);
 
 				continue;
 			}
@@ -540,7 +523,7 @@ bool GPU::oam_t::render_line(u8* dst, u8* dst_alpha, u8* typeTab, u8* prioTab)
 			
 			pal += (sprite->PaletteIndex<<4);
 			
-			render_sprite_16 (l, dst, address, pal, dst_alpha, typeTab, prioTab, prio, lg, sprX, x, xdir, sprite->Mode == 1);
+			render_sprite_16 (*this, l, address, pal, prio, lg, sprX, x, xdir, sprite->Mode == 1);
 		}
 	}
 

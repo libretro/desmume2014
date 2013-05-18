@@ -728,38 +728,20 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
    }
 
 	// calculate sprite pixels and priorities for the line
-	CACHE_ALIGN u8 spr[512];
-	CACHE_ALIGN u8 sprAlpha[256];
-	CACHE_ALIGN u8 sprType[256];
-	CACHE_ALIGN u8 sprPrio[256];
    bool has_sprites = false;
 
-	if (gpu->LayersEnable[4]) 
-	{
-      // NOTE: Don't bother clearing these if sprites aren't enabled
-      memset(sprAlpha, 0, 256);
-      memset(sprType, 0, 256);
-      memset(sprPrio, 0xFF, 256);
-      memset(sprWin, 0, 256);
+	if (gpu->LayersEnable[4] && gpu->oam.render_line())
+   {
+      has_sprites = true;
 
-		//n.b. - this is clearing the sprite line buffer to the background color,
-		//but it has been changed to write u32 instead of u16 for a little speedup
-		for(int i = 0; i< 128; ++i) HostWriteTwoWords(spr, i << 2, backdrop_color | (backdrop_color<<16));
-		//zero 06-may-09: I properly supported window color effects for backdrop, but I am not sure
-		//how it interacts with this. I wish we knew why we needed this
-		
-		has_sprites = gpu->oam.render_line(spr, sprAlpha, sprType, sprPrio);
-
-      if (has_sprites)
+      // assign them to the good priority item
+      for(int i = 0; i < 256; i++) 
       {
-         // assign them to the good priority item
-         for(int i = 0; i < 256; i++) 
+         const u32 prio = gpu->oam.priority_at<false>(i);
+         if (prio < 4)
          {
-            if (sprPrio[i] < 5)
-            {
-               itemsForPriority_t* item = &(gpu->itemsForPriority[sprPrio[i]]);
-               item->PixelsX[item->nbPixelsX ++] = i;
-            }
+            itemsForPriority_t* item = &(gpu->itemsForPriority[prio]);
+            item->PixelsX[item->nbPixelsX ++] = i;
          }
       }
 	}
@@ -815,8 +797,8 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 			
 			for (int i=0; i < item->nbPixelsX; i++)
 			{
-				const u32 x_pos = item->PixelsX[i];
-				setFinalColorSpr(gpu, gpu->currDst, HostReadWord(spr, (x_pos * 2)), sprAlpha[x_pos], sprType[x_pos], x_pos);
+            PIXEL p = gpu->oam.line_buffer[item->PixelsX[i]];
+				setFinalColorSpr(gpu, gpu->currDst, p.color, p.alpha, p.type, item->PixelsX[i]);
 			}
 		}
 	}
