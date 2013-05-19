@@ -181,7 +181,7 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
 
       for (int j = 0; j != 8; j ++)
       {
-         bg.set_pixel<true>(i * 8 + j, tile_line[j]);
+         bg.set_pixel<true>(i * 8 + j - (start_x & 7), tile_line[j]);
       }
    }
 }
