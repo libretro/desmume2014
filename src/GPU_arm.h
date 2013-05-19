@@ -430,6 +430,8 @@ struct GPU
          background_control_t get_control() const { return parent->dispx_st->background_control[number]; }
          void refresh_control();
 
+         const u16* get_extended_palette() const { return parent->dispx_st->display_control.ExBGxPalette_Enable ? (u16*)MMU.ExtPal[parent->core][extended_palette_slot] : 0; }
+
          bool render_pixels(u32 line, PIXEL pixels[34 * 4]); // Only 8-262 are drawn
 
          u32 get_x_offset() const { return parent->getHOFS(number); }
