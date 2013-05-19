@@ -154,6 +154,30 @@ struct window_rects_t
    };
 };
 
+union window_control_t
+{
+   u32 value;
+
+   struct
+   {
+      unsigned win0_layer_enable     : 5;
+      unsigned win0_special          : 1;
+      unsigned                       : 2;
+
+      unsigned win1_layer_enable     : 5;
+      unsigned win1_special          : 1;
+      unsigned                       : 2;
+
+      unsigned outside_layer_enable  : 5;
+      unsigned outside_special       : 1;
+      unsigned                       : 2;
+
+      unsigned object_layer_enable   : 5;
+      unsigned object_special        : 1;
+      unsigned                       : 2;      
+   } __attribute__((packed));
+};
+
 union master_bright_t
 {
    u16 value;
@@ -260,7 +284,7 @@ struct REG_DISPx {
     background_offset_t       background_offset[4];   // 0x0400x010
     affine_parameters_t       affine_parameters[2];   // 0x0400x020
     window_rects_t            window_rects;           // 0x0400x040
-    u8                        filler[4];              // 0x0400x048
+    window_control_t          window_control;         // 0x0400x048
     u16                       mosaic_size;            // 0x0400x04C
     MISCCNT                   dispx_MISC;             // 0x0400x04E
     DISP3DCNT                 dispA_DISP3DCNT;        // 0x04000060
@@ -518,17 +542,18 @@ struct GPU
       void refresh_background_control(u32 bg_number) { backgrounds[bg_number].refresh_control(); }
       void resort_backgrounds();
 
-      void force_window_h_refresh(u32 window_number) { need_update_winh[window_number ? 1 : 0] = true; }
+   	void calculate_windows();
 
       background& get_current_background() { return backgrounds[currBgNum]; }
       display_control_t get_display_control() const { return dispx_st->display_control; }
 
    public:
-      bool need_update_winh[2];
       background backgrounds[4];
       oam_t oam;
 
       u16* palette;
+   	u8 window_map[256];	
+
 
    public:
 	// some structs are becoming redundant
@@ -542,27 +567,9 @@ struct GPU
 	itemsForPriority_t itemsForPriority[NB_PRIORITIES];
 
 
-   // 
-	u8 h_win[2][256];
-	const u8 *curr_win[2];
-	void update_winh(int WIN_NUM); 
-
-	
-	template<int WIN_NUM> void setup_windows();
-
 	u8 core;
 
 	//FIFO	fifo;
-
-	u8 WININ0;
-	bool WININ0_SPECIAL;
-	u8 WININ1;
-	bool WININ1_SPECIAL;
-
-	u8 WINOUT;
-	bool WINOUT_SPECIAL;
-	u8 WINOBJ;
-	bool WINOBJ_SPECIAL;
 
 	u8 WIN0_ENABLED;
 	u8 WIN1_ENABLED;
@@ -614,10 +621,6 @@ struct GPU
 	} affineInfo[2];
 
 	void renderline_checkWindows(u16 x, bool &draw, bool &effect) const;
-
-	// check whether (x,y) is within the rectangle (including wraparounds) 
-	template<int WIN_NUM>
-	u8 withinRect(u16 x) const;
 
 	void setBLDALPHA(u16 val)
 	{
@@ -675,25 +678,6 @@ int GPU_ChangeGraphicsCore(int coreid);
 
 void GPU_set_DISPCAPCNT(u32 val) ;
 void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip = false) ;
-
-inline void GPU_setWININ(GPU* gpu, u16 val) {
-	gpu->WININ0=val&0x1F;
-	gpu->WININ0_SPECIAL=((val>>5)&1)!=0;
-	gpu->WININ1=(val>>8)&0x1F;
-	gpu->WININ1_SPECIAL=((val>>13)&1)!=0;
-}
-
-inline void GPU_setWININ0(GPU* gpu, u8 val) { gpu->WININ0 = val&0x1F; gpu->WININ0_SPECIAL = (val>>5)&1; }
-inline void GPU_setWININ1(GPU* gpu, u8 val) { gpu->WININ1 = val&0x1F; gpu->WININ1_SPECIAL = (val>>5)&1; }
-
-inline void GPU_setWINOUT16(GPU* gpu, u16 val) {
-	gpu->WINOUT=val&0x1F;
-	gpu->WINOUT_SPECIAL=((val>>5)&1)!=0;
-	gpu->WINOBJ=(val>>8)&0x1F;
-	gpu->WINOBJ_SPECIAL=((val>>13)&1)!=0;
-}
-inline void GPU_setWINOUT(GPU* gpu, u8 val) { gpu->WINOUT = val&0x1F; gpu->WINOUT_SPECIAL = (val>>5)&1; }
-inline void GPU_setWINOBJ(GPU* gpu, u8 val) { gpu->WINOBJ = val&0x1F; gpu->WINOBJ_SPECIAL = (val>>5)&1; }
 
 // Blending
 void SetupFinalPixelBlitter (GPU *gpu);

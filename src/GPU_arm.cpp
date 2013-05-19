@@ -51,13 +51,7 @@ NDS_Screen SubScreen;
 //#define DEBUG_TRI
 
 CACHE_ALIGN u8 GPU_screen[4*256*192];
-CACHE_ALIGN u8 sprWin[256];
 
-static const CACHE_ALIGN u8 win_empty[256] = {
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 static CACHE_ALIGN u16 fadeInColors[17][0x8000];
 CACHE_ALIGN u16 fadeOutColors[17][0x8000];
 
@@ -136,10 +130,6 @@ GPU * GPU_Init(u8 l)
 	GPU_Reset(g, l);
 	GPU_InitFadeColors();
 
-	g->curr_win[0] = win_empty;
-	g->curr_win[1] = win_empty;
-	g->need_update_winh[0] = true;
-	g->need_update_winh[1] = true;
 	g->setFinalColorBck_funcNum = 0;
 	g->setFinalColor3d_funcNum = 0;
 	g->setFinalColorSpr_funcNum = 0;
@@ -273,65 +263,19 @@ void GPU::resort_backgrounds()
 /*****************************************************************************/
 //		ROUTINES FOR INSIDE / OUTSIDE WINDOW CHECKS
 /*****************************************************************************/
-template<int WIN_NUM>
-FORCEINLINE u8 GPU::withinRect(u16 x) const
-{
-	assert(x<256); //only way to be >256 is in debug views, and mosaic shouldnt be enabled for those
-	return curr_win[WIN_NUM][x];
-}
-
 //  Now assumes that *draw and *effect are different from 0 when called, so we can avoid
 // setting some values twice
 FORCEINLINE void GPU::renderline_checkWindows(u16 x, bool &draw, bool &effect) const
 {
-	// Check if win0 if enabled, and only check if it is
-	// howevever, this has already been taken care of by the window precalculation
-	//if (WIN0_ENABLED)
-	{
-		// it is in win0, do we display ?
-		// high priority	
-		if (withinRect<0>(x))
-		{
-			//INFO("bg%i passed win0 : (%i %i) was within (%i %i)(%i %i)\n", bgnum, x, gpu->currLine, gpu->WIN0H0, gpu->WIN0V0, gpu->WIN0H1, gpu->WIN0V1);
-			draw = (WININ0 >> currBgNum)&1;
-			effect = (WININ0_SPECIAL);
-			return;
-		}
-	}
+   const window_control_t control = dispx_st->window_control;
 
-	// Check if win1 if enabled, and only check if it is
-	//if (WIN1_ENABLED)
-	// howevever, this has already been taken care of by the window precalculation
-	{
-		// it is in win1, do we display ?
-		// mid priority
-		if(withinRect<1>(x))
-		{
-			//INFO("bg%i passed win1 : (%i %i) was within (%i %i)(%i %i)\n", bgnum, x, gpu->currLine, gpu->WIN1H0, gpu->WIN1V0, gpu->WIN1H1, gpu->WIN1V1);
-			draw	= (WININ1 >> currBgNum)&1;
-			effect = (WININ1_SPECIAL);
-			return;
-		}
-	}
-
-	//if(true) //sprwin test hack
-	if (WINOBJ_ENABLED)
-	{
-		// it is in winOBJ, do we display ?
-		// low priority
-		if (sprWin[x])
-		{
-			draw	= (WINOBJ >> currBgNum)&1;
-			effect	= (WINOBJ_SPECIAL);
-			return;
-		}
-	}
-
-	if (WINOBJ_ENABLED | WIN1_ENABLED | WIN0_ENABLED)
-	{
-		draw	= (WINOUT >> currBgNum) & 1;
-		effect	= (WINOUT_SPECIAL);
-	}
+   switch(window_map[x])
+   {
+      case 0: draw = (control.outside_layer_enable >> currBgNum) & 1; effect = control.outside_special; return;
+      case 1: draw = (control.win0_layer_enable    >> currBgNum) & 1; effect = control.win0_special;    return;
+      case 2: draw = (control.win1_layer_enable    >> currBgNum) & 1; effect = control.win1_special;    return;
+      case 3: draw = (control.object_layer_enable  >> currBgNum) & 1; effect = control.object_special;  return;
+   }
 }
 
 /*****************************************************************************/
@@ -713,6 +657,8 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 		gpu->blend2[i] = (gpu->BLDCNT & (0x100 << i)) != 0;
    }
 
+   memset(gpu->window_map, 0, sizeof(gpu->window_map));
+
 	// calculate sprite pixels and priorities for the line
    bool has_sprites = false;
 
@@ -731,6 +677,9 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
          }
       }
 	}
+
+   // This is called after oam.render_line so that window_map can have the sprite window already in place
+	gpu->calculate_windows();
 
    // Draw all layers
    const bool all_bg_disabled = (!gpu->LayersEnable[0] && !gpu->LayersEnable[1] && !gpu->LayersEnable[2] && !gpu->LayersEnable[3]);
@@ -1015,90 +964,61 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
    }
 }
 
-template<int WIN_NUM>
-FORCEINLINE void GPU::setup_windows()
+FORCEINLINE void GPU::calculate_windows()
 {
 	u8 y = currLine;
-	u16 startY,endY;
 
-	if(WIN_NUM==0)
-	{
-		startY = dispx_st->window_rects.win_0_y1;
-		endY = dispx_st->window_rects.win_0_y2;
-	}
-	else
-	{
-		startY = dispx_st->window_rects.win_1_y1;
-		endY = dispx_st->window_rects.win_1_y2;
+   // When this is called window_map should have all object windows marked as 3 and every
+   // other value set to 0
+
+   // Window 1 then Window 0
+   if (WIN1_ENABLED)
+   {
+		const u32 startY = dispx_st->window_rects.win_1_y1;
+		const u32 endY   = dispx_st->window_rects.win_1_y2;
+
+      if ((startY <= endY && (y >= startY && y < endY)) ||
+          (startY >  endY && (y <= startY || y > endY)))
+      {
+         const u32 startX = dispx_st->window_rects.win_1_x1;
+         const u32 endX   = dispx_st->window_rects.win_1_x2;
+
+         if (startX <= endX)
+         {
+            memset(&window_map[startX], 2, endX - startX);
+         }
+         else
+         {
+            memset(&window_map[0], 2, endX);
+            memset(&window_map[startX], 2, 256 - startX);
+         }
+      }
 	}
 
-	if(WIN_NUM == 0 && !WIN0_ENABLED) goto allout;
-	if(WIN_NUM == 1 && !WIN1_ENABLED) goto allout;
+   if (WIN0_ENABLED)
+   {
+		const u32 startY = dispx_st->window_rects.win_0_y1;
+		const u32 endY   = dispx_st->window_rects.win_0_y2;
 
-	if(startY > endY)
-	{
-		if((y < startY) && (y > endY)) goto allout;
-	}
-	else
-	{
-		if((y < startY) || (y >= endY)) goto allout;
+      if ((startY <= endY && (y >= startY && y < endY)) ||
+          (startY >  endY && (y <= startY || y > endY)))
+      {
+         const u32 startX = dispx_st->window_rects.win_0_x1;
+         const u32 endX   = dispx_st->window_rects.win_0_x2;
+
+         if (startX <= endX)
+         {
+            memset(&window_map[startX], 1, endX - startX);
+         }
+         else
+         {
+            memset(&window_map[0], 1, endX);
+            memset(&window_map[startX], 1, 256 - startX);
+         }
+      }
 	}
 
-	//the x windows will apply for this scanline
-	curr_win[WIN_NUM] = h_win[WIN_NUM];
 	return;
-	
-allout:
-	curr_win[WIN_NUM] = win_empty;
-}
-
-void GPU::update_winh(int WIN_NUM)
-{
-	//dont even waste any time in here if the window isnt enabled
-	if(WIN_NUM==0 && !WIN0_ENABLED) return;
-	if(WIN_NUM==1 && !WIN1_ENABLED) return;
-
-	need_update_winh[WIN_NUM] = false;
-	u16 startX,endX;
-
-	if(WIN_NUM==0)
-	{
-		startX = dispx_st->window_rects.win_0_x1;
-		endX = dispx_st->window_rects.win_0_x2;
-	}
-	else
-	{
-		startX = dispx_st->window_rects.win_1_x1;
-		endX = dispx_st->window_rects.win_1_x2;
-	}
-
-	//the original logic: if you doubt the window code, please check it against the newer implementation below
-	//if(startX > endX)
-	//{
-	//	if((x < startX) && (x > endX)) return false;
-	//}
-	//else
-	//{
-	//	if((x < startX) || (x >= endX)) return false;
-	//}
-
-	if(startX > endX)
-	{
-		for(int i=0;i<=endX;i++)
-			h_win[WIN_NUM][i] = 1;
-		for(int i=endX+1;i<startX;i++)
-			h_win[WIN_NUM][i] = 0;
-		for(int i=startX;i<256;i++)
-			h_win[WIN_NUM][i] = 1;
-	} else
-	{
-		for(int i=0;i<startX;i++)
-			h_win[WIN_NUM][i] = 0;
-		for(int i=startX;i<endX;i++)
-			h_win[WIN_NUM][i] = 1;
-		for(int i=endX;i<256;i++)
-			h_win[WIN_NUM][i] = 0;
-	}
 }
 
 void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
@@ -1160,12 +1080,6 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 
 	//cache some parameters which are assumed to be stable throughout the rendering of the entire line
 	gpu->currLine = l;
-
-	if(gpu->need_update_winh[0]) gpu->update_winh(0);
-	if(gpu->need_update_winh[1]) gpu->update_winh(1);
-
-	gpu->setup_windows<0>();
-	gpu->setup_windows<1>();
 
 	//generate the 2d engine output
    const display_control_t display_control = gpu->get_display_control();

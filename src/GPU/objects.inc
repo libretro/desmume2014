@@ -140,7 +140,7 @@ INLINE void render_sprite_16 (GPU::oam_t& oam, u16 l, u32 srcadr, u16 * pal, u8 
 	}
 }
 
-INLINE void render_sprite_Win (u16 l, u32 srcadr,
+INLINE void render_sprite_Win (GPU* gpu, u16 l, u32 srcadr,
 	int col256, int lg, int sprX, int x, int xdir) {
 	int i; u8 palette, palette_entry;
 	u16 x1;
@@ -148,9 +148,8 @@ INLINE void render_sprite_Win (u16 l, u32 srcadr,
 
 	if (col256) {
 		for(i = 0; i < lg; i++, sprX++,x+=xdir)
-			//sprWin[sprX] = (src[x])?1:0;
 			if(src[(x&7) + ((x&0xFFF8)<<3)]) 
-				sprWin[sprX] = 1;
+				gpu->window_map[sprX] = 3;
 	} else {
 		for(i = 0; i < lg; i++, ++sprX, x+=xdir)
 		{
@@ -158,9 +157,8 @@ INLINE void render_sprite_Win (u16 l, u32 srcadr,
 			palette = src[(x1&0x3) + ((x1&0xFFFC)<<3)];
 			if (x & 1) palette_entry = palette >> 4;
 			else       palette_entry = palette & 0xF;
-			//sprWin[sprX] = (palette_entry)?1:0;
 			if(palette_entry)
-				sprWin[sprX] = 1;
+				gpu->window_map[sprX] = 3;
 		}
 	}
 }
@@ -461,7 +459,7 @@ bool GPU::oam_t::render_line()
 						if(colour && (prio < priority_at<true>(sprX)))
 						{
 							if(sprite->Mode==2)
-								sprWin[sprX] = 1;
+								parent->window_map[sprX] = 3;
 							else
 							{
                         set_pixel<true>(sprX, LE_TO_LOCAL_16(HostReadWord(pal, colour << 1)), true, 16, prio, sprite->Mode);
@@ -492,7 +490,7 @@ bool GPU::oam_t::render_line()
 
 			if (sprite->Mode == 2)
 			{
-				render_sprite_Win (l, address, sprite->Depth, lg, sprX, x, xdir);
+				render_sprite_Win (parent, l, address, sprite->Depth, lg, sprX, x, xdir);
 				continue;
 			}
 

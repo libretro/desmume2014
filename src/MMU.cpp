@@ -2278,50 +2278,6 @@ void FASTCALL _MMU_ARM9_write08(u32 adr, u8 val)
 				MMU_new.gxstat.write(8,adr,val);
 				break;
 
-			case REG_DISPA_WIN0H:
-			case REG_DISPA_WIN0H+1:
-            MainScreen.gpu->force_window_h_refresh(0);
-				break ; 	 
-			case REG_DISPA_WIN1H:
-			case REG_DISPA_WIN1H+1:
-            MainScreen.gpu->force_window_h_refresh(1);
-				break ; 	 
-
-			case REG_DISPB_WIN0H:
-			case REG_DISPB_WIN0H+1: 	 
-            SubScreen.gpu->force_window_h_refresh(0);
-				break ; 	 
-			case REG_DISPB_WIN1H: 	 
-			case REG_DISPB_WIN1H+1:
-            SubScreen.gpu->force_window_h_refresh(1);
-				break ;
-
-			case REG_DISPA_WININ: 	 
-				GPU_setWININ0(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WININ+1: 	 
-				GPU_setWININ1(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WINOUT: 	 
-				GPU_setWINOUT(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPA_WINOUT+1: 	 
-				GPU_setWINOBJ(MainScreen.gpu,val);
-				break ; 	 
-
-			case REG_DISPB_WININ: 	 
-				GPU_setWININ0(SubScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPB_WININ+1: 	 
-				GPU_setWININ1(SubScreen.gpu,val) ; 	 
-				break ; 
-			case REG_DISPB_WINOUT: 	 
-				GPU_setWINOUT(SubScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPB_WINOUT+1: 	 
-				GPU_setWINOBJ(SubScreen.gpu,val) ; 	 
-				break ;
-
 			case REG_DISPA_BLDCNT:
 				GPU_setBLDCNT_HIGH(MainScreen.gpu,val);
 				break;
@@ -2600,32 +2556,6 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 			case REG_DISPB_BLDY: 	 
 				GPU_setBLDY_EVY(SubScreen.gpu,val) ; 	 
 				break;
-
-			case REG_DISPA_WIN0H:
-            MainScreen.gpu->force_window_h_refresh(0);
-            break;
-			case REG_DISPA_WIN1H:
-            MainScreen.gpu->force_window_h_refresh(1);
-				break ; 	 
-			case REG_DISPB_WIN0H: 	 
-            SubScreen.gpu->force_window_h_refresh(0);
-				break ; 	 
-			case REG_DISPB_WIN1H: 	 
-            SubScreen.gpu->force_window_h_refresh(1);
-				break ; 	 
-			case REG_DISPA_WININ: 	 
-				GPU_setWININ(MainScreen.gpu, val) ; 	 
-				break ; 	 
-			case REG_DISPA_WINOUT: 	 
-				GPU_setWINOUT16(MainScreen.gpu, val) ; 	 
-				break ; 	 
-
-			case REG_DISPB_WININ: 	 
-				GPU_setWININ(SubScreen.gpu, val) ; 	 
-				break ; 	 
-			case REG_DISPB_WINOUT: 	 
-				GPU_setWINOUT16(SubScreen.gpu, val) ; 	 
-				break ;
 
             case REG_POWCNT1:
 				writereg_POWCNT1(16,adr,val);
@@ -3034,31 +2964,6 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 			//	GPU_setBGxVOFS(0, MainScreen.gpu, (val>>16));
 			//	break;
 
-			case REG_DISPA_WININ: 	 
-			{
-				GPU_setWININ(MainScreen.gpu, val & 0xFFFF) ; 	 
-				GPU_setWINOUT16(MainScreen.gpu, (val >> 16) & 0xFFFF) ; 	 
-	            break;
-			}
-			case REG_DISPB_WININ:
-			{
-				GPU_setWININ(SubScreen.gpu, val & 0xFFFF) ; 	 
-				GPU_setWINOUT16(SubScreen.gpu, (val >> 16) & 0xFFFF) ; 	 
-	            break;
-			}
-
-			case REG_DISPA_WIN0H:
-			{
-            MainScreen.gpu->force_window_h_refresh(0);
-            MainScreen.gpu->force_window_h_refresh(1);
-				break;
-			}
-			case REG_DISPB_WIN0H:
-			{
-            SubScreen.gpu->force_window_h_refresh(0);
-            SubScreen.gpu->force_window_h_refresh(1);
-				break;
-			}
 			case REG_DISPA_BLDCNT:
 			{
 				GPU_setBLDCNT   (MainScreen.gpu,val&0xffff);
