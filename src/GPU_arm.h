@@ -383,12 +383,12 @@ extern CACHE_ALIGN u8 gpuBlendTable555[17][17][32][32];
 
 struct PIXEL
 {
-   unsigned color : 16;
-   unsigned opaque : 1;
-   unsigned alpha : 4;    // For sprites
+   unsigned color    : 16;
+   unsigned opaque   : 1;
+   unsigned alpha    : 4;    // For sprites
    unsigned priority : 3; // For sprites
-   unsigned type : 2;     // For sprites
-   unsigned pad : 6;
+   unsigned type     : 2;     // For sprites
+   unsigned pad      : 6;
 };
 
 FORCEINLINE PIXEL BuildPIXEL(u16 color, bool opaque)
@@ -434,13 +434,12 @@ struct GPU
 
          bool render_pixels(u32 line); // Only 8-262 are drawn
 
-         u32 get_x_offset() const { return parent->getHOFS(number); }
-         u32 get_y_offset() const { return parent->getVOFS(number); }
+         u32 get_x_offset() const { return parent->dispx_st->background_offset[number].x; }
+         u32 get_y_offset() const { return parent->dispx_st->background_offset[number].y; }
          affine_parameters_t& get_affine_parameters() { return parent->dispx_st->affine_parameters[(number == 2) ? 0 : 1]; }
 
       public: // Inlines
          // The CHECK template argument enables or disables bounds checking
-         // The priority field of the PIXEL value is set to 4 + priority, for performance reasons
          template <bool CHECK>
          FORCEINLINE void set_pixel(s32 x, PIXEL pixel)
          {
@@ -638,9 +637,6 @@ struct GPU
 		BLDALPHA_EVB = (val&0x1f) > 16 ? 16 : (val&0x1f);
 		updateBLDALPHA();
 	}
-
-	u32 getHOFS(int bg) const { return dispx_st->background_offset[bg].x; }
-	u32 getVOFS(int bg) const { return dispx_st->background_offset[bg].y; }
 
 	typedef u8 TBlendTable[32][32];
 	TBlendTable *blendTable;

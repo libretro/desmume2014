@@ -671,7 +671,7 @@ static void render_backdrop(GPU* gpu, u16 color)
 
 static void render_3d_line(GPU* gpu, u32 line)
 {
-   const u16 hofs = gpu->getHOFS(0);
+   const u16 hofs = gpu->backgrounds[0].get_x_offset();
 
    gfx3d_GetLineData(line, &gpu->_3dColorLine);
    u8* colorLine = gpu->_3dColorLine;
