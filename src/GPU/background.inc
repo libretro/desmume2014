@@ -86,7 +86,7 @@ struct TILE
 static TILE tile_cache[0x10000];
 static u32  tile_tag;
 
-static FORCEINLINE void expand_tile_8(PIXEL* const tile_buffer, const u8* const tile_pixels, const u16* const palette)
+static FORCEINLINE void expand_tile_4bit(PIXEL* const tile_buffer, const u8* const tile_pixels, const u16* const palette)
 {
    for (int i = 0; i != 4; i ++)
    {
@@ -96,7 +96,7 @@ static FORCEINLINE void expand_tile_8(PIXEL* const tile_buffer, const u8* const 
    }
 }
 
-static FORCEINLINE void expand_tile_16(PIXEL* const tile_buffer, const u8* const tile_pixels, const u16* const palette)
+static FORCEINLINE void expand_tile_8bit(PIXEL* const tile_buffer, const u8* const tile_pixels, const u16* const palette)
 {
    for (int i = 0; i != 8; i ++)
    {
@@ -130,11 +130,11 @@ static FORCEINLINE const PIXEL* expand_tile(GPU* gpu, GPU::background& bg, tile_
 
       if (!colors256)
       {
-         expand_tile_8(tile_buffer, tile_pixels, &gpu->palette[tile.Palette * 16]);
+         expand_tile_4bit(tile_buffer, tile_pixels, &gpu->palette[tile.Palette * 16]);
       }
       else
       {
-         expand_tile_16(tile_buffer, tile_pixels, ex_palette ? &ex_palette[256 * tile.Palette] : gpu->palette);
+         expand_tile_8bit(tile_buffer, tile_pixels, ex_palette ? &ex_palette[256 * tile.Palette] : gpu->palette);
       }
 
       if (tile.HFlip)
