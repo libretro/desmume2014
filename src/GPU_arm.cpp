@@ -771,19 +771,7 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 					}
 					else 
                {
-                  PIXEL buffer[34 * 8];
-                  GPU::background& bg = gpu->get_current_background();
-                  
-                  if (bg.render_pixels(gpu->currLine, buffer))
-                  {
-                     for (int x = 0; x < SCREEN_WIDTH; x ++)
-                     {
-                        if (buffer[8 + x].opaque)
-                        {
-                           gpu->setFinalColorBG<false, 0>(buffer[8 + x].color, x);
-                        }
-                     }
-                  }
+                  gpu->get_current_background().render_pixels(gpu->currLine);
                }
 				}
 			}

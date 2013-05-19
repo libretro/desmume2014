@@ -136,7 +136,7 @@ static FORCEINLINE const PIXEL* expand_tile(GPU* gpu, GPU::background& bg, tile_
 /*****************************************************************************/
 //			BACKGROUND RENDERING -TEXT-
 /*****************************************************************************/
-static void renderline_textBG(GPU* gpu, PIXEL pixels[34 * 8], u32 start_x, u32 line, u32 width)
+static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
 {
    // Change tile tag, effectively clearing the tile cache
    // TODO: Make tile cache more persistent
@@ -158,9 +158,6 @@ static void renderline_textBG(GPU* gpu, PIXEL pixels[34 * 8], u32 start_x, u32 l
 
    const u32 x_offset        = start_x & 7;
 
-   // This is set so that pixels[8] will be the first displayed pixel
-   PIXEL* const pixel_base   = &pixels[8 - (start_x & 7)];
-
    for (int i = 0; i < 33; i ++)
    {
       const u32 x_tile      = ((start_x / 8) + i) & bg_width_mask;
@@ -168,7 +165,11 @@ static void renderline_textBG(GPU* gpu, PIXEL pixels[34 * 8], u32 start_x, u32 l
                             + ((x_tile >= 32) ? 32 * 32 * 2 : 0);
 
       const PIXEL* tile_line = expand_tile(gpu, bg, T1ReadWord(MMU_gpu_map(tile_map), 0), line & 7, bg_control.Palette_256, bg.get_extended_palette());
-      memcpy(&pixel_base[i * 8], tile_line, sizeof(PIXEL) * 8);
+
+      for (int j = 0; j != 8; j ++)
+      {
+         bg.set_pixel<true>(i * 8 + j, tile_line[j]);
+      }
    }
 }
 
@@ -229,7 +230,7 @@ FORCEINLINE PIXEL get_pixel_direct_bitmap(GPU::background& bg, s32 x_pixel, s32 
 //			BACKGROUND RENDERING -ROTOSCALE- NO ROTO & NO SCALE
 /*****************************************************************************/
 template <typename TILE_TYPE>
-static FORCEINLINE void mode2_tiled_no_rot_no_scale(GPU::background* bg, PIXEL pixels[34 * 8], const u16* ex_palette = 0)
+static FORCEINLINE void mode2_tiled_no_rot_no_scale(GPU::background* bg, const u16* ex_palette = 0)
 {
    // Change tile tag, effectively clearing the tile cache
    tile_tag ++;
@@ -239,30 +240,27 @@ static FORCEINLINE void mode2_tiled_no_rot_no_scale(GPU::background* bg, PIXEL p
    const s32 x = rotocoord_t(affine_params.X).Integer;
    const s32 y = rotocoord_t(affine_params.Y).Integer;
 
-   // Early out if the background is not visible on this line
-   if (y < 0 || y > bg->height)
+   // Only draw if the line is visible
+   if (y >= 0 && y < bg->height)
    {
-      memset(pixels, 0, sizeof(PIXEL) * 34 * 8);
-      return;
-   }
+      // Get backgroud size info
+      const u16 bg_width        = bg->width / 8;
+      const u16 bg_height       = bg->height / 8;
 
-   // Get backgroud size info
-	const u16 bg_width        = bg->width / 8;
-	const u16 bg_height       = bg->height / 8;
+      // Get the base Y location of the tile map
+      const u32 y_tile          = y / 8;
+      const TILE_TYPE* tile_map = (const TILE_TYPE*)MMU_gpu_map(bg->tile_map_ram + y_tile * (bg_width * sizeof(TILE_TYPE)));
 
-   // Get the base Y location of the tile map
-   const u32 y_tile          = y / 8;
-   const TILE_TYPE* tile_map = (const TILE_TYPE*)MMU_gpu_map(bg->tile_map_ram + y_tile * (bg_width * sizeof(TILE_TYPE)));
+      for (int i = 0; i != 33; i ++)
+      {
+         const u32 tile_val = tile_map[x / 8 + i];
+         const PIXEL* tile_line = expand_tile(bg->parent, *bg, tile_val, y & 7, true, ex_palette);
 
-   // This is set so that pixels[8] will be the first displayed pixel
-   PIXEL* const pixel_base   = &pixels[8 - (x & 7)];
-
-   for (int i = 0; i != 33; i ++)
-   {
-      const u32 tile_val = tile_map[x / 8 + i];
-
-      const PIXEL* tile_line = expand_tile(bg->parent, *bg, tile_val, y & 7, true, ex_palette);
-      memcpy(&pixel_base[i * 8], tile_line, sizeof(PIXEL) * 8);
+         for (int j = 0; j != 8; j ++)
+         {
+            bg->set_pixel<true>(i * 8 + j, tile_line[j]);
+         }
+      }
    }
 }
 
@@ -270,8 +268,8 @@ static FORCEINLINE void mode2_tiled_no_rot_no_scale(GPU::background* bg, PIXEL p
 //			BACKGROUND RENDERING -ROTOSCALE-
 /*****************************************************************************/
 
-template<mode2_get_pixel_fn fun, bool WRAP>
-FORCEINLINE void rot_scale_op(PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
+template<mode2_get_pixel_fn get_pixel, bool WRAP>
+FORCEINLINE void rot_scale_op(GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
 	rotocoord_t x = params.X;
    rotocoord_t y = params.Y;
@@ -288,19 +286,19 @@ FORCEINLINE void rot_scale_op(PIXEL pixels[34 * 8], GPU::background& bg, const a
 
       if(WRAP || ((x_pos >= 0) && (x_pos < bg.width) && (y_pos >= 0) && (y_pos < bg.height)))
       {
-         pixels[8 + i] = fun(bg, x_pos, y_pos, pal);
+         bg.set_pixel<false>(i, get_pixel(bg, x_pos, y_pos, pal));
       }
    }
 }
 
 template<mode2_get_pixel_fn fun>
-FORCEINLINE void apply_rot_fun(PIXEL pixels[34 * 8], GPU::background& bg, const affine_parameters_t& params, u8 * pal)
+FORCEINLINE void apply_rot_fun(GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
-	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (pixels, bg, params, pal);	
-	else                                    rot_scale_op<fun,false>(pixels, bg, params, pal);	
+	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (bg, params, pal);	
+	else                                    rot_scale_op<fun,false>(bg, params, pal);	
 }
 
-FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_t& params)
+FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
 {
    GPU::background& bg = gpu->get_current_background();
 	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
@@ -309,7 +307,7 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
 	{
       case GPU::background::Affine:
       {
-         apply_rot_fun<get_pixel_tiled_8bit_entry>(pixels, bg, params, pal);
+         apply_rot_fun<get_pixel_tiled_8bit_entry>(bg, params, pal);
          return;
       }
 
@@ -321,12 +319,12 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
 
             if (pal)
             {
-               apply_rot_fun<get_pixel_tiled_16bit_entry<true> >(pixels, bg, params, pal);
+               apply_rot_fun<get_pixel_tiled_16bit_entry<true> >(bg, params, pal);
             }
          }
          else
          {
-            apply_rot_fun<get_pixel_tiled_16bit_entry<false> >(pixels, bg, params, pal);
+            apply_rot_fun<get_pixel_tiled_16bit_entry<false> >(bg, params, pal);
          }
 
          return;
@@ -335,13 +333,13 @@ FORCEINLINE void rotBG2(GPU* gpu, PIXEL pixels[34 * 8], const affine_parameters_
       case GPU::background::AffineExt_256x1:
    	case GPU::background::Large8bpp:
       {
-   		apply_rot_fun<get_pixel_paletted_bitmap>(pixels, bg, params, pal);
+   		apply_rot_fun<get_pixel_paletted_bitmap>(bg, params, pal);
          return;
       }
 
       case GPU::background::AffineExt_Direct:
       {
-		   apply_rot_fun<get_pixel_direct_bitmap>(pixels, bg, params, NULL);
+		   apply_rot_fun<get_pixel_direct_bitmap>(bg, params, NULL);
 		   return;
       }
 
@@ -388,14 +386,14 @@ void GPU::background::refresh_control()
    set_size(sizeTab[type][bg_control.ScreenSize][0], sizeTab[type][bg_control.ScreenSize][1]);
 }
 
-bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
+bool GPU::background::render_pixels(u32 line)
 {
    const display_control_t display_control = parent->get_display_control();
    const bg_type base_type = background_types[display_control.BG_Mode][number];
 
    if (base_type == Text)
    {
-     	renderline_textBG(parent, pixels, get_x_offset(), line + get_y_offset(), 256);
+     	renderline_textBG(parent, get_x_offset(), line + get_y_offset(), 256);
    }
    else if ((base_type == Affine) || (base_type == AffineExt) || (base_type == Large8bpp))
    {
@@ -406,10 +404,10 @@ bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
       {
          switch(type)
          {
-            case Affine:            mode2_tiled_no_rot_no_scale<u8> (this, pixels); break;
-            case AffineExt_256x1:   mode2_tiled_no_rot_no_scale<u16>(this, pixels); break;
-            case AffineExt_256x16:  mode2_tiled_no_rot_no_scale<u16>(this, pixels, get_extended_palette()); break;
-            default:                rotBG2(parent, pixels, parms); break;
+            case Affine:            mode2_tiled_no_rot_no_scale<u8> (this); break;
+            case AffineExt_256x1:   mode2_tiled_no_rot_no_scale<u16>(this); break;
+            case AffineExt_256x16:  mode2_tiled_no_rot_no_scale<u16>(this, get_extended_palette()); break;
+            default:                rotBG2(parent, parms); break;
          }
       }
       // No rotation
@@ -417,15 +415,15 @@ bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
       {
          switch(type)
          {
-            case Affine:            mode2_tiled_no_rot<u8> (this, pixels); break;
-            case AffineExt_256x1:   mode2_tiled_no_rot<u16>(this, pixels); break;
-            case AffineExt_256x16:  mode2_tiled_no_rot<u16>(this, pixels, get_extended_palette()); break;
-            default:                rotBG2(parent, pixels, parms); break;
+            case Affine:            mode2_tiled_no_rot<u8> (this); break;
+            case AffineExt_256x1:   mode2_tiled_no_rot<u16>(this); break;
+            case AffineExt_256x16:  mode2_tiled_no_rot<u16>(this, get_extended_palette()); break;
+            default:                rotBG2(parent, parms); break;
          }
       }*/
       else
       {
-         rotBG2(parent, pixels, parms);
+         rotBG2(parent, parms);
       }
 
    	parms.X += parms.PB;
@@ -439,11 +437,3 @@ bool GPU::background::render_pixels(u32 line, PIXEL pixels[34 * 4])
 
    return true;
 }
-
-      enum bg_type
-      {
-         Invalid,   Text,             Affine,          Large8bpp, 
-         AffineExt, AffineExt_256x16, AffineExt_256x1, AffineExt_Direct
-      };
-
-
