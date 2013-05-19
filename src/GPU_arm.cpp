@@ -53,20 +53,6 @@ NDS_Screen SubScreen;
 CACHE_ALIGN u8 GPU_screen[4*256*192];
 CACHE_ALIGN u8 sprWin[256];
 
-//dont ever think of changing these to bits because you could avoid the multiplies in the main tile blitter.
-//it doesnt really help any
-static const short sizeTab[8][4][2] =
-{
-	{{0, 0}, {0, 0}, {0, 0}, {0, 0}}, //Invalid
-    {{256,256}, {512,256}, {256,512}, {512,512}}, //text
-    {{128,128}, {256,256}, {512,512}, {1024,1024}}, //affine
-    {{512,1024}, {1024,512}, {0,0}, {0,0}}, //large 8bpp
-	{{0, 0}, {0, 0}, {0, 0}, {0, 0}}, //affine ext (to be elaborated with another value)
-	{{128,128}, {256,256}, {512,512}, {1024,1024}}, //affine ext 256x16
-	{{128,128}, {256,256}, {512,256}, {512,512}}, //affine ext 256x1
-	{{128,128}, {256,256}, {512,256}, {512,512}}, //affine ext direct
-};
-
 static const CACHE_ALIGN u8 win_empty[256] = {
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 	0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,

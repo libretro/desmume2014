@@ -61,6 +61,19 @@ const GPU::background::bg_type GPU::background::background_types[8][4] =
    {Invalid,  Invalid, Invalid,     Invalid    }
 };
 
+static const u32 bg_size_table[8][4][2] =
+{
+	{{0,   0   }, {0,    0  }, {0,   0  }, {0,    0   }}, //Invalid
+   {{256, 256 }, {512,  256}, {256, 512}, {512,  512 }}, //text
+   {{128, 128 }, {256,  256}, {512, 512}, {1024, 1024}}, //affine
+   {{512, 1024}, {1024, 512}, {0,   0  }, {0,    0   }}, //large 8bpp
+	{{0,   0   }, {0,    0  }, {0,   0  }, {0,    0   }}, //affine ext (to be elaborated with another value)
+	{{128, 128 }, {256,  256}, {512, 512}, {1024, 1024}}, //affine ext 256x16
+	{{128, 128 }, {256,  256}, {512, 256}, {512,  512 }}, //affine ext 256x1
+	{{128, 128 }, {256,  256}, {512, 256}, {512,  512 }}, //affine ext direct
+};
+
+
 /*****************************************************************************/
 //			BACKGROUND RENDERING -TILE EXPANSION-
 /*****************************************************************************/
@@ -229,6 +242,8 @@ FORCEINLINE PIXEL get_pixel_direct_bitmap(GPU::background& bg, s32 x_pixel, s32 
 /*****************************************************************************/
 //			BACKGROUND RENDERING -ROTOSCALE- NO ROTO & NO SCALE
 /*****************************************************************************/
+// TODO: This urgently needs wrap and bounds support
+
 template <typename TILE_TYPE>
 static FORCEINLINE void mode2_tiled_no_rot_no_scale(GPU::background* bg, const u16* ex_palette = 0)
 {
@@ -260,6 +275,44 @@ static FORCEINLINE void mode2_tiled_no_rot_no_scale(GPU::background* bg, const u
          {
             bg->set_pixel<true>(i * 8 + j, tile_line[j]);
          }
+      }
+   }
+}
+
+static FORCEINLINE void mode2_paletted_bitmap_no_rot_no_scale(GPU::background* bg)
+{
+   affine_parameters_t& affine_params = bg->get_affine_parameters();
+   const s32 x = rotocoord_t(affine_params.X).Integer;
+   const s32 y = rotocoord_t(affine_params.Y).Integer;
+
+   // Only draw if the line is visible
+   if (y >= 0 && y < bg->height)
+   {
+      const u32 bitmap_ram = (bg->type == GPU::background::Large8bpp) ? bg->large_bitmap_ram : bg->bitmap_ram;
+      const u8* const bitmap = (const u8* const)MMU_gpu_map(bitmap_ram + (y * bg->width) + x);
+
+      for (int i = 0; i != 256; i ++)
+      {
+         const u32 color = bitmap[i] ? bg->parent->palette[bitmap[i]] : 0;
+         bg->set_pixel<false>(i, BuildPIXEL(color, bitmap[i]));
+      }
+   }
+}
+
+static FORCEINLINE void mode2_direct_bitmap_no_rot_no_scale(GPU::background* bg)
+{
+   affine_parameters_t& affine_params = bg->get_affine_parameters();
+   const s32 x = rotocoord_t(affine_params.X).Integer;
+   const s32 y = rotocoord_t(affine_params.Y).Integer;
+
+   // Only draw if the line is visible
+   if (y >= 0 && y < bg->height)
+   {
+      const u16* const bitmap = (const u16* const)MMU_gpu_map(bg->bitmap_ram + ((y * bg->width) + x) * 2);
+
+      for (int i = 0; i != 256; i ++)
+      {
+         bg->set_pixel<false>(i, BuildPIXEL(bitmap[i], bitmap[i] & 0x8000));
       }
    }
 }
@@ -383,7 +436,7 @@ void GPU::background::refresh_control()
       type = affine_modes[affine_mode];
 	}
 
-   set_size(sizeTab[type][bg_control.ScreenSize][0], sizeTab[type][bg_control.ScreenSize][1]);
+   set_size(bg_size_table[type][bg_control.ScreenSize][0], bg_size_table[type][bg_control.ScreenSize][1]);
 }
 
 bool GPU::background::render_pixels(u32 line)
@@ -405,9 +458,11 @@ bool GPU::background::render_pixels(u32 line)
          switch(type)
          {
             case Affine:            mode2_tiled_no_rot_no_scale<u8> (this); break;
-            case AffineExt_256x1:   mode2_tiled_no_rot_no_scale<u16>(this); break;
             case AffineExt_256x16:  mode2_tiled_no_rot_no_scale<u16>(this, get_extended_palette()); break;
-            default:                rotBG2(parent, parms); break;
+            case AffineExt_Direct:  mode2_direct_bitmap_no_rot_no_scale(this); break;
+            case AffineExt_256x1:   mode2_paletted_bitmap_no_rot_no_scale(this); break;
+   	      case Large8bpp:         mode2_paletted_bitmap_no_rot_no_scale(this); break;
+            default:                abort();
          }
       }
       // No rotation
@@ -416,9 +471,11 @@ bool GPU::background::render_pixels(u32 line)
          switch(type)
          {
             case Affine:            mode2_tiled_no_rot<u8> (this); break;
-            case AffineExt_256x1:   mode2_tiled_no_rot<u16>(this); break;
             case AffineExt_256x16:  mode2_tiled_no_rot<u16>(this, get_extended_palette()); break;
-            default:                rotBG2(parent, parms); break;
+            case AffineExt_Direct:  mode2_direct_bitmap_no_rot(this); break;
+            case AffineExt_256x1:   mode2_paletted_bitmap_no_rot(this); break;
+   	      case Large8bpp:         mode2_paletted_bitmap_no_rot(this); break;
+            default:                abort();
          }
       }*/
       else
