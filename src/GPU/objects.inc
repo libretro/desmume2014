@@ -146,10 +146,12 @@ INLINE void render_sprite_Win (GPU* gpu, u16 l, u32 srcadr,
 	u16 x1;
 	u8* src = (u8 *)MMU_gpu_map(srcadr);
 
+   const u8 window_control = gpu->get_window_control(3);
+
 	if (col256) {
 		for(i = 0; i < lg; i++, sprX++,x+=xdir)
 			if(src[(x&7) + ((x&0xFFF8)<<3)]) 
-				gpu->window_map[sprX] = 3;
+				gpu->window_map[sprX] = window_control;
 	} else {
 		for(i = 0; i < lg; i++, ++sprX, x+=xdir)
 		{
@@ -158,7 +160,7 @@ INLINE void render_sprite_Win (GPU* gpu, u16 l, u32 srcadr,
 			if (x & 1) palette_entry = palette >> 4;
 			else       palette_entry = palette & 0xF;
 			if(palette_entry)
-				gpu->window_map[sprX] = 3;
+				gpu->window_map[sprX] = window_control;
 		}
 	}
 }
@@ -435,6 +437,8 @@ bool GPU::oam_t::render_line()
 					pal = MMU.ARM9_VMEM + 0x200 + parent->core*0x400 + (sprite->PaletteIndex*32);
 				}
 
+            const u32 window_control = parent->get_window_control(3);
+
 				for(j = 0; j < lg; ++j, ++sprX)
 				{
 					// Get the integer part of the fixed point 8.8, and check if it lies inside the sprite data
@@ -459,7 +463,7 @@ bool GPU::oam_t::render_line()
 						if(colour && (prio < priority_at<true>(sprX)))
 						{
 							if(sprite->Mode==2)
-								parent->window_map[sprX] = 3;
+								parent->window_map[sprX] = window_control;
 							else
 							{
                         set_pixel<true>(sprX, LE_TO_LOCAL_16(HostReadWord(pal, colour << 1)), true, 16, prio, sprite->Mode);

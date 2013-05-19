@@ -263,19 +263,10 @@ void GPU::resort_backgrounds()
 /*****************************************************************************/
 //		ROUTINES FOR INSIDE / OUTSIDE WINDOW CHECKS
 /*****************************************************************************/
-//  Now assumes that *draw and *effect are different from 0 when called, so we can avoid
-// setting some values twice
-FORCEINLINE void GPU::renderline_checkWindows(u16 x, bool &draw, bool &effect) const
+FORCEINLINE bool GPU::check_window(u32 x, bool &effect) const
 {
-   const window_control_t control = dispx_st->window_control;
-
-   switch(window_map[x])
-   {
-      case 0: draw = (control.outside_layer_enable >> currBgNum) & 1; effect = control.outside_special; return;
-      case 1: draw = (control.win0_layer_enable    >> currBgNum) & 1; effect = control.win0_special;    return;
-      case 2: draw = (control.win1_layer_enable    >> currBgNum) & 1; effect = control.win1_special;    return;
-      case 3: draw = (control.object_layer_enable  >> currBgNum) & 1; effect = control.object_special;  return;
-   }
+   effect = (window_map[x] >> 5) & 1;
+   return (window_map[x] >> currBgNum) & 1;
 }
 
 /*****************************************************************************/
@@ -298,14 +289,8 @@ FORCEINLINE FASTCALL void GPU::_master_setFinal3dColor(int dstX, int srcX)
 	
 	//TODO - should we do an alpha==0 -> bail out entirely check here?
 
-	if(WINDOW)
-	{
-		bool windowDraw = false;
-		renderline_checkWindows(dstX, windowDraw, windowEffect);
-
-		//we never have anything more to do if the window rejected us
-		if(!windowDraw) return;
-	}
+	if(WINDOW && !check_window(dstX, windowEffect))
+      return;
 
 	int bg_under = bgPixels[dstX];
 	if(blend2[bg_under])
@@ -355,18 +340,8 @@ FORCEINLINE FASTCALL bool GPU::_master_setFinalBGColor(u16 &color, const u32 x)
 	if(FUNC==Blend && BACKDROP) return true;
 
 	bool windowEffect = true;
-
-	if(WINDOW)
-	{
-		bool windowDraw = false;
-		renderline_checkWindows(x, windowDraw, windowEffect);
-
-		//backdrop must always be drawn
-		if(BACKDROP) windowDraw = true;
-
-		//we never have anything more to do if the window rejected us
-		if(!windowDraw) return false;
-	}
+   if (WINDOW && (!check_window(x, windowEffect) && !BACKDROP))
+      return false;
 
 	//special effects rejected. just draw it.
 	if(!(blend1 && windowEffect))
@@ -387,14 +362,10 @@ FORCEINLINE FASTCALL bool GPU::_master_setFinalBGColor(u16 &color, const u32 x)
 template<BlendFunc FUNC, bool WINDOW>
 static FORCEINLINE void _master_setFinalOBJColor(GPU *gpu, u8 *dst, u16 color, u8 alpha, u8 type, u16 x)
 {
-	bool windowDraw = true, windowEffect = true;
+	bool windowEffect = true;
 
-	if(WINDOW)
-	{
-		gpu->renderline_checkWindows(x, windowDraw, windowEffect);
-		if(!windowDraw)
-			return;
-	}
+   if (WINDOW && !gpu->check_window(x, windowEffect))
+      return;
 
 	const bool sourceEffectSelected = gpu->blend1;
 
@@ -657,7 +628,7 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 		gpu->blend2[i] = (gpu->BLDCNT & (0x100 << i)) != 0;
    }
 
-   memset(gpu->window_map, 0, sizeof(gpu->window_map));
+   memset(gpu->window_map, gpu->get_window_control(2), sizeof(gpu->window_map));
 
 	// calculate sprite pixels and priorities for the line
    bool has_sprites = false;
@@ -985,12 +956,12 @@ FORCEINLINE void GPU::calculate_windows()
 
          if (startX <= endX)
          {
-            memset(&window_map[startX], 2, endX - startX);
+            memset(&window_map[startX], get_window_control(1), endX - startX);
          }
          else
          {
-            memset(&window_map[0], 2, endX);
-            memset(&window_map[startX], 2, 256 - startX);
+            memset(&window_map[0], get_window_control(1), endX);
+            memset(&window_map[startX], get_window_control(1), 256 - startX);
          }
       }
 	}
@@ -1008,12 +979,12 @@ FORCEINLINE void GPU::calculate_windows()
 
          if (startX <= endX)
          {
-            memset(&window_map[startX], 1, endX - startX);
+            memset(&window_map[startX], get_window_control(0), endX - startX);
          }
          else
          {
-            memset(&window_map[0], 1, endX);
-            memset(&window_map[startX], 1, 256 - startX);
+            memset(&window_map[0], get_window_control(0), endX);
+            memset(&window_map[startX], get_window_control(0), 256 - startX);
          }
       }
 	}

@@ -154,30 +154,6 @@ struct window_rects_t
    };
 };
 
-union window_control_t
-{
-   u32 value;
-
-   struct
-   {
-      unsigned win0_layer_enable     : 5;
-      unsigned win0_special          : 1;
-      unsigned                       : 2;
-
-      unsigned win1_layer_enable     : 5;
-      unsigned win1_special          : 1;
-      unsigned                       : 2;
-
-      unsigned outside_layer_enable  : 5;
-      unsigned outside_special       : 1;
-      unsigned                       : 2;
-
-      unsigned object_layer_enable   : 5;
-      unsigned object_special        : 1;
-      unsigned                       : 2;      
-   } __attribute__((packed));
-};
-
 union master_bright_t
 {
    u16 value;
@@ -284,7 +260,7 @@ struct REG_DISPx {
     background_offset_t       background_offset[4];   // 0x0400x010
     affine_parameters_t       affine_parameters[2];   // 0x0400x020
     window_rects_t            window_rects;           // 0x0400x040
-    window_control_t          window_control;         // 0x0400x048
+    u8                        window_control[4];      // 0x0400x048
     u16                       mosaic_size;            // 0x0400x04C
     MISCCNT                   dispx_MISC;             // 0x0400x04E
     DISP3DCNT                 dispA_DISP3DCNT;        // 0x04000060
@@ -543,6 +519,8 @@ struct GPU
       void resort_backgrounds();
 
    	void calculate_windows();
+   	bool check_window(u32 x, bool &effect) const;
+      u32 get_window_control(u32 window) const { return dispx_st->window_control[window & 3]; }
 
       background& get_current_background() { return backgrounds[currBgNum]; }
       display_control_t get_display_control() const { return dispx_st->display_control; }
@@ -619,8 +597,6 @@ struct GPU
 		AffineInfo() : x(0), y(0) {}
 		u32 x, y;
 	} affineInfo[2];
-
-	void renderline_checkWindows(u16 x, bool &draw, bool &effect) const;
 
 	void setBLDALPHA(u16 val)
 	{
