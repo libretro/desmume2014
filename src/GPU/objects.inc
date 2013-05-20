@@ -222,8 +222,26 @@ FORCEINLINE BOOL compute_sprite_vars(const oam_object_t* sprite, u16 l,
 /**********************************/
 // GPU::oam_t
 /**********************************/
+void GPU::oam_t::reset(GPU* parent_)
+{
+   parent          = parent_;
+   mode            = SPRITE_1D;
+   oam             = MMU.ARM9_OAM + ((parent->core == GPU_SUB) ? ADDRESS_STEP_1KB : 0);
+   memory          = (parent->core == GPU_MAIN) ? MMU_AOBJ : MMU_BOBJ;
+   enable          = false;
+
+   boundary        = 0;
+   bitmap_boundary = 0;
+
+   visible_count   = 0;
+   need_rebuild    = true;
+}
+
 bool GPU::oam_t::render_line()
 {
+   if (need_rebuild)
+      rebuild();
+
    bool has_sprite = false;
 
 	u16 l = parent->currLine;
@@ -231,12 +249,14 @@ bool GPU::oam_t::render_line()
 	int cost = 0;
 
 	const display_control_t display_control = parent->get_display_control();
-   const oam_object_t* sprite = (const oam_object_t*)oam;
+   const oam_object_t* sprite_base = (const oam_object_t*)oam;
 
    memset(line_buffer, 0, sizeof(line_buffer));
 
-	for(int i = 0; i < 128; i++, sprite++)
+	for(int t = 0; t != visible_count; t ++)
 	{
+      const oam_object_t* sprite = &sprite_base[visible_list[t]];
+
 		//for each sprite:
 		if(cost>=2130)
 		{
@@ -534,7 +554,26 @@ bool GPU::oam_t::render_line()
    return has_sprite;
 }
 
-u32 GPU::oam_t::sprite_address(const oam_object_t& sprite, u32 line)
+void GPU::oam_t::rebuild()
+{
+   need_rebuild = false;
+   visible_count = 0;
+
+	const display_control_t display_control = parent->get_display_control();
+   const oam_object_t* sprite = (const oam_object_t*)oam;
+
+	for(int i = 0; i != 128; i ++, sprite ++)
+   {
+      const size& sprite_size = sprite->get_size();
+
+      if (((sprite->Y < 192) || ((sprite->Y + sprite_size.y) < 256)) && ((sprite->X + sprite_size.x) > 0))
+      {
+         visible_list[visible_count ++] = i;
+      }
+   }
+}
+
+FORCEINLINE u32 GPU::oam_t::sprite_address(const oam_object_t& sprite, u32 line)
 {
    const u32 width = sprite.get_size().x;
 

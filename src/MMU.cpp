@@ -2358,6 +2358,17 @@ void FASTCALL _MMU_ARM9_write08(u32 adr, u8 val)
 		MMU.MMU_MEM[ARMCPU_ARM9][adr>>20][adr&MMU.MMU_MASK[ARMCPU_ARM9][adr>>20]]=val;
 		return;
 	}
+   else if(adr >> 24 == 7) // OAM
+   {
+      if((adr & 0x7FF) < 0x400)
+      {
+         MainScreen.gpu->oam.invalidate();
+      }
+      else
+      {
+         SubScreen.gpu->oam.invalidate();
+      }
+   }
 
 	bool unmapped, restricted;
 	adr = MMU_LCDmap<ARMCPU_ARM9>(adr, unmapped, restricted);
@@ -2700,6 +2711,17 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 		T1WriteWord(MMU.MMU_MEM[ARMCPU_ARM9][adr>>20], adr&MMU.MMU_MASK[ARMCPU_ARM9][adr>>20], val); 
 		return;
 	}
+   else if(adr >> 24 == 7) // OAM
+   {
+      if((adr & 0x7FF) < 0x400)
+      {
+         MainScreen.gpu->oam.invalidate();
+      }
+      else
+      {
+         SubScreen.gpu->oam.invalidate();
+      }
+   }
 
 
 	bool unmapped, restricted;
@@ -3076,6 +3098,17 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 		T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][adr>>20], adr & MMU.MMU_MASK[ARMCPU_ARM9][adr>>20], val);
 		return;
 	}
+   else if(adr >> 24 == 7) // OAM
+   {
+      if((adr & 0x7FF) < 0x400)
+      {
+         MainScreen.gpu->oam.invalidate();
+      }
+      else
+      {
+         SubScreen.gpu->oam.invalidate();
+      }
+   }
 
 	bool unmapped, restricted;
 	adr = MMU_LCDmap<ARMCPU_ARM9>(adr, unmapped, restricted);

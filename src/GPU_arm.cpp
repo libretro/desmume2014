@@ -154,23 +154,16 @@ void GPU_Reset(GPU *g, u8 l)
       g->backgrounds[i].set_size(256, 256);
    }
 
-   g->oam.parent = g;
-	g->oam.mode = GPU::oam_t::SPRITE_1D;
+   g->oam.reset(g);
 
 	if(g->core == GPU_SUB)
 	{
       g->palette = (u16*)(MMU.ARM9_VMEM + ADDRESS_STEP_1KB);
-		g->oam.oam = (MMU.ARM9_OAM + ADDRESS_STEP_1KB);
-		g->oam.memory = MMU_BOBJ;
-		// GPU core B
 		g->dispx_st = (REG_DISPx*)(&MMU.ARM9_REG[REG_DISPB]);
 	}
 	else
 	{
       g->palette = (u16*)MMU.ARM9_VMEM;
-		g->oam.oam = (MMU.ARM9_OAM);
-		g->oam.memory = MMU_AOBJ;
-		// GPU core A
 		g->dispx_st = (REG_DISPx*)(&MMU.ARM9_REG[0]);
 	}
 }

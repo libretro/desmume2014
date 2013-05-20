@@ -498,11 +498,17 @@ struct GPU
    struct oam_t
    {
       public:
+         void reset(GPU* parent_);
+
          bool render_line();
 
-         u32 sprite_address(const oam_object_t& sprite, u32 line);
+         FORCEINLINE void invalidate() { need_rebuild = true; }
+         void rebuild();
+
+         FORCEINLINE u32 sprite_address(const oam_object_t& sprite, u32 line);
 
       public: // Inlines
+
          // The CHECK template argument enables or disables bounds checking
          // The priority field of the PIXEL value is set to 4 + priority, for performance reasons
          template <bool CHECK>
@@ -526,6 +532,10 @@ struct GPU
       public:
          GPU* parent;
          bool enable;
+
+         u32 visible_list[128];
+         u32 visible_count;
+         bool need_rebuild;
 
          const void* oam;
          u32 memory;
