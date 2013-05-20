@@ -473,7 +473,7 @@ struct GPU
             {
                if (pixel.opaque)
                {
-                  parent->setFinalColorBG<false, 0>(pixel.color, x);
+                  parent->set_bg_color(pixel.color, x);
                }
             }
          }
@@ -553,6 +553,26 @@ struct GPU
       blend_alpha_t get_blend_alpha() const { return dispx_st->blend_alpha; }
       brightness_t get_brightness() const { return dispx_st->brightness; }
 
+   public: // Pixel rendering
+      template<BlendFunc FUNC, bool WINDOW>
+      FASTCALL void master_set_3d_color(int dstX, int srcX);
+      FASTCALL void set_3d_color(int dstX, int srcX);
+
+      template<BlendFunc FUNC, bool WINDOW>
+      FASTCALL void master_set_bg_color(u16 color, const u32 x);
+      FASTCALL void set_bg_color(u16 color, const u32 x);
+
+      template<BlendFunc FUNC, bool WINDOW>
+      FASTCALL void master_set_obj_color(u16 color, u8 alpha, u8 type, u16 x);
+      FASTCALL void set_obj_color(u16 color, u8 alpha, u8 type, u16 x);
+
+      void render_backdrop(u16 color);
+      void render_3d_line(u32 line);
+
+      int setFinalColorBck_funcNum;
+      int setFinalColor3d_funcNum;
+      int setFinalColorSpr_funcNum;
+
    public:
       background backgrounds[4];
       oam_t oam;
@@ -597,21 +617,6 @@ struct GPU
 	u8* _3dColorLine;
 
 	u16 blend(u16 colA, u16 colB);
-
-	template<bool BACKDROP, BlendFunc FUNC, bool WINDOW>
-	FORCEINLINE FASTCALL bool _master_setFinalBGColor(u16 &color, const u32 x);
-
-	template<BlendFunc FUNC, bool WINDOW>
-	FORCEINLINE FASTCALL void _master_setFinal3dColor(int dstX, int srcX);
-
-	int setFinalColorBck_funcNum;
-	int setFinalColor3d_funcNum;
-	int setFinalColorSpr_funcNum;
-	//Final3DColFunct setFinalColor3D;
-
-	void setFinalColor3d(int dstX, int srcX);
-	
-	template<bool BACKDROP, int FUNCNUM> void setFinalColorBG(u16 color, const u32 x);
 
 	void setAffineStart(int layer, int xy, u32 val);
 	void setAffineStartWord(int layer, int xy, u16 val, int word);
