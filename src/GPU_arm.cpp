@@ -141,11 +141,6 @@ void GPU_Reset(GPU *g, u8 l)
 {
 	memset(g, 0, sizeof(GPU));
 
-	//important for emulator stability for this to initialize, since we have to setup a table based on it
-	g->BLDALPHA_EVA = 0;
-	g->BLDALPHA_EVB = 0;
-	//make sure we have our blend table setup even if the game blends without setting the blend variables
-	g->updateBLDALPHA();
 
 	g->setFinalColorBck_funcNum = 0;
 	g->setFinalColor3d_funcNum = 0;
@@ -205,9 +200,9 @@ void SetupFinalPixelBlitter (GPU *gpu)
 	u8 windowUsed = (gpu->WIN0_ENABLED | gpu->WIN1_ENABLED | gpu->WINOBJ_ENABLED);
 	u8 blendMode  = (gpu->BLDCNT >> 6)&3;
 
-	gpu->setFinalColorSpr_funcNum = windowUsed*4 + blendMode;
-	gpu->setFinalColorBck_funcNum = windowUsed*4 + blendMode;
-	gpu->setFinalColor3d_funcNum = windowUsed*4 + blendMode;
+	gpu->setFinalColorSpr_funcNum = windowUsed * 4 + blendMode;
+	gpu->setFinalColorBck_funcNum = windowUsed * 4 + blendMode;
+	gpu->setFinalColor3d_funcNum  = windowUsed * 4 + blendMode;
 	
 }
     
@@ -609,8 +604,12 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 	GPU * gpu = screen->gpu;
 	const display_control_t display_control = gpu->get_display_control();
 
-	gpu->currentFadeInColors = &fadeInColors[gpu->BLDY_EVY][0];
-	gpu->currentFadeOutColors = &fadeOutColors[gpu->BLDY_EVY][0];
+   blend_alpha_t alpha = gpu->get_blend_alpha();
+   gpu->blendTable = (GPU::TBlendTable*)&gpuBlendTable555[alpha.first_target_factor][alpha.second_target_factor];
+
+   brightness_t brightness = gpu->get_brightness();
+	gpu->currentFadeInColors = &fadeInColors[brightness.max ? 16 : brightness.factor][0];
+	gpu->currentFadeOutColors = &fadeOutColors[brightness.max ? 16 : brightness.factor][0];
 
 	const u16 backdrop_color = T1ReadWord(MMU.ARM9_VMEM, gpu->core * 0x400) & 0x7FFF;
    render_backdrop(gpu, backdrop_color);
@@ -1162,8 +1161,6 @@ bool gpu_loadstate(EMUFILE* is, int size)
 		//SubScreen.gpu->refreshAffineStartRegs(-1,-1);
 	}
 
-	MainScreen.gpu->updateBLDALPHA();
-	SubScreen.gpu->updateBLDALPHA();
 	return !is->fail();
 }
 

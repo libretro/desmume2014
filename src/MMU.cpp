@@ -2292,27 +2292,6 @@ void FASTCALL _MMU_ARM9_write08(u32 adr, u8 val)
 				GPU_setBLDCNT_LOW (SubScreen.gpu,val);
 				break;
 
-			case REG_DISPA_BLDALPHA: 	 
-				MainScreen.gpu->setBLDALPHA_EVA(val);
-				break;
-			case REG_DISPA_BLDALPHA+1:
-				MainScreen.gpu->setBLDALPHA_EVB(val);
-				break;
-
-			case REG_DISPB_BLDALPHA:
-				SubScreen.gpu->setBLDALPHA_EVA(val);
-				break;
-			case REG_DISPB_BLDALPHA+1:
-				SubScreen.gpu->setBLDALPHA_EVB(val);
-				break;
-
-			case REG_DISPA_BLDY: 	 
-				GPU_setBLDY_EVY(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPB_BLDY: 	 
-				GPU_setBLDY_EVY(SubScreen.gpu,val) ; 	 
-				break;
-
 			case REG_AUXSPICNT:
 				write_auxspicnt(9,8,0,val);
 				return;
@@ -2544,18 +2523,6 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
 			case REG_DISPB_BLDCNT: 	 
 				GPU_setBLDCNT(SubScreen.gpu,val) ; 	 
 				break ; 	 
-			case REG_DISPA_BLDALPHA: 	 
-				MainScreen.gpu->setBLDALPHA(val);
-				break ; 	 
-			case REG_DISPB_BLDALPHA: 	 
-				SubScreen.gpu->setBLDALPHA(val);
-				break ; 	 
-			case REG_DISPA_BLDY: 	 
-				GPU_setBLDY_EVY(MainScreen.gpu,val) ; 	 
-				break ; 	 
-			case REG_DISPB_BLDY: 	 
-				GPU_setBLDY_EVY(SubScreen.gpu,val) ; 	 
-				break;
 
             case REG_POWCNT1:
 				writereg_POWCNT1(16,adr,val);
@@ -2959,30 +2926,16 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
 				return;
 			}
 
-			//case REG_DISPA_BG0HOFS:
-			//	GPU_setBGxHOFS(0, MainScreen.gpu, val&0xFFFF);
-			//	GPU_setBGxVOFS(0, MainScreen.gpu, (val>>16));
-			//	break;
-
 			case REG_DISPA_BLDCNT:
 			{
 				GPU_setBLDCNT   (MainScreen.gpu,val&0xffff);
-				MainScreen.gpu->setBLDALPHA(val>>16);
 				break;
 			}
 			case REG_DISPB_BLDCNT:
 			{
 				GPU_setBLDCNT   (SubScreen.gpu,val&0xffff);
-				SubScreen.gpu->setBLDALPHA(val>>16);
 				break;
 			}
-
-			case REG_DISPA_BLDY:
-				GPU_setBLDY_EVY(MainScreen.gpu,val&0xFFFF) ; 	 
-				break ; 	 
-			case REG_DISPB_BLDY: 	 
-				GPU_setBLDY_EVY(SubScreen.gpu,val&0xFFFF);
-				break;
 
 			case REG_DISPA_DISPCNT :
 				T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0, val);

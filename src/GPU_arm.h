@@ -154,6 +154,46 @@ struct window_rects_t
    };
 };
 
+union blend_control_t
+{
+   u16 value;
+
+   struct
+   {
+      unsigned first_target_mask    : 6;
+      unsigned effect               : 2;
+      unsigned second_target_mask   : 6;
+      unsigned                      : 2;
+   } __attribute__((packed));
+};
+
+union blend_alpha_t
+{
+   u16 value;
+
+   struct
+   {
+      unsigned first_target_factor  : 4;
+      unsigned first_target_max     : 1;
+      unsigned                      : 3;
+      unsigned second_target_factor : 4;
+      unsigned second_target_max    : 1;
+      unsigned                      : 3;
+   } __attribute__((packed));
+};
+
+union brightness_t
+{
+   u16 value;
+
+   struct
+   {
+      unsigned factor               : 4;
+      unsigned max                  : 1;
+      unsigned                      : 11;
+   } __attribute__((packed));
+};
+
 union master_bright_t
 {
    u16 value;
@@ -172,24 +212,6 @@ enum BlendFunc
 {
 	NoBlend, Blend, Increase, Decrease
 };
-
-
-/*******************************************************************************
-    this structure is for miscellanous settings
-    //TODO: needs further description
-*******************************************************************************/
-
-typedef struct {
-    u16 unused1;
-    u16 unused2;//BLDCNT;
-    u16 unused3;//BLDALPHA;
-    u16 unused4;//BLDY;
-    u16 unused5;
-    u16 unused6;
-    u16 unused7;
-    u16 unused8;
-    u16 unused9;
-} MISCCNT;
 
 
 /*******************************************************************************
@@ -262,7 +284,11 @@ struct REG_DISPx {
     window_rects_t            window_rects;           // 0x0400x040
     u8                        window_control[4];      // 0x0400x048
     u16                       mosaic_size;            // 0x0400x04C
-    MISCCNT                   dispx_MISC;             // 0x0400x04E
+    u16                       unused;                 // 0x0400x04E
+    blend_control_t           blend_control;          // 0x0400x050
+    blend_alpha_t             blend_alpha;            // 0x0400x052
+    brightness_t              brightness;             // 0x0400x054
+    u16                       unused2[5];             // 0x0400x056
     DISP3DCNT                 dispA_DISP3DCNT;        // 0x04000060
     u32                       dispA_DISPCAPCNT;       // 0x04000064
     u32                       dispA_DISPMMEMFIFO;     // 0x04000068
@@ -524,6 +550,8 @@ struct GPU
 
       background& get_current_background() { return backgrounds[currBgNum]; }
       display_control_t get_display_control() const { return dispx_st->display_control; }
+      blend_alpha_t get_blend_alpha() const { return dispx_st->blend_alpha; }
+      brightness_t get_brightness() const { return dispx_st->brightness; }
 
    public:
       background backgrounds[4];
@@ -554,9 +582,6 @@ struct GPU
 	u8 WINOBJ_ENABLED;
 
 	u16 BLDCNT;
-	u8	BLDALPHA_EVA;
-	u8	BLDALPHA_EVB;
-	u8	BLDY_EVY;
 	u16 *currentFadeInColors, *currentFadeOutColors;
 	bool blend2[8];
 
@@ -598,32 +623,8 @@ struct GPU
 		u32 x, y;
 	} affineInfo[2];
 
-	void setBLDALPHA(u16 val)
-	{
-		BLDALPHA_EVA = (val&0x1f) > 16 ? 16 : (val&0x1f); 
-		BLDALPHA_EVB = ((val>>8)&0x1f) > 16 ? 16 : ((val>>8)&0x1f);
-		updateBLDALPHA();
-	}
-
-	void setBLDALPHA_EVA(u8 val)
-	{
-		BLDALPHA_EVA = (val&0x1f) > 16 ? 16 : (val&0x1f);
-		updateBLDALPHA();
-	}
-	
-	void setBLDALPHA_EVB(u8 val)
-	{
-		BLDALPHA_EVB = (val&0x1f) > 16 ? 16 : (val&0x1f);
-		updateBLDALPHA();
-	}
-
 	typedef u8 TBlendTable[32][32];
 	TBlendTable *blendTable;
-
-	void updateBLDALPHA()
-	{
-		blendTable = (TBlendTable*)&gpuBlendTable555[BLDALPHA_EVA][BLDALPHA_EVB][0][0];
-	}
 };
 
 CACHE_ALIGN extern u8 GPU_screen[4*256*192];
@@ -647,23 +648,14 @@ void Screen_DeInit(void);
 
 extern MMU_struct MMU;
 
-void GPU_setBLDCNT(GPU *gpu, u16 v) ;
-void GPU_setBLDY(GPU *gpu, u16 v) ;
-
-int GPU_ChangeGraphicsCore(int coreid);
-
 void GPU_set_DISPCAPCNT(u32 val) ;
 void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip = false) ;
 
 // Blending
 void SetupFinalPixelBlitter (GPU *gpu);
-#define GPU_setBLDCNT_LOW(gpu, val) {gpu->BLDCNT = (gpu->BLDCNT&0xFF00) | (val); SetupFinalPixelBlitter (gpu);}
+#define GPU_setBLDCNT_LOW(gpu, val)  {gpu->BLDCNT = (gpu->BLDCNT&0xFF00) | (val); SetupFinalPixelBlitter (gpu);}
 #define GPU_setBLDCNT_HIGH(gpu, val) {gpu->BLDCNT = (gpu->BLDCNT&0xFF) | (val<<8); SetupFinalPixelBlitter (gpu);}
-#define GPU_setBLDCNT(gpu, val) {gpu->BLDCNT = (val); SetupFinalPixelBlitter (gpu);}
-
-
-
-#define GPU_setBLDY_EVY(gpu, val) {gpu->BLDY_EVY = ((val)&0x1f) > 16 ? 16 : ((val)&0x1f);}
+#define GPU_setBLDCNT(gpu, val)      {gpu->BLDCNT = (val); SetupFinalPixelBlitter (gpu);}
 
 #endif
 

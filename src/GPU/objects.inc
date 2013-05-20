@@ -146,6 +146,8 @@ INLINE void render_sprite_Win (GPU* gpu, u16 l, u32 srcadr,
 	u16 x1;
 	u8* src = (u8 *)MMU_gpu_map(srcadr);
 
+   // TODO: Don't draw if obj window is disabled!
+
    const u8 window_control = gpu->get_window_control(3);
 
 	if (col256) {
