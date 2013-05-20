@@ -582,7 +582,7 @@ static void GPU_RenderLine_layer(NDS_Screen * screen, u16 l)
 	const display_control_t display_control = gpu->get_display_control();
 
    blend_alpha_t alpha = gpu->get_blend_alpha();
-   gpu->blendTable = (GPU::TBlendTable*)&gpuBlendTable555[alpha.first_target_factor][alpha.second_target_factor];
+   gpu->blendTable = (GPU::TBlendTable*)&gpuBlendTable555[alpha.get_first_target_factor()][alpha.get_second_target_factor()];
 
    brightness_t brightness = gpu->get_brightness();
 	gpu->currentFadeInColors = &fadeInColors[brightness.max ? 16 : brightness.factor][0];
@@ -922,7 +922,7 @@ FORCEINLINE void GPU::calculate_windows()
 		const u32 startY = dispx_st->window_rects.win_1_y1;
 		const u32 endY   = dispx_st->window_rects.win_1_y2;
 
-      if ((startY <= endY && (y >= startY && y < endY)) ||
+      if ((startY <= endY && (y >= startY && y <= endY)) ||
           (startY >  endY && (y <= startY || y > endY)))
       {
          const u32 startX = dispx_st->window_rects.win_1_x1;
@@ -945,7 +945,7 @@ FORCEINLINE void GPU::calculate_windows()
 		const u32 startY = dispx_st->window_rects.win_0_y1;
 		const u32 endY   = dispx_st->window_rects.win_0_y2;
 
-      if ((startY <= endY && (y >= startY && y < endY)) ||
+      if ((startY <= endY && (y >= startY && y <= endY)) ||
           (startY >  endY && (y <= startY || y > endY)))
       {
          const u32 startX = dispx_st->window_rects.win_0_x1;

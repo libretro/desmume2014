@@ -171,6 +171,9 @@ union blend_alpha_t
 {
    u16 value;
 
+   u32 get_first_target_factor()  { return first_target_max  ? 16 : first_target_factor;  }
+   u32 get_second_target_factor() { return second_target_max ? 16 : second_target_factor; }
+
    struct
    {
       unsigned first_target_factor  : 4;
