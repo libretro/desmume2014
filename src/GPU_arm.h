@@ -555,19 +555,19 @@ struct GPU
 
    public: // Pixel rendering
       template<BlendFunc FUNC, bool WINDOW>
-      FASTCALL void master_set_3d_color(int dstX, int srcX);
-      FASTCALL void set_3d_color(int dstX, int srcX);
+      FORCEINLINE FASTCALL void master_set_3d_color(int dstX, int srcX);
+      FORCEINLINE FASTCALL void set_3d_color(int dstX, int srcX);
 
       template<BlendFunc FUNC, bool WINDOW>
-      FASTCALL void master_set_bg_color(u16 color, const u32 x);
-      FASTCALL void set_bg_color(u16 color, const u32 x);
+      FORCEINLINE FASTCALL void master_set_bg_color(u16 color, const u32 x);
+      FORCEINLINE FASTCALL void set_bg_color(u16 color, const u32 x);
 
       template<BlendFunc FUNC, bool WINDOW>
-      FASTCALL void master_set_obj_color(u16 color, u8 alpha, u8 type, u16 x);
-      FASTCALL void set_obj_color(u16 color, u8 alpha, u8 type, u16 x);
+      FORCEINLINE FASTCALL void master_set_obj_color(u16 color, u8 alpha, u8 type, u16 x);
+      FORCEINLINE FASTCALL void set_obj_color(u16 color, u8 alpha, u8 type, u16 x);
 
-      void render_backdrop(u16 color);
-      void render_3d_line(u32 line);
+      FORCEINLINE FASTCALL void render_backdrop(u16 color);
+      FORCEINLINE FASTCALL void render_3d_line(u32 line);
 
       int setFinalColorBck_funcNum;
       int setFinalColor3d_funcNum;

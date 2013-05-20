@@ -439,7 +439,7 @@ FORCEINLINE FASTCALL void GPU::set_obj_color(u16 color, u8 alpha, u8 type, u16 x
 	};
 }
 
-void GPU::render_backdrop(u16 color)
+FORCEINLINE FASTCALL void GPU::render_backdrop(u16 color)
 {
 	const bool window_enabled = (WIN0_ENABLED | WIN1_ENABLED | WINOBJ_ENABLED);
 	const u32 blend_mode =  (BLDCNT >> 6) & 3;
@@ -470,7 +470,7 @@ void GPU::render_backdrop(u16 color)
 	memset(bgPixels, 5, 256);
 }
 
-void GPU::render_3d_line(u32 line)
+FORCEINLINE FASTCALL void GPU::render_3d_line(u32 line)
 {
    const u16 hofs = backgrounds[0].get_x_offset();
 
