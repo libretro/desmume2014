@@ -566,7 +566,7 @@ void GPU::oam_t::rebuild()
    {
       const size& sprite_size = sprite->get_size();
 
-      if (((sprite->Y < 192) || ((sprite->Y + sprite_size.y) < 256)) && ((sprite->X + sprite_size.x) > 0))
+      if (((sprite->Y < 192) || ((sprite->Y + sprite_size.y) >= 256)) && ((sprite->X + sprite_size.x) > 0))
       {
          visible_list[visible_count ++] = i;
       }
