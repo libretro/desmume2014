@@ -29,16 +29,8 @@
 #include "MMU.h"
 #include <iosfwd>
 
-//#undef FORCEINLINE
-//#define FORCEINLINE
-
 void gpu_savestate(EMUFILE* os);
 bool gpu_loadstate(EMUFILE* is, int size);
-
-/*******************************************************************************
-    this structure is for display control,
-    it holds flags for general display
-*******************************************************************************/
 
 union display_control_t
 {
@@ -299,14 +291,8 @@ struct REG_DISPx {
 } __attribute__((packed)) ;
 
 
-typedef BOOL (*fun_gl_Begin) (int screen);
-typedef void (*fun_gl_End) (int screen);
-// the GUI should use this function prior to all gl calls
-// if call to beg succeeds opengl draw
-void register_gl_fun(fun_gl_Begin beg,fun_gl_End end);
-
 #define GPU_MAIN	0
-#define GPU_SUB		1
+#define GPU_SUB	1
 
 /* human readable bitmask names */
 #define ADDRESS_STEP_512B	   0x00200
@@ -407,8 +393,6 @@ typedef struct
 #define MMU_AOBJ	0x06400000
 #define MMU_BOBJ	0x06600000
 #define MMU_LCDC	0x06800000
-
-extern CACHE_ALIGN u8 gpuBlendTable555[17][17][32][32];
 
 struct PIXEL
 {
@@ -513,7 +497,9 @@ struct GPU
       public: // Inlines
 
          // The CHECK template argument enables or disables bounds checking
-         // The priority field of the PIXEL value is set to 4 + priority, for performance reasons
+         // The priority field of the PIXEL value is set to 4 + priority, for performance reasons:
+         //     The line is cleared by memset'ing it to 0, going back through to make the priority value
+         //     higher seemed like a waste of time.
          template <bool CHECK>
          FORCEINLINE void set_pixel(s32 x, u16 color, bool opaque, unsigned alpha, unsigned priority, unsigned type)
          {
@@ -582,6 +568,8 @@ struct GPU
       FORCEINLINE FASTCALL void render_backdrop(u16 color);
       FORCEINLINE FASTCALL void render_3d_line(u32 line);
 
+   	FORCEINLINE FASTCALL u16 blend(u16 colA, u16 colB);
+
       int setFinalColorBck_funcNum;
       int setFinalColor3d_funcNum;
       int setFinalColorSpr_funcNum;
@@ -598,8 +586,6 @@ struct GPU
 	// some structs are becoming redundant
 	// some functions too (no need to recopy some vars as it is done by MMU)
 	REG_DISPx * dispx_st;
-
-	void modeRender(int layer);
 
 	DISPCAPCNT dispCapCnt;
 	BOOL LayersEnable[5];
@@ -628,8 +614,6 @@ struct GPU
 	u8* currDst;
 
 	u8* _3dColorLine;
-
-	u16 blend(u16 colA, u16 colB);
 
 	void setAffineStart(int layer, int xy, u32 val);
 	void setAffineStartWord(int layer, int xy, u16 val, int word);

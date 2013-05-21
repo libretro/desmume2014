@@ -38,25 +38,22 @@
 #include "../libretro/performance.h"
 
 #ifdef FASTBUILD
-	#undef FORCEINLINE
-	#define FORCEINLINE
+# undef FORCEINLINE
+# define FORCEINLINE
 #endif
 
 #define SCREEN_WIDTH 256
 
-extern BOOL click;
 NDS_Screen MainScreen;
 NDS_Screen SubScreen;
-
-//#define DEBUG_TRI
 
 CACHE_ALIGN u8 GPU_screen[4*256*192];
 
 static CACHE_ALIGN u16 fadeInColors[17][0x8000];
-CACHE_ALIGN u16 fadeOutColors[17][0x8000];
+static CACHE_ALIGN u16 fadeOutColors[17][0x8000];
+static CACHE_ALIGN u8  gpuBlendTable555[17][17][32][32];
+static CACHE_ALIGN GPU GPU_main, GPU_sub;
 
-//this should be public, because it gets used somewhere else
-CACHE_ALIGN u8 gpuBlendTable555[17][17][32][32];
 
 
 /*****************************************************************************/
@@ -84,41 +81,47 @@ static void GPU_InitFadeColors()
 
 	*/
 
-	for(int i = 0; i <= 16; i++)
-	{
-		for(int j = 0x8000; j < 0x10000; j++)
-		{
-			COLOR cur;
+   // Don't run this more than once
+   static bool inited = false;
 
-			cur.val = j;
-			cur.bits.red = (cur.bits.red + ((31 - cur.bits.red) * i / 16));
-			cur.bits.green = (cur.bits.green + ((31 - cur.bits.green) * i / 16));
-			cur.bits.blue = (cur.bits.blue + ((31 - cur.bits.blue) * i / 16));
-			cur.bits.alpha = 0;
-			fadeInColors[i][j & 0x7FFF] = cur.val;
+   if (!inited)
+   {
+      inited = true;
 
-			cur.val = j;
-			cur.bits.red = (cur.bits.red - (cur.bits.red * i / 16));
-			cur.bits.green = (cur.bits.green - (cur.bits.green * i / 16));
-			cur.bits.blue = (cur.bits.blue - (cur.bits.blue * i / 16));
-			cur.bits.alpha = 0;
-			fadeOutColors[i][j & 0x7FFF] = cur.val;
-		}
-	}
+      for(int i = 0; i <= 16; i++)
+      {
+         for(int j = 0x8000; j < 0x10000; j++)
+         {
+            COLOR cur;
+
+            cur.val = j;
+            cur.bits.red = (cur.bits.red + ((31 - cur.bits.red) * i / 16));
+            cur.bits.green = (cur.bits.green + ((31 - cur.bits.green) * i / 16));
+            cur.bits.blue = (cur.bits.blue + ((31 - cur.bits.blue) * i / 16));
+            cur.bits.alpha = 0;
+            fadeInColors[i][j & 0x7FFF] = cur.val;
+
+            cur.val = j;
+            cur.bits.red = (cur.bits.red - (cur.bits.red * i / 16));
+            cur.bits.green = (cur.bits.green - (cur.bits.green * i / 16));
+            cur.bits.blue = (cur.bits.blue - (cur.bits.blue * i / 16));
+            cur.bits.alpha = 0;
+            fadeOutColors[i][j & 0x7FFF] = cur.val;
+         }
+      }
 
 
-	for(int c0=0;c0<=31;c0++) 
-		for(int c1=0;c1<=31;c1++) 
-			for(int eva=0;eva<=16;eva++)
-				for(int evb=0;evb<=16;evb++)
-				{
-					int blend = ((c0 * eva) + (c1 * evb) ) / 16;
-					int final = std::min<int>(31,blend);
-					gpuBlendTable555[eva][evb][c0][c1] = final;
-				}
+      for(int c0=0;c0<=31;c0++)
+         for(int c1=0;c1<=31;c1++) 
+            for(int eva=0;eva<=16;eva++)
+               for(int evb=0;evb<=16;evb++)
+               {
+                  int blend = ((c0 * eva) + (c1 * evb) ) / 16;
+                  int final = std::min<int>(31,blend);
+                  gpuBlendTable555[eva][evb][c0][c1] = final;
+               }
+   }
 }
-
-static CACHE_ALIGN GPU GPU_main, GPU_sub;
 
 GPU * GPU_Init(u8 l)
 {
@@ -183,7 +186,7 @@ static FORCEINLINE u16 _blend(u16 colA, u16 colB, GPU::TBlendTable* blendTable)
 	return r|(g<<5)|(b<<10);
 }
 
-FORCEINLINE u16 GPU::blend(u16 colA, u16 colB)
+FORCEINLINE FASTCALL u16 GPU::blend(u16 colA, u16 colB)
 {
 	return _blend(colA, colB, blendTable);
 }
@@ -191,12 +194,11 @@ FORCEINLINE u16 GPU::blend(u16 colA, u16 colB)
 void SetupFinalPixelBlitter (GPU *gpu)
 {
 	u8 windowUsed = (gpu->WIN0_ENABLED | gpu->WIN1_ENABLED | gpu->WINOBJ_ENABLED);
-	u8 blendMode  = (gpu->BLDCNT >> 6)&3;
+	u8 blendMode  = (gpu->BLDCNT >> 6) & 3;
 
 	gpu->setFinalColorSpr_funcNum = windowUsed * 4 + blendMode;
 	gpu->setFinalColorBck_funcNum = windowUsed * 4 + blendMode;
 	gpu->setFinalColor3d_funcNum  = windowUsed * 4 + blendMode;
-	
 }
     
 //Sets up LCD control variables for Display Engines A and B for quick reading
@@ -206,7 +208,7 @@ void GPU::refresh_display_control()
 
 	WIN0_ENABLED	  = display_control.Win0_Enable;
 	WIN1_ENABLED	  = display_control.Win1_Enable;
-	WINOBJ_ENABLED = display_control.WinOBJ_Enable;
+	WINOBJ_ENABLED   = display_control.WinOBJ_Enable;
 
 	SetupFinalPixelBlitter(this);
 
@@ -247,10 +249,66 @@ void GPU::resort_backgrounds()
 	}
 }
 
-
 /*****************************************************************************/
 //		ROUTINES FOR INSIDE / OUTSIDE WINDOW CHECKS
 /*****************************************************************************/
+FORCEINLINE void GPU::calculate_windows()
+{
+	u8 y = currLine;
+
+   // When this is called window_map should have all object windows marked as 3 and every
+   // other value set to 0
+
+   // Window 1 then Window 0
+   if (WIN1_ENABLED)
+   {
+		const u32 startY = dispx_st->window_rects.win_1_y1;
+		const u32 endY   = dispx_st->window_rects.win_1_y2;
+
+      if ((startY <= endY && (y >= startY && y <= endY)) ||
+          (startY >  endY && (y <= startY || y > endY)))
+      {
+         const u32 startX = dispx_st->window_rects.win_1_x1;
+         const u32 endX   = dispx_st->window_rects.win_1_x2;
+
+         if (startX <= endX)
+         {
+            memset(&window_map[startX], get_window_control(1), endX - startX);
+         }
+         else
+         {
+            memset(&window_map[0], get_window_control(1), endX);
+            memset(&window_map[startX], get_window_control(1), 256 - startX);
+         }
+      }
+	}
+
+   if (WIN0_ENABLED)
+   {
+		const u32 startY = dispx_st->window_rects.win_0_y1;
+		const u32 endY   = dispx_st->window_rects.win_0_y2;
+
+      if ((startY <= endY && (y >= startY && y <= endY)) ||
+          (startY >  endY && (y <= startY || y > endY)))
+      {
+         const u32 startX = dispx_st->window_rects.win_0_x1;
+         const u32 endX   = dispx_st->window_rects.win_0_x2;
+
+         if (startX <= endX)
+         {
+            memset(&window_map[startX], get_window_control(0), endX - startX);
+         }
+         else
+         {
+            memset(&window_map[0], get_window_control(0), endX);
+            memset(&window_map[startX], get_window_control(0), 256 - startX);
+         }
+      }
+	}
+
+	return;
+}
+
 FORCEINLINE bool GPU::check_window(u32 x, bool &effect) const
 {
    effect = (window_map[x] >> 5) & 1;
@@ -862,7 +920,7 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
 {
    // NOTE: This is a good candidate for vectorization
 
-   const master_bright_t& master_bright = screen->gpu->dispx_st->master_bright;
+   const master_bright_t master_bright = screen->gpu->dispx_st->master_bright;
 	u16* dst = (u16*)(GPU_screen + (screen->offset + l) * 512);
 
    // It's turned off, nothing to do
@@ -882,9 +940,6 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
    // Needs lookup
    else
    {
-      RARCH_PERFORMANCE_INIT(mbP);
-      RARCH_PERFORMANCE_START(mbP);
-
 #if 0
       if (master_bright.mode == 2)
       {
@@ -904,67 +959,9 @@ static INLINE void GPU_RenderLine_MasterBrightness(NDS_Screen * screen, u16 l)
             dst[i] = fade_table[dst[i] & 0x7FFF];
          }
       }
-
-      RARCH_PERFORMANCE_STOP(mbP);
    }
 }
 
-FORCEINLINE void GPU::calculate_windows()
-{
-	u8 y = currLine;
-
-   // When this is called window_map should have all object windows marked as 3 and every
-   // other value set to 0
-
-   // Window 1 then Window 0
-   if (WIN1_ENABLED)
-   {
-		const u32 startY = dispx_st->window_rects.win_1_y1;
-		const u32 endY   = dispx_st->window_rects.win_1_y2;
-
-      if ((startY <= endY && (y >= startY && y <= endY)) ||
-          (startY >  endY && (y <= startY || y > endY)))
-      {
-         const u32 startX = dispx_st->window_rects.win_1_x1;
-         const u32 endX   = dispx_st->window_rects.win_1_x2;
-
-         if (startX <= endX)
-         {
-            memset(&window_map[startX], get_window_control(1), endX - startX);
-         }
-         else
-         {
-            memset(&window_map[0], get_window_control(1), endX);
-            memset(&window_map[startX], get_window_control(1), 256 - startX);
-         }
-      }
-	}
-
-   if (WIN0_ENABLED)
-   {
-		const u32 startY = dispx_st->window_rects.win_0_y1;
-		const u32 endY   = dispx_st->window_rects.win_0_y2;
-
-      if ((startY <= endY && (y >= startY && y <= endY)) ||
-          (startY >  endY && (y <= startY || y > endY)))
-      {
-         const u32 startX = dispx_st->window_rects.win_0_x1;
-         const u32 endX   = dispx_st->window_rects.win_0_x2;
-
-         if (startX <= endX)
-         {
-            memset(&window_map[startX], get_window_control(0), endX - startX);
-         }
-         else
-         {
-            memset(&window_map[0], get_window_control(0), endX);
-            memset(&window_map[startX], get_window_control(0), 256 - startX);
-         }
-      }
-	}
-
-	return;
-}
 
 void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 {
@@ -1007,7 +1004,7 @@ void GPU_RenderLine(NDS_Screen * screen, u16 l, bool skip)
 	}
 
 	// skip some work if master brightness makes the screen completely white or completely black
-   const master_bright_t& master_bright = gpu->dispx_st->master_bright;
+   const master_bright_t master_bright = gpu->dispx_st->master_bright;
 	if(master_bright.max && (master_bright.mode == 1 || master_bright.mode == 2))
 	{
 		// except if it could cause any side effects (for example if we're capturing), then don't skip anything
