@@ -2663,20 +2663,6 @@ void FASTCALL _MMU_ARM9_write16(u32 adr, u16 val)
                MainScreen.gpu->refresh_display_control();
 				}
 				return;
-			case REG_DISPA_DISPCAPCNT :
-				{
-					u32 v = (T1ReadLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x64) & 0xFFFF0000) | val; 
-					GPU_set_DISPCAPCNT(v);
-					T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x64, v);
-					return;
-				}
-			case REG_DISPA_DISPCAPCNT + 2:
-				{
-					u32 v = (T1ReadLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x64) & 0xFFFF) | ((u32)val << 16); 
-					GPU_set_DISPCAPCNT(v);
-					T1WriteLong(MMU.MMU_MEM[ARMCPU_ARM9][0x40], 0x64, v);
-					return;
-				}
 
 			case REG_DISPB_DISPCNT :
 				{
@@ -3054,11 +3040,6 @@ void FASTCALL _MMU_ARM9_write32(u32 adr, u32 val)
            
 			case REG_GCROMCTRL :
 				MMU_writeToGCControl<ARMCPU_ARM9>(val);
-				return;
-			case REG_DISPA_DISPCAPCNT :
-				//INFO("MMU write32: REG_DISPA_DISPCAPCNT 0x%X\n", val);
-				GPU_set_DISPCAPCNT(val);
-				T1WriteLong(MMU.ARM9_REG, 0x64, val);
 				return;
 				
 			case REG_DISPA_BG0CNT :

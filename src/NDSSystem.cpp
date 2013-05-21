@@ -972,7 +972,7 @@ public:
 	}
 	void Advance()
 	{
-		bool capturing = (MainScreen.gpu->dispCapCnt.enabled || (MainScreen.gpu->dispCapCnt.val & 0x80000000));
+		bool capturing = (MainScreen.gpu->get_capture_control().enabled);
 
 		if(capturing && consecutiveNonCaptures > 30)
 		{

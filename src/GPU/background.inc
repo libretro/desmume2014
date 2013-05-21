@@ -1,21 +1,21 @@
 /*
-	Copyright (C) 2006 yopyop
-	Copyright (C) 2006-2007 Theo Berkau
-	Copyright (C) 2007 shash
-	Copyright (C) 2009-2012 DeSmuME team
+   Copyright (C) 2006 yopyop
+   Copyright (C) 2006-2007 Theo Berkau
+   Copyright (C) 2007 shash
+   Copyright (C) 2009-2012 DeSmuME team
 
-	This file is free software: you can redistribute it and/or modify
-	it under the terms of the GNU General Public License as published by
-	the Free Software Foundation, either version 2 of the License, or
-	(at your option) any later version.
+   This file is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 2 of the License, or
+   (at your option) any later version.
 
-	This file is distributed in the hope that it will be useful,
-	but WITHOUT ANY WARRANTY; without even the implied warranty of
-	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-	GNU General Public License for more details.
+   This file is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
-	You should have received a copy of the GNU General Public License
-	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 union tile_entry_t
@@ -63,19 +63,19 @@ const GPU::background::bg_type GPU::background::background_types[8][4] =
 
 static const u32 bg_size_table[8][4][2] =
 {
-	{{0,   0   }, {0,    0  }, {0,   0  }, {0,    0   }}, //Invalid
+   {{0,   0   }, {0,    0  }, {0,   0  }, {0,    0   }}, //Invalid
    {{256, 256 }, {512,  256}, {256, 512}, {512,  512 }}, //text
    {{128, 128 }, {256,  256}, {512, 512}, {1024, 1024}}, //affine
    {{512, 1024}, {1024, 512}, {0,   0  }, {0,    0   }}, //large 8bpp
-	{{0,   0   }, {0,    0  }, {0,   0  }, {0,    0   }}, //affine ext (to be elaborated with another value)
-	{{128, 128 }, {256,  256}, {512, 512}, {1024, 1024}}, //affine ext 256x16
-	{{128, 128 }, {256,  256}, {512, 256}, {512,  512 }}, //affine ext 256x1
-	{{128, 128 }, {256,  256}, {512, 256}, {512,  512 }}, //affine ext direct
+   {{0,   0   }, {0,    0  }, {0,   0  }, {0,    0   }}, //affine ext (to be elaborated with another value)
+   {{128, 128 }, {256,  256}, {512, 512}, {1024, 1024}}, //affine ext 256x16
+   {{128, 128 }, {256,  256}, {512, 256}, {512,  512 }}, //affine ext 256x1
+   {{128, 128 }, {256,  256}, {512, 256}, {512,  512 }}, //affine ext direct
 };
 
 
 /*****************************************************************************/
-//			BACKGROUND RENDERING -TILE EXPANSION-
+//         BACKGROUND RENDERING -TILE EXPANSION-
 /*****************************************************************************/
 struct TILE
 {
@@ -147,7 +147,7 @@ static FORCEINLINE const PIXEL* expand_tile(GPU* gpu, GPU::background& bg, tile_
 }
 
 /*****************************************************************************/
-//			BACKGROUND RENDERING -TEXT-
+//         BACKGROUND RENDERING -TEXT-
 /*****************************************************************************/
 static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
 {
@@ -156,13 +156,13 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
    tile_tag ++;
 
    GPU::background& bg       = gpu->get_current_background();
-	const background_control_t bg_control = bg.get_control();
+   const background_control_t bg_control = bg.get_control();
 
    // Get backgroud size info
-	const u16 bg_width        = 32 + ((bg_control.ScreenSize & 1) ? 32 : 0);
-	const u16 bg_height       = 32 + ((bg_control.ScreenSize & 2) ? 32 : 0);
-	const u16 bg_width_mask   = (bg_width - 1);
-	const u16 bg_height_mask  = (bg_height - 1);
+   const u16 bg_width        = 32 + ((bg_control.ScreenSize & 1) ? 32 : 0);
+   const u16 bg_height       = 32 + ((bg_control.ScreenSize & 2) ? 32 : 0);
+   const u16 bg_width_mask   = (bg_width - 1);
+   const u16 bg_height_mask  = (bg_height - 1);
 
    // Get the base Y location of the tile map
    const u32 y_tile          = (line / 8) & bg_height_mask;
@@ -187,7 +187,7 @@ static void renderline_textBG(GPU* gpu, u32 start_x, u32 line, u32 width)
 }
 
 /*****************************************************************************/
-//			BACKGROUND RENDERING -ROTOSCALE- PIXEL GETTERS
+//         BACKGROUND RENDERING -ROTOSCALE- PIXEL GETTERS
 /*****************************************************************************/
 
 //        bg : Background structure
@@ -198,27 +198,27 @@ typedef PIXEL (*mode2_get_pixel_fn)(GPU::background& bg, s32 x_pixel, s32 y_pixe
 
 FORCEINLINE PIXEL get_pixel_tiled_8bit_entry(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	const u32 tileindex = *(u8*)MMU_gpu_map(bg.tile_map_ram + ((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)));
-	const u32 x = (x_pixel & 7);
-	const u32 y = (y_pixel & 7);
+   const u32 tileindex = *(u8*)MMU_gpu_map(bg.tile_map_ram + ((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)));
+   const u32 x = (x_pixel & 7);
+   const u32 y = (y_pixel & 7);
 
-	const u32 palette_entry = *(u8*)MMU_gpu_map(bg.tile_pixel_ram + ((tileindex * 64) + (y * 8) + x));
-	const u32 color = palette_entry ? T1ReadWord(palette, palette_entry << 1) : 0;
+   const u32 palette_entry = *(u8*)MMU_gpu_map(bg.tile_pixel_ram + ((tileindex * 64) + (y * 8) + x));
+   const u32 color = palette_entry ? T1ReadWord(palette, palette_entry << 1) : 0;
 
    return BuildPIXEL(color, palette_entry);
 }
 
 template<bool extPal> FORCEINLINE PIXEL get_pixel_tiled_16bit_entry(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	void* const map_addr = MMU_gpu_map(bg.tile_map_ram + (((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)) * 2));
-	
-	tile_entry_t tileentry = T1ReadWord(map_addr, 0);
+   void* const map_addr = MMU_gpu_map(bg.tile_map_ram + (((x_pixel / 8) + (y_pixel / 8) * (bg.width / 8)) * 2));
+   
+   tile_entry_t tileentry = T1ReadWord(map_addr, 0);
 
-	const u16 x = ((tileentry.HFlip) ? 7 - (x_pixel) : (x_pixel)) & 7;
-	const u16 y = ((tileentry.VFlip) ? 7 - (y_pixel) : (y_pixel)) & 7;
+   const u16 x = ((tileentry.HFlip) ? 7 - (x_pixel) : (x_pixel)) & 7;
+   const u16 y = ((tileentry.VFlip) ? 7 - (y_pixel) : (y_pixel)) & 7;
 
-	const u8 palette_entry = *(u8*)MMU_gpu_map(bg.tile_pixel_ram + ((tileentry.TileNum * 64) + (y * 8) + x));
-	const u16 color = palette_entry ? T1ReadWord(palette, (palette_entry + (extPal ? (tileentry.Palette * 256) : 0)) * 2) : 0;
+   const u8 palette_entry = *(u8*)MMU_gpu_map(bg.tile_pixel_ram + ((tileentry.TileNum * 64) + (y * 8) + x));
+   const u16 color = palette_entry ? T1ReadWord(palette, (palette_entry + (extPal ? (tileentry.Palette * 256) : 0)) * 2) : 0;
 
    return BuildPIXEL(color, palette_entry);
 }
@@ -226,21 +226,21 @@ template<bool extPal> FORCEINLINE PIXEL get_pixel_tiled_16bit_entry(GPU::backgro
 FORCEINLINE PIXEL get_pixel_paletted_bitmap(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
    const u32 bitmap_ram = (bg.type == GPU::background::Large8bpp) ? bg.large_bitmap_ram : bg.bitmap_ram;
-	const u32 palette_entry = *(u8*)MMU_gpu_map(bitmap_ram + (y_pixel * bg.width) + x_pixel);;
-	const u32 color = palette_entry ? T1ReadWord(palette, palette_entry << 1) : 0;
+   const u32 palette_entry = *(u8*)MMU_gpu_map(bitmap_ram + (y_pixel * bg.width) + x_pixel);;
+   const u32 color = palette_entry ? T1ReadWord(palette, palette_entry << 1) : 0;
 
    return BuildPIXEL(color, palette_entry);
 }
 
 FORCEINLINE PIXEL get_pixel_direct_bitmap(GPU::background& bg, s32 x_pixel, s32 y_pixel, u8* palette)
 {
-	const u32 color = T1ReadWord(MMU_gpu_map((bg.bitmap_ram) + ((x_pixel + y_pixel * bg.width) * 2)), 0);
+   const u32 color = T1ReadWord(MMU_gpu_map((bg.bitmap_ram) + ((x_pixel + y_pixel * bg.width) * 2)), 0);
    return BuildPIXEL(color, color & 0x8000);
 }
 
 
 /*****************************************************************************/
-//			BACKGROUND RENDERING -ROTOSCALE- NO ROTO & NO SCALE
+//         BACKGROUND RENDERING -ROTOSCALE- NO ROTO & NO SCALE
 /*****************************************************************************/
 // TODO: This urgently needs wrap and bounds support
 
@@ -318,17 +318,17 @@ static FORCEINLINE void mode2_direct_bitmap_no_rot_no_scale(GPU::background* bg)
 }
 
 /*****************************************************************************/
-//			BACKGROUND RENDERING -ROTOSCALE-
+//         BACKGROUND RENDERING -ROTOSCALE-
 /*****************************************************************************/
 
 template<mode2_get_pixel_fn get_pixel, bool WRAP>
 FORCEINLINE void rot_scale_op(GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
-	rotocoord_t x = params.X;
+   rotocoord_t x = params.X;
    rotocoord_t y = params.Y;
 
-	const s32 dx = (s32)params.PA;
-	const s32 dy = (s32)params.PC;
+   const s32 dx = (s32)params.PA;
+   const s32 dy = (s32)params.PC;
 
    // TODO: Don't check bounds every pixel, instead calculate how many pixels can be drawn or skipped before overflow or wrap   
 
@@ -347,24 +347,24 @@ FORCEINLINE void rot_scale_op(GPU::background& bg, const affine_parameters_t& pa
 template<mode2_get_pixel_fn fun>
 FORCEINLINE void apply_rot_fun(GPU::background& bg, const affine_parameters_t& params, u8 * pal)
 {
-	if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (bg, params, pal);	
-	else                                    rot_scale_op<fun,false>(bg, params, pal);	
+   if(bg.get_control().PaletteSet_Wrap)    rot_scale_op<fun,true> (bg, params, pal);   
+   else                                    rot_scale_op<fun,false>(bg, params, pal);   
 }
 
 FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
 {
    GPU::background& bg = gpu->get_current_background();
-	u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
+   u8 *pal = MMU.ARM9_VMEM + gpu->core * 0x400;
 
-	switch(bg.type)
-	{
+   switch(bg.type)
+   {
       case GPU::background::Affine:
       {
          apply_rot_fun<get_pixel_tiled_8bit_entry>(bg, params, pal);
          return;
       }
 
-   	case GPU::background::AffineExt_256x16:
+      case GPU::background::AffineExt_256x16:
       {
          if (gpu->get_display_control().ExBGxPalette_Enable)
          {
@@ -384,21 +384,21 @@ FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
       }
 
       case GPU::background::AffineExt_256x1:
-   	case GPU::background::Large8bpp:
+      case GPU::background::Large8bpp:
       {
-   		apply_rot_fun<get_pixel_paletted_bitmap>(bg, params, pal);
+         apply_rot_fun<get_pixel_paletted_bitmap>(bg, params, pal);
          return;
       }
 
       case GPU::background::AffineExt_Direct:
       {
-		   apply_rot_fun<get_pixel_direct_bitmap>(bg, params, NULL);
-		   return;
+         apply_rot_fun<get_pixel_direct_bitmap>(bg, params, NULL);
+         return;
       }
 
       default:
          return;
-	}
+   }
 }
 
 /**********************************/
@@ -408,9 +408,9 @@ FORCEINLINE void rotBG2(GPU* gpu, const affine_parameters_t& params)
 void GPU::background::refresh_control()
 {
    const u32 core = parent->core;
-	const display_control_t display_control = parent->get_display_control();
-	const background_control_t bg_control   = get_control();
-	
+   const display_control_t display_control = parent->get_display_control();
+   const background_control_t bg_control   = get_control();
+   
    parent->resort_backgrounds();
 
    const u32 memory_base   = (core == GPU_SUB) ? MMU_BBG : MMU_ABG;
@@ -419,22 +419,22 @@ void GPU::background::refresh_control()
    bitmap_ram              = memory_base;
    large_bitmap_ram        = memory_base;
 
-	tile_map_ram           += bg_control.ScreenBase_Block * ADDRESS_STEP_2KB;
-	tile_pixel_ram         += bg_control.CharacBase_Block * ADDRESS_STEP_16KB;
-	bitmap_ram             += bg_control.ScreenBase_Block * ADDRESS_STEP_16KB;
+   tile_map_ram           += bg_control.ScreenBase_Block * ADDRESS_STEP_2KB;
+   tile_pixel_ram         += bg_control.CharacBase_Block * ADDRESS_STEP_16KB;
+   bitmap_ram             += bg_control.ScreenBase_Block * ADDRESS_STEP_16KB;
 
    extended_palette_slot   = number + ((number < 2) ? bg_control.PaletteSet_Wrap * 2 : 0);
 
-	type                    = background_types[display_control.BG_Mode][number];
+   type                    = background_types[display_control.BG_Mode][number];
 
-	//clarify affine ext modes 
-	if(type == AffineExt)
-	{
+   //clarify affine ext modes 
+   if(type == AffineExt)
+   {
       static const bg_type affine_modes[4] = { AffineExt_256x16, AffineExt_256x16, AffineExt_256x1, AffineExt_Direct };
-		const u32 affine_mode = (bg_control.Palette_256 << 1) | (bg_control.CharacBase_Block & 1);
+      const u32 affine_mode = (bg_control.Palette_256 << 1) | (bg_control.CharacBase_Block & 1);
 
       type = affine_modes[affine_mode];
-	}
+   }
 
    set_size(bg_size_table[type][bg_control.ScreenSize][0], bg_size_table[type][bg_control.ScreenSize][1]);
 }
@@ -446,11 +446,11 @@ bool GPU::background::render_pixels(u32 line)
 
    if (base_type == Text)
    {
-     	renderline_textBG(parent, get_x_offset(), line + get_y_offset(), 256);
+        renderline_textBG(parent, get_x_offset(), line + get_y_offset(), 256);
    }
    else if ((base_type == Affine) || (base_type == AffineExt) || (base_type == Large8bpp))
    {
-   	affine_parameters_t& parms = get_affine_parameters();
+      affine_parameters_t& parms = get_affine_parameters();
 
       // No rotation, no scale
       if (parms.PA == 0x100 && parms.PC == 0)
@@ -461,7 +461,7 @@ bool GPU::background::render_pixels(u32 line)
             case AffineExt_256x16:  mode2_tiled_no_rot_no_scale<u16>(this, get_extended_palette()); break;
             case AffineExt_Direct:  mode2_direct_bitmap_no_rot_no_scale(this); break;
             case AffineExt_256x1:   mode2_paletted_bitmap_no_rot_no_scale(this); break;
-   	      case Large8bpp:         mode2_paletted_bitmap_no_rot_no_scale(this); break;
+            case Large8bpp:         mode2_paletted_bitmap_no_rot_no_scale(this); break;
             default:                abort();
          }
       }
@@ -474,7 +474,7 @@ bool GPU::background::render_pixels(u32 line)
             case AffineExt_256x16:  mode2_tiled_no_rot<u16>(this, get_extended_palette()); break;
             case AffineExt_Direct:  mode2_direct_bitmap_no_rot(this); break;
             case AffineExt_256x1:   mode2_paletted_bitmap_no_rot(this); break;
-   	      case Large8bpp:         mode2_paletted_bitmap_no_rot(this); break;
+            case Large8bpp:         mode2_paletted_bitmap_no_rot(this); break;
             default:                abort();
          }
       }*/
@@ -483,9 +483,9 @@ bool GPU::background::render_pixels(u32 line)
          rotBG2(parent, parms);
       }
 
-   	parms.X += parms.PB;
-	   parms.Y += parms.PD;
-	}
+      parms.X += parms.PB;
+      parms.Y += parms.PD;
+   }
    else if (type == Invalid)
    {
       PROGINFO("Attempting to render an invalid BG type\n");
