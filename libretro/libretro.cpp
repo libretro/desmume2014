@@ -39,12 +39,6 @@ namespace /* INPUT */
         return std::max(MIN, std::min(MAX, aValue));
     }
 
-    template<int32_t MIN, int32_t MAX>
-    static int32_t ClampedMove(int32_t aTarget, int32_t aValue)
-    {
-        return Saturate<MIN, MAX>(aTarget + aValue);
-    }
-
     static int32_t TouchX;
     static int32_t TouchY;
 
@@ -79,6 +73,8 @@ namespace /* VIDEO */
 {
     static uint16_t screenSwap[256 * 192 * 2];
     static retro_pixel_format colorMode;
+    static uint32_t frameSkip;
+    static uint32_t frameIndex;
 
     struct LayoutData
     {
@@ -155,6 +151,11 @@ namespace /* VIDEO */
     void (*SwapScreens)();
 }
 
+namespace
+{
+    uint32_t firmwareLanguage;
+}
+
 static void CheckSettings()
 {
     retro_variable layout = { "desmume_screens_layout", 0 };
@@ -164,6 +165,33 @@ static void CheckSettings()
     retro_variable pointer = { "desmume_pointer_type", 0 };
     environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &pointer);
     absolutePointer = pointer.value && (strcmp(pointer.value, "absolute") == 0);
+
+    retro_variable frameskip = { "desmume_frameskip", 0 };
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &frameskip);
+    frameSkip = frameskip.value ? strtol(frameskip.value, 0, 10) : 0;
+
+    retro_variable language = { "desmume_firmware_language", 0 };
+    environ_cb(RETRO_ENVIRONMENT_GET_VARIABLE, &language);
+    language.value = language.value ? language.value : "English";
+
+    static const struct { const char* name; uint32_t id; } languages[6] = 
+    {
+        { "Japanese", 0 },
+        { "English", 1 },
+        { "French", 2 },
+        { "German", 3 },
+        { "Italian", 4 },
+        { "Spanish", 5 }
+    };
+
+    for (int i = 0; i != 6; i ++)
+    {
+        if (strcmp(languages[i].name, language.value) == 0)
+        {
+            firmwareLanguage = languages[i].id;
+            break;
+        }
+    }
 }
 
 void frontend_process_samples(u32 frames, const s16* data)
@@ -198,6 +226,8 @@ void retro_set_environment(retro_environment_t cb)
    {
       { "desmume_screens_layout", "Screen Layout; main_top_ext_bottom|main_bottom_ext_top|main_left_ext_right|main_right_ext_left" },
       { "desmume_pointer_type", "Pointer Mode; relative|absolute" },
+      { "desmume_firmware_language", "Language; English|Japanese|French|German|Italian|Spanish" },
+      { "desmume_frameskip", "Frame Skip; 0|1|2|3|4|5|6|7|8|9" },
       { 0, 0 }
    };
 
@@ -238,6 +268,7 @@ void retro_init (void)
     // Init DeSmuME
     struct NDS_fw_config_data fw_config;
     NDS_FillDefaultFirmwareConfigData(&fw_config);
+    fw_config.language = firmwareLanguage;
 
     CommonSettings.num_cores = 2;
     CommonSettings.use_jit = true;
@@ -280,8 +311,8 @@ void retro_run (void)
     const int16_t analogY = input_cb(0, RETRO_DEVICE_ANALOG, RETRO_DEVICE_INDEX_ANALOG_LEFT, RETRO_DEVICE_ID_ANALOG_Y) / 2048;
     haveTouch = haveTouch || input_cb(0, RETRO_DEVICE_JOYPAD, 0, RETRO_DEVICE_ID_JOYPAD_R2);    
 
-    TouchX = ClampedMove<0, 255>(TouchX, analogX);
-    TouchY = ClampedMove<0, 191>(TouchY, analogY);
+    TouchX = Saturate<0, 255>(TouchX + analogX);
+    TouchY = Saturate<0, 191>(TouchY + analogY);
     FramesWithPointer = (analogX || analogY) ? FramesWithPointerBase : FramesWithPointer;
 
     // TOUCH: Mouse
@@ -291,8 +322,8 @@ void retro_run (void)
         const int16_t mouseY = input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_Y);
         haveTouch = haveTouch || input_cb(1, RETRO_DEVICE_MOUSE, 0, RETRO_DEVICE_ID_MOUSE_LEFT);
     
-        TouchX = ClampedMove<0, 255>(TouchX, mouseX);
-        TouchY = ClampedMove<0, 191>(TouchY, mouseY);
+        TouchX = Saturate<0, 255>(TouchX + mouseX);
+        TouchY = Saturate<0, 191>(TouchY + mouseY);
         FramesWithPointer = (mouseX || mouseY) ? FramesWithPointerBase : FramesWithPointer;
     }
     // TOUCH: Pointer
@@ -341,10 +372,23 @@ void retro_run (void)
     NDS_endProcessingInput();
 
     // RUN
+    frameIndex ++;
+    bool skipped = frameIndex <= frameSkip;
+
+    if (skipped)
+    {
+        NDS_SkipNextFrame();
+    }
+
     NDS_exec<false>();
     
     // VIDEO: Swap screen colors and pass on
-    SwapScreens();
+    if (!skipped)
+        SwapScreens();
+    else
+        video_cb(0, screenLayout->width, screenLayout->height, screenLayout->pitchInPix * 2);
+
+    frameIndex = skipped ? frameIndex : 0;
 }
 
 size_t retro_serialize_size (void)
