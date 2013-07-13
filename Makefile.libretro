@@ -89,12 +89,29 @@ else ifeq ($(platform), android)
    ifeq ($(RETRO_PROFILE),1)
       LDFLAGS += -llog
    endif
-else ifeq ($(platform), arm)
-   TARGET := $(TARGET_NAME)_libretro.so
+else ifneq (,$(findstring armv,$(platform)))
    CPPFLAGS += -D__RETRO_ARM__
-   fpic := -fPIC
+   TARGET := $(TARGET_NAME)_libretro.so
    SHARED := -shared -Wl,--version-script=libretro/link.T
+   fpic := -fPIC
+   CC = gcc
    DESMUME_JIT_ARM = 1
+ifneq (,$(findstring cortexa8,$(platform)))
+   CPPFLAGS += -marm -mcpu=cortex-a8
+else ifneq (,$(findstring cortexa9,$(platform)))
+   CPPFLAGS += -marm -mcpu=cortex-a9
+endif
+   CPPFLAGS += -marm
+ifneq (,$(findstring neon,$(platform)))
+   CPPFLAGS += -mfpu=neon
+   HAVE_NEON = 1
+endif
+ifneq (,$(findstring softfloat,$(platform)))
+   CPPFLAGS += -mfloat-abi=softfp
+else ifneq (,$(findstring hardfloat,$(platform)))
+   CPPFLAGS += -mfloat-abi=hard
+endif
+   CPPFLAGS += -DARM
 else
    TARGET := $(TARGET_NAME)_libretro.dll
    CC = gcc
