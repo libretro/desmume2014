@@ -90,7 +90,7 @@ else ifeq ($(platform), android)
       LDFLAGS += -llog
    endif
 else ifneq (,$(findstring armv,$(platform)))
-   CPPFLAGS += -D__RETRO_ARM__
+   CPPFLAGS = -DUSE_POSIX_MEMALIGN -D__RETRO_ARM__
    TARGET := $(TARGET_NAME)_libretro.so
    SHARED := -shared -Wl,--version-script=libretro/link.T
    fpic := -fPIC
