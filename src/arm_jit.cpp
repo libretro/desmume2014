@@ -16,7 +16,7 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "types.h"
+#include "emu-types.h"
 #ifdef HAVE_JIT
 #if !defined(__x86_64__) && !defined(__LP64) && !defined(__IA64__) && !defined(_M_X64) && !defined(_WIN64) && !defined(_M_IX86) && !defined(__INTEL__) && !defined(__i386__)
 #error "ERROR: JIT compiler - unsupported target platform"

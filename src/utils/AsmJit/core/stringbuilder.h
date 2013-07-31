@@ -9,6 +9,7 @@
 #define _ASMJIT_CORE_STRINGBUILDER_H
 
 // [Dependencies - AsmJit]
+#include <stdarg.h>
 #include "../core/assert.h"
 #include "../core/defs.h"
 
