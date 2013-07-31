@@ -20,7 +20,7 @@
 #define RENDER3D_H
 
 #include "gfx3d.h"
-#include "types.h"
+#include "emu-types.h"
 
 //not using this right now
 #define CALL_CONVENTION

@@ -22,7 +22,7 @@
 
 #include <stdlib.h>
 #include <assert.h>
-#include "types.h"
+#include "emu-types.h"
 
 //this was originally declared in MMU.h but we suffered some organizational problems and had to remove it
 enum MMU_ACCESS_TYPE

@@ -22,7 +22,7 @@
 #define GPU_H
 
 #include <stdio.h>
-#include "mem.h"
+#include "emu-mem.h"
 #include "common.h"
 #include "registers.h"
 #include "FIFO.h"

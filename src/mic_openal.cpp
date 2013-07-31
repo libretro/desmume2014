@@ -21,7 +21,7 @@
 #include <AL/al.h>
 #include <AL/alc.h>
 
-#include "types.h"
+#include "emu-types.h"
 #include "mic.h"
 #include "readwrite.h"
 #include "emufile.h"

@@ -3,7 +3,7 @@
 
 #ifdef LIBFAT_PC
 
-#include "../../types.h"
+#include "../../emu-types.h"
 
 #ifdef _MSC_VER
 

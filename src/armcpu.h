@@ -19,7 +19,7 @@
 #ifndef ARM_CPU
 #define ARM_CPU
 
-#include "types.h"
+#include "emu-types.h"
 #include "bits.h"
 #include "MMU.h"
 #include "common.h"

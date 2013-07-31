@@ -19,7 +19,7 @@
 #ifndef _GDBSTUB_H_
 #define _GDBSTUB_H_ 1
 
-#include "types.h"
+#include "emu-types.h"
 
 typedef void *gdbstub_handle_t;
 

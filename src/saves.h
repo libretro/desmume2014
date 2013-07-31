@@ -20,7 +20,7 @@
 #ifndef _SRAM_H
 #define _SRAM_H
 
-#include "types.h"
+#include "emu-types.h"
 
 #define NB_STATES 10
 

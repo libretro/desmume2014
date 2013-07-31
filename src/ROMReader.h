@@ -21,7 +21,7 @@
 #endif
 #include <string.h>
 
-#include "types.h"
+#include "emu-types.h"
 
 #define ROMREADER_DEFAULT -1
 #define ROMREADER_STD	0

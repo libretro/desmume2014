@@ -22,7 +22,7 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "types.h"
+#include "emu-types.h"
 #include <string>
 
 extern const u8	logo_data[156];

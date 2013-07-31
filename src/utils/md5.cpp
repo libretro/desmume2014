@@ -9,7 +9,7 @@
 // -Xodnizel   
 
 #include <string.h>
-#include "../types.h"
+#include "../emu-types.h"
 #include "md5.h"
 
 typedef u8 uint8;

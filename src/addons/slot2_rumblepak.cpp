@@ -18,7 +18,7 @@
 */
 
 #include "../addons.h"
-#include "../mem.h"
+#include "../emu-mem.h"
 #include "../MMU.h"
 #include <string.h>
 

@@ -18,7 +18,7 @@
 
 #include "GPU_osd.h"
 #include "GPU.h"
-#include "mem.h"
+#include "emu-mem.h"
 #include <string.h> //mem funcs
 #include <stdarg.h> //va_start, etc
 #include <sstream>

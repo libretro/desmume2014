@@ -19,7 +19,7 @@
 #define __ADDONS_H__
 
 #include "common.h"
-#include "types.h"
+#include "emu-types.h"
 #include "debug.h"
 
 struct ADDONINTERFACE

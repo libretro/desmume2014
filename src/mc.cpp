@@ -20,7 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "debug.h"
-#include "types.h"
+#include "emu-types.h"
 #include "mc.h"
 #include "movie.h"
 #include "readwrite.h"

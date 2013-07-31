@@ -22,7 +22,7 @@
 #include <iosfwd>
 #include <string>
 #include <assert.h>
-#include "types.h"
+#include "emu-types.h"
 #include "matrix.h"
 #include "emufile.h"
 #include "metaspu/metaspu.h"

@@ -22,7 +22,7 @@
 #include <iosfwd>
 #include <ostream>
 #include <istream>
-#include "types.h"
+#include "emu-types.h"
 #include "emufile.h"
 
 

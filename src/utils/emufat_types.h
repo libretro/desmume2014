@@ -1,6 +1,6 @@
 #ifndef EMUFAT_TYPES_H
 #define EMUFAT_TYPES_H
 
-#include "types.h"
+#include "emu-types.h"
 
 #endif //EMUFAT_TYPES_H

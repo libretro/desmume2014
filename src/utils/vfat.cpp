@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <stack>
 
-#include "../types.h"
+#include "../emu-types.h"
 #include "../debug.h"
 #include "../fs.h"
 

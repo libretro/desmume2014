@@ -20,7 +20,7 @@
 
 #include <string>
 #include "common.h"
-#include "types.h"
+#include "emu-types.h"
 #include "debug.h"
 
 class EMUFILE;

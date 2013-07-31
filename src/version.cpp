@@ -15,7 +15,7 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "types.h"
+#include "emu-types.h"
 #include "version.h"
 
 // Helper macros to convert numerics to strings

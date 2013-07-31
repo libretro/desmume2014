@@ -19,7 +19,7 @@
 #ifndef FS_H
 #define FS_H
 
-#include "types.h"
+#include "emu-types.h"
 
 #define FS_IS_DIR 1
 

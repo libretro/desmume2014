@@ -20,7 +20,7 @@
 #define WIFI_H
 
 #include <stdio.h>
-#include "types.h"
+#include "emu-types.h"
 
 #include <queue>
 

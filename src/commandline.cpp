@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <stdio.h>
 #include "commandline.h"
-#include "types.h"
+#include "emu-types.h"
 #include "movie.h"
 #include "addons.h"
 #include "slot1.h"

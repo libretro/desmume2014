@@ -19,7 +19,7 @@
 #ifndef DISASSEMBLER_H
 #define DISASSEMBLER_H
 
-#include "types.h"
+#include "emu-types.h"
 
 typedef char* (* DisasmOpFunc)(u32 adr, u32 i, char * txt);
 

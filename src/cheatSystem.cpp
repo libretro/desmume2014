@@ -18,7 +18,7 @@
 #include <string.h>
 #include "cheatSystem.h"
 #include "NDSSystem.h"
-#include "mem.h"
+#include "emu-mem.h"
 #include "MMU.h"
 #include "debug.h"
 #include "utils/xstring.h"

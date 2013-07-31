@@ -25,7 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "../../types.h"
+#include "../../emu-types.h"
 #include "crc.h"
 #include "header.h"
 #include "decrypt.h"

@@ -20,7 +20,7 @@
 
 #include <string>
 #include <cstdio>
-#include "../types.h"
+#include "emu-types.h"
 #include "valuearray.h"
 
 struct Desmume_Guid : public ValueArray<u8,16>

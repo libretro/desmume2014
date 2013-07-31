@@ -23,7 +23,7 @@
 #include <stdio.h>
 #include <vector>
 #include <string>
-#include "types.h"
+#include "emu-types.h"
 #include "emufile.h"
 #include "common.h"
 #include "utils/tinyxml/tinyxml.h"

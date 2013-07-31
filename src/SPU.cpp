@@ -34,7 +34,7 @@
 #include "debug.h"
 #include "MMU.h"
 #include "SPU.h"
-#include "mem.h"
+#include "emu-mem.h"
 #include "readwrite.h"
 #include "armcpu.h"
 #include "NDSSystem.h"

@@ -17,7 +17,7 @@
 
 #include <string>
 
-#include "types.h"
+#include "emu-types.h"
 #include "slot1.h"
 
 #include "NDSSystem.h"

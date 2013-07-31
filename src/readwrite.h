@@ -18,7 +18,7 @@
 #ifndef _READWRITE_H_
 #define _READWRITE_H_
 
-#include "types.h"
+#include "emu-types.h"
 #include "emufile.h"
 #include <iostream>
 #include <cstdio>

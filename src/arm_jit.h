@@ -19,7 +19,7 @@
 #ifndef ARM_JIT
 #define ARM_JIT
 
-#include "types.h"
+#include "emu-types.h"
 #ifndef _MSC_VER
 #include <stdint.h>
 #endif

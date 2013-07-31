@@ -89,7 +89,7 @@
 
 #include <string>
 
-#include "../types.h"
+#include "emu-types.h"
 
 enum DayOfWeek {
 	DayOfWeek_Sunday=0,

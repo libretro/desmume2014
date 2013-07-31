@@ -21,7 +21,7 @@
 #define _RTC_H_
 #include <stdlib.h>
 #include <time.h>
-#include "types.h"
+#include "emu-types.h"
 #include "utils/datetime.h"
 
 DateTime rtcGetTime(void);

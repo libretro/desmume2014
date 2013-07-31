@@ -16,7 +16,7 @@
 */
 
 #include "readwrite.h"
-#include "types.h"
+#include "emu-types.h"
 
 //well. just for the sake of consistency
 int write8le(u8 b, EMUFILE*os)

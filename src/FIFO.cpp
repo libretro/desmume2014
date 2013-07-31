@@ -21,7 +21,7 @@
 #include <string.h>
 #include "armcpu.h"
 #include "debug.h"
-#include "mem.h"
+#include "emu-mem.h"
 #include "MMU.h"
 #include "NDSSystem.h"
 #include "gfx3d.h"

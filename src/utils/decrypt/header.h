@@ -25,7 +25,7 @@
 #define _HEADER_H_
 
 
-#include "../../types.h"
+#include "../../emu-types.h"
 
 #include "../../PACKED.h"
 struct __PACKED Header

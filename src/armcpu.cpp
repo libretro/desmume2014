@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <algorithm>
-#include "types.h"
+#include "emu-types.h"
 #include "instructions.h"
 #include "cp15.h"
 #include "bios.h"

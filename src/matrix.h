@@ -22,8 +22,8 @@
 #include <math.h>
 #include <string.h>
 
-#include "types.h"
-#include "mem.h"
+#include "emu-types.h"
+#include "emu-mem.h"
 
 #ifdef ENABLE_SSE
 #include <xmmintrin.h>

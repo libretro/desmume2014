@@ -19,7 +19,7 @@
 #ifndef instruction_attributes_H_
 #define instruction_attributes_H_
 
-#include "types.h"
+#include "emu-types.h"
 
 #define INSTR_CYCLES_MASK  0x7
 #define INSTR_CYCLES(c) c       // constant cycles. does not include the penalty for writing to r15 for instructions other than dedicated branches.

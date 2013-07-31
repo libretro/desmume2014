@@ -19,7 +19,7 @@
 #define _COMMANDLINE_H_
 
 #include <string>
-#include "types.h"
+#include "emu-types.h"
 
 //I hate C. we have to forward declare these with more detail than I like
 typedef struct _GOptionContext GOptionContext;

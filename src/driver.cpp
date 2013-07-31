@@ -15,7 +15,7 @@
 	along with the this software.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-#include "types.h"
+#include "emu-types.h"
 #include "driver.h"
 #include "rasterize.h"
 #include "gfx3d.h"

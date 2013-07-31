@@ -20,7 +20,7 @@
 
 #include <iostream>
 #include "emufile.h"
-#include "types.h"
+#include "emu-types.h"
 
 #ifdef WIN32
 static char MicSampleName[256];

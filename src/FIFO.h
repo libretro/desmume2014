@@ -21,7 +21,7 @@
 #ifndef FIFO_H
 #define FIFO_H
 
-#include "types.h"
+#include "emu-types.h"
 
 //=================================================== IPC FIFO
 typedef struct

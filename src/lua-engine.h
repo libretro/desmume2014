@@ -18,7 +18,7 @@
 #ifndef LUA_SCRIPT_H
 #define LUA_SCRIPT_H
 
-#include "types.h"
+#include "emu-types.h"
 
 #if defined(WIN32) && !defined(WXPORT)
 #include <winsock2.h>

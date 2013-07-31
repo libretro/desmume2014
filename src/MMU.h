@@ -21,7 +21,7 @@
 #define MMU_H
 
 #include "FIFO.h"
-#include "mem.h"
+#include "emu-mem.h"
 #include "registers.h"
 #include "mc.h"
 #include "bits.h"

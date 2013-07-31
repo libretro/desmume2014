@@ -25,11 +25,11 @@
 #include "driver.h"
 #include "GPU.h"
 #include "SPU.h"
-#include "mem.h"
+#include "emu-mem.h"
 #include "wifi.h"
 #include "emufile.h"
 #include "firmware.h"
-#include "types.h"
+#include "emu-types.h"
 
 #include <string>
 

@@ -24,8 +24,8 @@
 #include <cstdarg>
 #include <bitset>
 
-#include "types.h"
-#include "mem.h"
+#include "emu-types.h"
+#include "emu-mem.h"
 #include "emufile.h"
 
 struct DebugStatistics

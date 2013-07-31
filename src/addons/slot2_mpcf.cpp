@@ -28,7 +28,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "types.h"
+#include "../emu-types.h"
 #include "../utils/vfat.h"
 #include "../path.h"
 

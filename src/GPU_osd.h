@@ -19,7 +19,7 @@
 #ifndef __GPU_OSD_
 #define __GPU_OSD_
 
-#include "types.h"
+#include "emu-types.h"
 
 #ifdef HAVE_LIBAGG
 #include <stdlib.h>

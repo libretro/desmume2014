@@ -28,7 +28,7 @@
 #include <iostream>
 #include <cstdio>
 
-#include "../types.h"
+#include "../emu-types.h"
 #include "../emufile.h"
 
 
