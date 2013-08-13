@@ -18,12 +18,25 @@
  * Boston, MA 02111-1307, USA.
  */
 
-#ifndef WIN32
-
 #include <stdlib.h>
 #include "mic.h"
 #include "NDSSystem.h"
 #include "readwrite.h"
+
+#ifdef WIN32
+BOOL Mic_Init(void)
+{
+   return TRUE;
+}
+
+void Mic_DeInit(void) { }
+void Mic_DoNoise(BOOL noise) { }
+void mic_savestate(EMUFILE* os) { }
+bool mic_loadstate(EMUFILE* is, int size) { return TRUE; }
+u8 Mic_ReadSample(void) { return 0; }
+void Mic_Reset(void) { }
+#else
+
 
 #define MIC_NULL_SAMPLE_VALUE 0
 #define MIC_MAX_BUFFER_SAMPLES 320
