@@ -23,9 +23,9 @@ else ifeq ($(platform), osx)
    SHARED := -dynamiclib
 else ifeq ($(platform), ios)
    TARGET := $(TARGET_NAME)_libretro_ios.dylib
-   CC = clang -arch armv7 -isysroot $(IOSSDK)
-   CXX = clang++ -arch armv7 -isysroot $(IOSSDK)
-   CPPFLAGS = -DUSE_POSIX_MEMALIGN -D__RETRO_ARM__
+   CC = clang -arch armv7 -isysroot $(IOSSDK) -miphoneos-version-min=5.0
+   CXX = clang++ -arch armv7 -isysroot $(IOSSDK) -miphoneos-version-min=5.0
+   CPPFLAGS = -DUSE_POSIX_MEMALIGN -D__RETRO_ARM__ -miphoneos-version-min=5.0
    fpic := -fPIC
    SHARED := -dynamiclib
    DESMUME_JIT_ARM = 1
