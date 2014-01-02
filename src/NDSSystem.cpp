@@ -2522,6 +2522,9 @@ void NDS_Reset()
 	else
 	{
 		//fake firmware boot-up process
+      
+      // Create the dummy firmware
+      NDS_CreateDummyFirmware(&CommonSettings.fw_config);
 
 		//copy the arm9 program to the address specified by rom header
 		u32 src = header->ARM9src;
