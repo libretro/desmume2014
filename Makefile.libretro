@@ -17,10 +17,12 @@ ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.so
    fpic := -fPIC
    SHARED := -shared -Wl,--version-script=libretro/link.T
+	DESMUME_JIT = 1
 else ifeq ($(platform), osx)
    TARGET := $(TARGET_NAME)_libretro.dylib
    fpic := -fPIC
    SHARED := -dynamiclib
+	DESMUME_JIT = 1
 else ifeq ($(platform), ios)
    TARGET := $(TARGET_NAME)_libretro_ios.dylib
    CC = clang -arch armv7 -isysroot $(IOSSDK) -miphoneos-version-min=5.0
@@ -117,6 +119,7 @@ else
    CC = gcc
    CXX = g++
    SHARED := -shared -static-libgcc -static-libstdc++ -s -Wl,--version-script=libretro/link.T
+	DESMUME_JIT = 1
 endif
 
 SOURCES = \
