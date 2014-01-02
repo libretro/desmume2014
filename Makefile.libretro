@@ -220,7 +220,7 @@ SOURCES += \
    utils/AsmJit/x86/x86func.cpp \
    utils/AsmJit/x86/x86operand.cpp \
    utils/AsmJit/x86/x86util.cpp
-CPPFLAGS += -DHAVE_JIT
+CPPFLAGS += -DHAVE_JIT -DASMJIT_POSIX
 endif
 
 DEBUG=0
