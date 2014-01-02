@@ -16,12 +16,9 @@
 */
 
 //TODO - move this into ndssystem where it belongs probably
-
+#include <stdarg.h>
 #include <string.h>
-
-#ifdef __LIBRETRO__ // Need ctype.h
 #include <ctype.h>
-#endif
 
 #include <string>
 #include "common.h"
@@ -57,3 +54,42 @@ char *removeSpecialChars(char *s)
 	*buf = 0;
 	return s;
 }
+
+// ===============================================================================
+// Message dialogs
+// ===============================================================================
+#define MSG_PRINT { \
+	va_list args; \
+	va_start (args, fmt); \
+	vprintf (fmt, args); \
+	va_end (args); \
+}
+void msgFakeInfo(const char *fmt, ...)
+{
+	MSG_PRINT;
+}
+
+bool msgFakeConfirm(const char *fmt, ...)
+{
+	MSG_PRINT;
+	return true;
+}
+
+void msgFakeError(const char *fmt, ...)
+{
+	MSG_PRINT;
+}
+
+void msgFakeWarn(const char *fmt, ...)
+{
+	MSG_PRINT;
+}
+
+msgBoxInterface msgBoxFake = {
+	msgFakeInfo,
+	msgFakeConfirm,
+	msgFakeError,
+	msgFakeWarn,
+};
+
+msgBoxInterface *msgbox = &msgBoxFake;

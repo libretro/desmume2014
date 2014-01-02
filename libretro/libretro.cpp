@@ -1,3 +1,4 @@
+#include <stdarg.h>
 #include "libretro.h"
 
 #include "MMU.h"
@@ -15,6 +16,7 @@
 
 //
 
+static retro_log_printf_t log_cb = NULL;
 static retro_video_refresh_t video_cb = NULL;
 static retro_input_poll_t poll_cb = NULL;
 static retro_input_state_t input_cb = NULL;
@@ -251,8 +253,62 @@ void retro_get_system_av_info(struct retro_system_av_info *info)
     info->timing.sample_rate = 44100.0;
 }
 
+//====================== Message box
+#define MSG_ARG \
+	char msg_buf[1024] = {0}; \
+	{ \
+		va_list args; \
+		va_start (args, fmt); \
+		vsprintf (msg_buf, fmt, args); \
+		va_end (args); \
+	}
+
+void msgWndInfo(const char *fmt, ...)
+{
+	MSG_ARG;
+   if (log_cb)
+      log_cb(RETRO_LOG_INFO, "%s.\n", msg_buf);
+}
+
+bool msgWndConfirm(const char *fmt, ...)
+{
+	MSG_ARG;
+   if (log_cb)
+      log_cb(RETRO_LOG_INFO, "%s.\n", msg_buf);
+   return true;
+}
+
+void msgWndError(const char *fmt, ...)
+{
+	MSG_ARG;
+   if (log_cb)
+      log_cb(RETRO_LOG_ERROR, "%s.\n", msg_buf);
+}
+
+void msgWndWarn(const char *fmt, ...)
+{
+	MSG_ARG;
+   if (log_cb)
+      log_cb(RETRO_LOG_WARN, "%s.\n", msg_buf);
+}
+
+msgBoxInterface msgBoxWnd = {
+	msgWndInfo,
+	msgWndConfirm,
+	msgWndError,
+	msgWndWarn,
+};
+//====================== Dialogs end
+
+
 void retro_init (void)
 {
+   struct retro_log_callback log;
+   if (environ_cb(RETRO_ENVIRONMENT_GET_LOG_INTERFACE, &log))
+      log_cb = log.log;
+   else
+      log_cb = NULL;
+
     colorMode = RETRO_PIXEL_FORMAT_RGB565;
     if(!environ_cb(RETRO_ENVIRONMENT_SET_PIXEL_FORMAT, &colorMode))
         colorMode = RETRO_PIXEL_FORMAT_0RGB1555;
@@ -274,6 +330,8 @@ void retro_init (void)
     NDS_CreateDummyFirmware(&fw_config);
     NDS_3D_ChangeCore(0);
     backup_setManualBackupType(MC_TYPE_AUTODETECT);
+
+    msgbox = &msgBoxWnd;
 }
 
 void retro_deinit(void)
