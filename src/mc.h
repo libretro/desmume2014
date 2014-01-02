@@ -93,6 +93,7 @@ public:
       if(foundAsSerial) return "Serial";
       return "";
    }
+   std::string lastImportErrorMessage;
 };
 
 
