@@ -25,10 +25,6 @@ retro_environment_t environ_cb = NULL;
 
 volatile bool execute = false;
 
-#ifndef SWAPTYPE
-# define SWAPTYPE uint32_t
-#endif
-
 namespace /* INPUT */
 {
     static bool absolutePointer;
@@ -138,8 +134,8 @@ namespace /* VIDEO */
     void SwapScreensFn()
     {
         static const uint16_t* const screenSource[2] = {(uint16_t*)&GPU_screen[0], (uint16_t*)&GPU_screen[256 * 192 * 2]};
-        SwapScreen<SWAPTYPE, EXTRA>(screenLayout->screens[0], screenSource[0], screenLayout->pitchInPix);
-        SwapScreen<SWAPTYPE, EXTRA>(screenLayout->screens[1], screenSource[1], screenLayout->pitchInPix);
+        SwapScreen<uint32_t, EXTRA>(screenLayout->screens[0], screenSource[0], screenLayout->pitchInPix);
+        SwapScreen<uint32_t, EXTRA>(screenLayout->screens[1], screenSource[1], screenLayout->pitchInPix);
         DrawPointer<EXTRA ? 0xFFFF : 0x7FFF>(screenLayout->screens[1], screenLayout->pitchInPix);
 
         video_cb(screenSwap, screenLayout->width, screenLayout->height, screenLayout->pitchInPix * 2);
