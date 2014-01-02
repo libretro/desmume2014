@@ -48,7 +48,7 @@
 #endif
 #endif // __APPLE__
 
-#if defined(_WIN32) && !defined(_MSC_VER)
+#if defined(_WIN32) && !defined(_MSC_VER) && !defined(__MINGW64_VERSION_MAJOR)
 #define COMPILE_IN_STRNLEN
 #include <malloc.h>
 #endif

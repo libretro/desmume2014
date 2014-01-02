@@ -253,7 +253,7 @@ $(TARGET): $(OBJECTS)
 ifeq ($(STATIC_LINKING), 1)
 	$(AR) rcs $@ $(OBJECTS)
 else
-	$(CXX) $(LDFLAGS) $(fpic) $(SHARED) $(LIBS) -o $@ $(OBJECTS)
+	$(CXX) $(LDFLAGS) $(fpic) $(SHARED) -o $@ $(OBJECTS) $(LIBS)
 endif
 
 clean:
