@@ -242,7 +242,7 @@ bool CommandLine::validate()
 	}
 
 #ifdef HAVE_JIT
-	if (_cpu_mode < -1 || _cpu_mode > 1) {
+   if (_cpu_mode != -1 && (_jit_size < 1 || _jit_size > 100)) {
 		g_printerr("Invalid cpu mode emulation (0 - interpreter, 1 - dynarec)\n");
 	}
 	if (_jit_size < 1 || _jit_size > 100) {
