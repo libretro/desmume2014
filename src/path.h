@@ -48,9 +48,11 @@ extern retro_environment_t environ_cb;
 #ifdef _WINDOWS
 #define FILE_EXT_DELIMITER_CHAR		'.'
 #define DIRECTORY_DELIMITER_CHAR	'\\'
+#define ALL_DIRECTORY_DELIMITER_STRING "/\\"
 #else
 #define FILE_EXT_DELIMITER_CHAR		'.'
 #define DIRECTORY_DELIMITER_CHAR	'/'
+#define ALL_DIRECTORY_DELIMITER_STRING "/"
 #endif
 
 #ifdef _WINDOWS
@@ -63,6 +65,7 @@ public:
 	static bool IsPathRooted (const std::string &path);
 	static std::string GetFileDirectoryPath(std::string filePath);
 	static std::string GetFileNameFromPath(std::string filePath);
+   static std::string ScrubInvalid(std::string str);
 	static std::string GetFileNameWithoutExt(std::string fileName);
 	static std::string GetFileNameFromPathWithoutExt(std::string filePath);
 	static std::string GetFileExt(std::string fileName);
@@ -95,8 +98,7 @@ public:
 	#define LUAKEY			"Lua"
 	char screenshotFormat[MAX_FORMAT];
 	bool savelastromvisit;
-
-	enum KnownPath
+enum KnownPath
 	{
 		FIRSTKNOWNPATH = 0,
 		ROMS = 0,
@@ -430,6 +432,7 @@ public:
 		std::string romPath = filename;
 
 		RomName = Path::GetFileNameFromPath(romPath);
+      RomName = Path::ScrubInvalid(RomName);
 		RomDirectory = Path::GetFileDirectoryPath(romPath);
 	}
 
