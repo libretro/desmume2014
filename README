@@ -1,6 +1,6 @@
 libretro wrapper for desmume NDS emulator.
 
-Build with 'make -f Makfile.libretro'.
+Build with 'make -f Makefile.libretro'.
 
 Save games are stored in the system directory reported from the frontend. If one isn't provided whatever '.' resolves to will be used.
 Tested on OS X and Android, should work on linux, may not work on windows yet.
