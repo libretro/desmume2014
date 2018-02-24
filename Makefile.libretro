@@ -11,7 +11,7 @@ else ifneq ($(findstring win,$(shell uname -a)),)
 endif
 endif
 
-TARGET_NAME := desmume
+TARGET_NAME := desmume2014
 
 ifeq ($(platform), unix)
    TARGET := $(TARGET_NAME)_libretro.so
