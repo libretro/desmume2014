@@ -234,7 +234,7 @@ void retro_set_environment(retro_environment_t cb)
 
 void retro_get_system_info(struct retro_system_info *info)
 {
-   info->library_name = "DeSmuME";
+   info->library_name = "DeSmuME 2014";
    info->library_version = "svn";
    info->valid_extensions = "nds";
    info->need_fullpath = true;   
